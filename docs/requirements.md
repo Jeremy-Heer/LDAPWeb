@@ -1,0 +1,112 @@
+# LDAP Browser - Requirements Document
+
+This document outlines the functional and technical requirements for building the LDAP Browser application.
+
+## Application Overview
+
+LDAP Browser is a comprehensive Java web application for browsing, searching, and managing LDAP directorys.
+
+## Key Features
+
+1. **Stack**
+   - Vaadin 24.3.0
+   - Spring Boot 3.2.0
+   - UnboundID LDAP SDK 7.0.3
+   - Java 17+
+
+1. **Layout**
+    - Navbar
+        - Vaadin Navbar displayed at the top of each window
+        - A Server drop down allowing the user to select multiple LDAP servers
+        - Selected LDAP servers are then displayed in the Navbar
+        - Selected LDAP servers are then used when performing LDAP request
+
+    - Drawer
+        - Vaadin Drawer displayed at the left of each window.
+        - Toggles to display or hide
+        - Links: Server, Search, Browse, Schema, Access, Bulk, Import/Export
+
+1. **Server**
+   - Server link in Drawer
+   - Purpose is to manage LDAP server connection details
+   - Server dropdown in Navbar is updated when new servers are saved.
+   - Configuration of LDAP servers connection details
+   - Saved into a local file connections.json
+   - Test, save, and copy actions
+
+1. **Search**
+   - Search link in Drawer
+   - Purpose is to perform ldap searches and display their results
+   - A browse button to launch the "Browse Selector" shared component to select a DN for the search base.
+   - Search Base can also be manually updated
+   - Filter field for manual ldap search entry
+   - Search Button to perform the search
+   - When the search is requested from the LDAP backend, its performed on each selected LDAP server.
+   - Filter Builder acordion
+       - when selected will expand and dislay a search builder
+       - allows building complex ldap searches graphacilly
+       - resulting filter is populated into the Filter field
+   - Search results are displayed at the bottom
+   - Results can be selected to display entry details in a details pane to the right
+      - Entry Details
+        - a header with LDAP server name corisponding to the result, the DN of the selected entry and a copy icon to copy the DN to clipboard
+        - Add Attribute button allows adding attribute to the entry
+        - save button to save changes
+        - test login button to pop up a dialog to enter a password and perform a ldap bind attempt for the selected entry
+        - refresh button to reload entry details from the ldap server
+        - delete button to delete the entry from ldap
+        - show operational attributes to fetch and display operational attributes for the entry
+        - a grid with headers for attribute, value, actions
+            - attribute column displays the attribute names for the entry
+            - Values column displays the values for the attribute
+            - Actions column to display edit, copy, delete icons to allow editing of the attribute
+
+1. **Browse**
+    - Browse link in Drawer
+    - The TreeBrowser Dialog is displayed on the left using selected ldap servers for its data.
+    - Selected Entries from the TreeBrowser are displayed in the EntryDetails dialog on the right.
+
+1. **Schema**
+    - TBD
+
+1. **Access**
+    - TBD
+
+1. **Bulk**
+    - TBD
+
+1. **Import/Export**
+    - TBD
+
+1. **Shared Components**
+
+    - "Tree Navigator"
+        - A hierachical LDAP Tree-based DN selector used throughout application.
+        - Expandable/collapsible tree nodes with lazy loading
+        - Real-time directory tree updates
+        - Displays a list of selected ldap servers and a tree selector under each.to choose and populate DN fields
+        - Top level of the Tree is the selected ldap server names.
+        - Servers names are expanded to display the LDAP tree data allowing the user to select a DN for the LDAP branches of the given server names
+        - Used on the Browse page inside main window. also as a popup helper to choose an LDAP DN (for example the search base field helper)
+```
+first.example.ldap/
+|----dc=example,dc=com/
+|    |----ou=people
+|    |----ou=groups
+|
+second.example.ldap/
+|----dc=company,dc=net
+|    |----ou=admins
+|    |----ou=developers
+```
+
+## Core Services
+
+### LdapService
+Primary service for LDAP operations:
+- Connection management and pooling
+- Authentication and bind operations
+- Search operations with pagination support
+- Entry CRUD operations (Create, Read, Update, Delete)
+- Schema management operations
+- SSL/TLS and StartTLS support
