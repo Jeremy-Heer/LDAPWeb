@@ -17,8 +17,8 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
 1. **Layout**
     - Navbar
         - Vaadin Navbar displayed at the top of each window
-        - A Server drop down allowing the user to select multiple LDAP servers
-        - Selected LDAP servers are then displayed in the Navbar
+        - A multi select server Combo Box drop down allowing the user to select multiple LDAP servers.
+        - Selected LDAP servers are then displayed in the Navbar in a horizontal row as badges.
         - Selected LDAP servers are then used when performing LDAP request
 
     - Drawer
@@ -37,7 +37,7 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
 1. **Search**
    - Search link in Drawer
    - Purpose is to perform ldap searches and display their results
-   - A browse button to launch the "Browse Selector" shared component to select a DN for the search base.
+   - A browse button to launch the "Browse Selector" shared component to select a DN for the search base field
    - Search Base can also be manually updated
    - Filter field for manual ldap search entry
    - Search Button to perform the search
@@ -63,8 +63,9 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
 
 1. **Browse**
     - Browse link in Drawer
-    - The TreeBrowser Dialog is displayed on the left using selected ldap servers for its data.
-    - Selected Entries from the TreeBrowser are displayed in the EntryDetails dialog on the right.
+    - The "Tree Navigator" is displayed on the left using selected ldap servers for its data.
+    - Selected Entries from the Tree Navigator are displayed in the EntryDetails dialog on the right.
+    - 
 
 1. **Schema**
     - TBD
@@ -86,8 +87,10 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - Real-time directory tree updates
         - Displays a list of selected ldap servers and a tree selector under each.to choose and populate DN fields
         - Top level of the Tree is the selected ldap server names.
-        - Servers names are expanded to display the LDAP tree data allowing the user to select a DN for the LDAP branches of the given server names
-        - Used on the Browse page inside main window. also as a popup helper to choose an LDAP DN (for example the search base field helper)
+        - ldap server names are expanded to display the "Root DSE"
+        - "Root DSE" is expanded to show the naming contexts obtained from the "namingContets" attribute value of the "Root DSE"
+        - Each naming context is expanded to drill down into the LDAP tree structure.
+        - A maximum of 100 entries are displayed. When more than 100 entries are in the LDAP container, a pageing feature is used to page forward and backwards.
 ```
 first.example.ldap/
 |----dc=example,dc=com/
