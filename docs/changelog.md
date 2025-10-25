@@ -1,9 +1,81 @@
 # LDAP Web Browser
 
-## v0.6 - Implement shared Entry Details pane
-  - When displaying a selected entry from the Browse tab
-  - When displaying a selected entry from the Search tab
-  - use the common Entry Details component
+## v0.6 - 2025-10-25 ✅ COMPLETED - Shared Entry Details Component
+
+### Implemented Features
+- ✅ **AttributeEditor Component** - Comprehensive LDAP entry editing component
+  - Created `AttributeEditor` as a unified, shared component for entry management
+  - Based on proven model from LDAPBrowser GitHub repository
+  - Complete CRUD operations for LDAP entries and attributes
+  
+  - **Entry Management:**
+    - Full DN display with copy-to-clipboard functionality
+    - Add, edit, and delete attributes with dialog-based interfaces
+    - Save changes with modification tracking (pending changes indicator)
+    - Delete entry with confirmation dialog
+    - Refresh entry to reload from LDAP server
+    - Test login functionality to verify credentials
+    
+  - **Attribute Display:**
+    - Sortable grid with attribute name, values, and action columns
+    - Multi-value attribute support (values displayed one per line)
+    - Color-coded attribute names (objectClass highlighted in red)
+    - Operational attributes toggle (show/hide system attributes)
+    - Operational attributes marked in orange when visible
+    
+  - **Edit Features:**
+    - Add new attributes with multi-line value input
+    - Edit existing attributes with multi-line value editor
+    - Delete attributes with confirmation
+    - Inline action buttons (edit, delete) for each attribute
+    - Automatic sorting: objectClass first, then alphabetical
+    
+  - **Advanced Operations:**
+    - Test bind dialog to verify authentication credentials
+    - Copy DN to clipboard with single click
+    - Pending changes indicator on Save button (highlighted with asterisk)
+    - Modification tracking to detect actual changes before saving
+    - Operational attributes filtering (create*, modify*, entryUUID, etc.)
+
+- ✅ **SearchView Integration**
+  - Replaced custom entry details implementation with AttributeEditor
+  - Simplified codebase by removing duplicate dialogs and methods
+  - All entry editing now handled by shared component
+  - Automatic server config detection from selected entry
+  
+- ✅ **BrowseView Integration**
+  - Replaced simple EntryDetailsPanel with full-featured AttributeEditor
+  - Upgraded from read-only view to full editing capabilities
+  - Browse and edit entries in same interface
+  - Consistent user experience across Search and Browse views
+
+### Technical Details
+- **Component Location**: `src/main/java/com/ldapbrowser/ui/components/AttributeEditor.java`
+- **Code Reduction**: Eliminated ~300 lines of duplicate code from SearchView
+- **API Usage**: Leverages existing LdapService methods (readEntry, addAttribute, modifyAttribute, deleteAttribute, deleteEntry, testBind)
+- **Data Model**: Works with LdapEntry.getAttributes() Map API
+- **Modification Detection**: Compares original vs. modified entries to generate minimal change sets
+- **Error Handling**: Comprehensive try-catch blocks with user-friendly notifications
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/AttributeEditor.java` - Created new shared component
+- `src/main/java/com/ldapbrowser/ui/views/SearchView.java` - Integrated AttributeEditor
+- `src/main/java/com/ldapbrowser/ui/views/BrowseView.java` - Integrated AttributeEditor
+- `pom.xml` - Version bumped to 0.6.0-SNAPSHOT
+
+### Build Verification
+- ✅ `mvn clean compile` - Successful (20 source files)
+- ✅ `mvn checkstyle:check` - 0 violations (only style warnings)
+- ✅ All components compile without errors
+
+### User Experience Improvements
+- **Consistency**: Same editing interface in both Search and Browse views
+- **Full Functionality**: Both views now support complete entry management
+- **Better UX**: Professional dialogs for add/edit operations with multi-line text areas
+- **Visual Feedback**: Pending changes indicator, color-coded attributes, clear notifications
+- **Safety**: Confirmation dialogs for destructive operations (delete attribute, delete entry)
+
+---
 
 ## v0.5 - 2025-10-24 ✅ COMPLETED - Tree Browser Component
 

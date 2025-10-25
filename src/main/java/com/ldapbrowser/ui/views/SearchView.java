@@ -6,6 +6,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
+import com.ldapbrowser.ui.components.EntryEditor;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
@@ -14,8 +15,6 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H3;
-import com.vaadin.flow.component.html.H4;
-import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
@@ -23,16 +22,12 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
-import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +50,7 @@ public class SearchView extends VerticalLayout {
   private Select<SearchScope> scopeSelect;
   private Button searchButton;
   private Grid<LdapEntry> resultsGrid;
-  private VerticalLayout entryDetailsPanel;
+  private EntryEditor entryEditor;
   private AdvancedSearchBuilder filterBuilderPanel;
   private List<LdapEntry> currentResults;
 
@@ -96,12 +91,11 @@ public class SearchView extends VerticalLayout {
     resultsLayout.setSizeFull();
     resultsLayout.setPadding(false);
 
-    // Entry details panel
-    entryDetailsPanel = createEntryDetailsPanel();
-    entryDetailsPanel.setVisible(false);
+    // Entry editor
+    entryEditor = new EntryEditor(ldapService, configService);
 
     splitLayout.addToPrimary(resultsLayout);
-    splitLayout.addToSecondary(entryDetailsPanel);
+    splitLayout.addToSecondary(entryEditor);
 
     add(title, searchForm, splitLayout);
     expand(splitLayout);
@@ -224,114 +218,16 @@ public class SearchView extends VerticalLayout {
     return grid;
   }
 
-  private VerticalLayout createEntryDetailsPanel() {
-    VerticalLayout panel = new VerticalLayout();
-    panel.setSizeFull();
-    panel.setPadding(true);
-    panel.setSpacing(true);
-    panel.getStyle().set("background-color", "var(--lumo-contrast-5pct)");
-
-    return panel;
-  }
-
   private void showEntryDetails(LdapEntry entry) {
-    entryDetailsPanel.removeAll();
-    entryDetailsPanel.setVisible(true);
-
-    // Header
-    HorizontalLayout header = new HorizontalLayout();
-    header.setWidthFull();
-    header.setAlignItems(Alignment.CENTER);
-
-    Span serverLabel = new Span("Server: " + entry.getServerName());
-    serverLabel.getStyle()
-        .set("font-weight", "bold")
-        .set("color", "var(--lumo-primary-text-color)");
-
-    header.add(serverLabel);
-
-    // DN with copy button
-    HorizontalLayout dnLayout = new HorizontalLayout();
-    dnLayout.setWidthFull();
-    dnLayout.setAlignItems(Alignment.CENTER);
-
-    TextField dnField = new TextField("Distinguished Name");
-    dnField.setValue(entry.getDn());
-    dnField.setReadOnly(true);
-    dnField.setWidthFull();
-
-    Button copyDnButton = new Button(VaadinIcon.COPY.create());
-    copyDnButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    copyDnButton.getElement().executeJs(
-        "navigator.clipboard.writeText($0)",
-        entry.getDn()
-    );
-    copyDnButton.addClickListener(e -> {
-      Notification.show("DN copied to clipboard", 2000, Notification.Position.BOTTOM_CENTER);
-    });
-
-    dnLayout.add(dnField, copyDnButton);
-    dnLayout.expand(dnField);
-
-    // Action buttons
-    HorizontalLayout actionButtons = createEntryActionButtons(entry);
-
-    // Attributes grid
-    Grid<Map.Entry<String, List<String>>> attributesGrid = new Grid<>();
-    attributesGrid.setItems(entry.getAttributes().entrySet());
-    attributesGrid.setHeight("400px");
-
-    attributesGrid.addColumn(Map.Entry::getKey)
-        .setHeader("Attribute")
-        .setWidth("200px");
-
-    attributesGrid.addColumn(e -> String.join(", ", e.getValue()))
-        .setHeader("Values")
-        .setFlexGrow(1);
-
-    attributesGrid.addColumn(new ComponentRenderer<>(attrEntry -> {
-      HorizontalLayout actions = new HorizontalLayout();
-
-      Button editButton = new Button(VaadinIcon.EDIT.create());
-      editButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
-      editButton.addClickListener(e ->
-          showEditAttributeDialog(entry, attrEntry.getKey(), attrEntry.getValue())
-      );
-
-      Button deleteButton = new Button(VaadinIcon.TRASH.create());
-      deleteButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_ERROR);
-      deleteButton.addClickListener(e ->
-          deleteAttribute(entry, attrEntry.getKey())
-      );
-
-      actions.add(editButton, deleteButton);
-      return actions;
-    })).setHeader("Actions").setWidth("120px").setFlexGrow(0);
-
-    entryDetailsPanel.add(header, dnLayout, actionButtons, new H4("Attributes"), attributesGrid);
-  }
-
-  private HorizontalLayout createEntryActionButtons(LdapEntry entry) {
-    HorizontalLayout layout = new HorizontalLayout();
-
-    Button addAttrButton = new Button("Add Attribute", VaadinIcon.PLUS.create());
-    addAttrButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    addAttrButton.addClickListener(e -> showAddAttributeDialog(entry));
-
-    Button testLoginButton = new Button("Test Login", VaadinIcon.KEY.create());
-    testLoginButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    testLoginButton.addClickListener(e -> showTestLoginDialog(entry));
-
-    Button refreshButton = new Button("Refresh", VaadinIcon.REFRESH.create());
-    refreshButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    refreshButton.addClickListener(e -> refreshEntry(entry));
-
-    Button deleteButton = new Button("Delete Entry", VaadinIcon.TRASH.create());
-    deleteButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-    deleteButton.addClickListener(e -> deleteEntry(entry));
-
-    layout.add(addAttrButton, testLoginButton, refreshButton, deleteButton);
-    return layout;
+    // Find the server config for this entry
+    List<LdapServerConfig> configs = configService.loadConfigurations();
+    configs.stream()
+        .filter(c -> c.getName().equals(entry.getServerName()))
+        .findFirst()
+        .ifPresent(config -> {
+          entryEditor.setServerConfig(config);
+          entryEditor.editEntry(entry);
+        });
   }
 
   private void performSearch() {
@@ -530,241 +426,5 @@ public class SearchView extends VerticalLayout {
         filterField.setValue(generatedFilter);
       }
     }
-  }
-
-  private void showAddAttributeDialog(LdapEntry entry) {
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Add Attribute");
-
-    TextField attrNameField = new TextField("Attribute Name");
-    attrNameField.setWidthFull();
-
-    TextField attrValueField = new TextField("Value");
-    attrValueField.setWidthFull();
-
-    Button addButton = new Button("Add", e -> {
-      String attrName = attrNameField.getValue();
-      String attrValue = attrValueField.getValue();
-
-      if (attrName != null && !attrName.isEmpty() && attrValue != null && !attrValue.isEmpty()) {
-        addAttribute(entry, attrName, Arrays.asList(attrValue));
-        dialog.close();
-      }
-    });
-    addButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-
-    FormLayout form = new FormLayout(attrNameField, attrValueField);
-    HorizontalLayout buttons = new HorizontalLayout(addButton, cancelButton);
-
-    dialog.add(form, buttons);
-    dialog.open();
-  }
-
-  private void showEditAttributeDialog(LdapEntry entry, String attrName, List<String> values) {
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Edit Attribute: " + attrName);
-
-    TextField valueField = new TextField("Value");
-    valueField.setValue(String.join(", ", values));
-    valueField.setWidthFull();
-
-    Button saveButton = new Button("Save", e -> {
-      String newValue = valueField.getValue();
-      if (newValue != null && !newValue.isEmpty()) {
-        modifyAttribute(entry, attrName, Arrays.asList(newValue.split(",\\s*")));
-        dialog.close();
-      }
-    });
-    saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-
-    FormLayout form = new FormLayout(valueField);
-    HorizontalLayout buttons = new HorizontalLayout(saveButton, cancelButton);
-
-    dialog.add(form, buttons);
-    dialog.open();
-  }
-
-  private void showTestLoginDialog(LdapEntry entry) {
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Test Login");
-
-    TextField dnField = new TextField("DN");
-    dnField.setValue(entry.getDn());
-    dnField.setReadOnly(true);
-    dnField.setWidthFull();
-
-    PasswordField passwordField = new PasswordField("Password");
-    passwordField.setWidthFull();
-
-    Button testButton = new Button("Test", e -> {
-      String password = passwordField.getValue();
-      if (password != null && !password.isEmpty()) {
-        testLogin(entry, password);
-        dialog.close();
-      }
-    });
-    testButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-
-    FormLayout form = new FormLayout(dnField, passwordField);
-    HorizontalLayout buttons = new HorizontalLayout(testButton, cancelButton);
-
-    dialog.add(form, buttons);
-    dialog.open();
-  }
-
-  private void addAttribute(LdapEntry entry, String attrName, List<String> values) {
-    List<LdapServerConfig> configs = configService.loadConfigurations();
-    configs.stream()
-        .filter(c -> c.getName().equals(entry.getServerName()))
-        .findFirst()
-        .ifPresent(config -> {
-          try {
-            ldapService.addAttribute(config, entry.getDn(), attrName, values);
-            Notification.show(
-                "Attribute added successfully",
-                3000,
-                Notification.Position.BOTTOM_END
-            ).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-            refreshEntry(entry);
-          } catch (LDAPException | GeneralSecurityException e) {
-            Notification.show(
-                "Failed to add attribute: " + e.getMessage(),
-                5000,
-                Notification.Position.MIDDLE
-            ).addThemeVariants(NotificationVariant.LUMO_ERROR);
-            logger.error("Failed to add attribute", e);
-          }
-        });
-  }
-
-  private void modifyAttribute(LdapEntry entry, String attrName, List<String> values) {
-    List<LdapServerConfig> configs = configService.loadConfigurations();
-    configs.stream()
-        .filter(c -> c.getName().equals(entry.getServerName()))
-        .findFirst()
-        .ifPresent(config -> {
-          try {
-            ldapService.modifyAttribute(config, entry.getDn(), attrName, values);
-            Notification.show(
-                "Attribute modified successfully",
-                3000,
-                Notification.Position.BOTTOM_END
-            ).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-            refreshEntry(entry);
-          } catch (LDAPException | GeneralSecurityException e) {
-            Notification.show(
-                "Failed to modify attribute: " + e.getMessage(),
-                5000,
-                Notification.Position.MIDDLE
-            ).addThemeVariants(NotificationVariant.LUMO_ERROR);
-            logger.error("Failed to modify attribute", e);
-          }
-        });
-  }
-
-  private void deleteAttribute(LdapEntry entry, String attrName) {
-    List<LdapServerConfig> configs = configService.loadConfigurations();
-    configs.stream()
-        .filter(c -> c.getName().equals(entry.getServerName()))
-        .findFirst()
-        .ifPresent(config -> {
-          try {
-            ldapService.deleteAttribute(config, entry.getDn(), attrName);
-            Notification.show(
-                "Attribute deleted successfully",
-                3000,
-                Notification.Position.BOTTOM_END
-            ).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-            refreshEntry(entry);
-          } catch (LDAPException | GeneralSecurityException e) {
-            Notification.show(
-                "Failed to delete attribute: " + e.getMessage(),
-                5000,
-                Notification.Position.MIDDLE
-            ).addThemeVariants(NotificationVariant.LUMO_ERROR);
-            logger.error("Failed to delete attribute", e);
-          }
-        });
-  }
-
-  private void refreshEntry(LdapEntry entry) {
-    List<LdapServerConfig> configs = configService.loadConfigurations();
-    configs.stream()
-        .filter(c -> c.getName().equals(entry.getServerName()))
-        .findFirst()
-        .ifPresent(config -> {
-          try {
-            LdapEntry refreshed = ldapService.readEntry(config, entry.getDn(), false);
-            showEntryDetails(refreshed);
-            Notification.show(
-                "Entry refreshed",
-                2000,
-                Notification.Position.BOTTOM_END
-            );
-          } catch (LDAPException | GeneralSecurityException e) {
-            Notification.show(
-                "Failed to refresh entry: " + e.getMessage(),
-                5000,
-                Notification.Position.MIDDLE
-            ).addThemeVariants(NotificationVariant.LUMO_ERROR);
-            logger.error("Failed to refresh entry", e);
-          }
-        });
-  }
-
-  private void deleteEntry(LdapEntry entry) {
-    List<LdapServerConfig> configs = configService.loadConfigurations();
-    configs.stream()
-        .filter(c -> c.getName().equals(entry.getServerName()))
-        .findFirst()
-        .ifPresent(config -> {
-          try {
-            ldapService.deleteEntry(config, entry.getDn());
-            Notification.show(
-                "Entry deleted successfully",
-                3000,
-                Notification.Position.BOTTOM_END
-            ).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-            currentResults.remove(entry);
-            resultsGrid.setItems(currentResults);
-            entryDetailsPanel.setVisible(false);
-          } catch (LDAPException | GeneralSecurityException e) {
-            Notification.show(
-                "Failed to delete entry: " + e.getMessage(),
-                5000,
-                Notification.Position.MIDDLE
-            ).addThemeVariants(NotificationVariant.LUMO_ERROR);
-            logger.error("Failed to delete entry", e);
-          }
-        });
-  }
-
-  private void testLogin(LdapEntry entry, String password) {
-    List<LdapServerConfig> configs = configService.loadConfigurations();
-    configs.stream()
-        .filter(c -> c.getName().equals(entry.getServerName()))
-        .findFirst()
-        .ifPresent(config -> {
-          boolean success = ldapService.testBind(config, entry.getDn(), password);
-          if (success) {
-            Notification.show(
-                "Login test successful",
-                3000,
-                Notification.Position.MIDDLE
-            ).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-          } else {
-            Notification.show(
-                "Login test failed - invalid credentials",
-                3000,
-                Notification.Position.MIDDLE
-            ).addThemeVariants(NotificationVariant.LUMO_ERROR);
-          }
-        });
   }
 }

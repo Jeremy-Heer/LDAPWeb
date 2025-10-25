@@ -47,24 +47,13 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
        - allows building complex ldap searches graphacilly
        - resulting filter is populated into the Filter field
    - Search results are displayed at the bottom
-   - Results can be selected to display entry details in a details pane to the right
-      - Entry Details
-        - a header with LDAP server name corisponding to the result, the DN of the selected entry and a copy icon to copy the DN to clipboard
-        - Add Attribute button allows adding attribute to the entry
-        - save button to save changes
-        - test login button to pop up a dialog to enter a password and perform a ldap bind attempt for the selected entry
-        - refresh button to reload entry details from the ldap server
-        - delete button to delete the entry from ldap
-        - show operational attributes to fetch and display operational attributes for the entry
-        - a grid with headers for attribute, value, actions
-            - attribute column displays the attribute names for the entry
-            - Values column displays the values for the attribute
-            - Actions column to display edit, copy, delete icons to allow editing of the attribute
+   - Results can be selected to display shared Entry Editor pane to the right
+
 
 1. **Browse**
     - Browse link in Drawer
     - The "Tree Browser " is displayed on the left using selected ldap servers for its data.
-    - Selected Entries from the Tree Browser  are displayed in the EntryDetails dialog on the right.
+    - Selected Entries from the Tree Browser  are displayed in the shared Entry Editor to the right.
     - 
 
 1. **Schema**

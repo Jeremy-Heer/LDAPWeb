@@ -5,7 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
-import com.ldapbrowser.ui.components.EntryDetailsPanel;
+import com.ldapbrowser.ui.components.EntryEditor;
 import com.ldapbrowser.ui.components.LdapTreeBrowser;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
@@ -34,7 +34,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
   private final ConfigurationService configService;
 
   private LdapTreeBrowser treeBrowser;
-  private EntryDetailsPanel entryDetails;
+  private EntryEditor entryEditor;
   private SplitLayout splitLayout;
   private Set<String> lastLoadedServers;
 
@@ -102,8 +102,8 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
       onEntrySelected(selectedEntry);
     });
 
-    // Create entry details panel
-    entryDetails = new EntryDetailsPanel(ldapService);
+    // Create attribute editor
+    entryEditor = new EntryEditor(ldapService, configService);
   }
 
   private void setupLayout() {
@@ -112,7 +112,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
     splitLayout.setSplitterPosition(25); // 25% for tree, 75% for details
 
     splitLayout.addToPrimary(treeBrowser);
-    splitLayout.addToSecondary(entryDetails);
+    splitLayout.addToSecondary(entryEditor);
 
     add(splitLayout);
     setFlexGrow(1, splitLayout);
@@ -138,8 +138,6 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
     if (!selectedConfigs.isEmpty()) {
       treeBrowser.setServerConfigs(selectedConfigs);
-      // Set the first config for the entry details panel (used when viewing details)
-      entryDetails.setServerConfig(selectedConfigs.get(0));
       treeBrowser.loadServers();
     } else {
       showServerNotFound("No matching server configurations found");
@@ -148,13 +146,13 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
   private void onEntrySelected(LdapEntry entry) {
     if (entry == null) {
-      entryDetails.clear();
+      entryEditor.clear();
       return;
     }
 
     // Don't show details for server nodes
     if (entry.getDn().startsWith("SERVER:")) {
-      entryDetails.clear();
+      entryEditor.clear();
       return;
     }
 
@@ -176,8 +174,8 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
             // Try to read the entry with this config
             fullEntry = ldapService.readEntry(config, entry.getDn(), false);
             if (fullEntry != null) {
-              entryDetails.setServerConfig(config);
-              entryDetails.showEntry(fullEntry);
+              entryEditor.setServerConfig(config);
+              entryEditor.editEntry(fullEntry);
               return;
             }
           } catch (Exception ignored) {
@@ -188,14 +186,14 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
       
       // If we couldn't read from any server, show basic entry info
       if (fullEntry == null) {
-        entryDetails.showEntry(entry);
+        entryEditor.editEntry(entry);
       }
     } catch (Exception e) {
       Notification.show("Failed to load entry details: " + e.getMessage(),
           3000, Notification.Position.BOTTOM_END)
           .addThemeVariants(NotificationVariant.LUMO_ERROR);
       // Show basic entry info
-      entryDetails.showEntry(entry);
+      entryEditor.editEntry(entry);
     }
   }
 
@@ -212,17 +210,17 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
         .set("color", "var(--lumo-secondary-text-color)");
 
     splitLayout.addToPrimary(message);
-    // Keep entry details on the right (secondary)
-    splitLayout.addToSecondary(entryDetails);
+    // Keep attribute editor on the right (secondary)
+    splitLayout.addToSecondary(entryEditor);
   }
 
   private void restoreNormalLayout() {
     // Remove all components from split layout
     splitLayout.removeAll();
     
-    // Re-add in correct order: tree browser on left (primary), entry details on right (secondary)
+    // Re-add in correct order: tree browser on left (primary), attribute editor on right (secondary)
     splitLayout.addToPrimary(treeBrowser);
-    splitLayout.addToSecondary(entryDetails);
+    splitLayout.addToSecondary(entryEditor);
   }
 
   private void showServerNotFound(String serverName) {
