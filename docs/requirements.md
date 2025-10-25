@@ -63,8 +63,8 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
 
 1. **Browse**
     - Browse link in Drawer
-    - The "Tree Navigator" is displayed on the left using selected ldap servers for its data.
-    - Selected Entries from the Tree Navigator are displayed in the EntryDetails dialog on the right.
+    - The "Tree Browser " is displayed on the left using selected ldap servers for its data.
+    - Selected Entries from the Tree Browser  are displayed in the EntryDetails dialog on the right.
     - 
 
 1. **Schema**
@@ -81,7 +81,15 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
 
 1. **Shared Components**
 
-    - "Tree Navigator"
+    - "Entry Editor"
+        - Displayed when an LDAP entry is selected either by search or browse
+        - DN displayed in Title with copy options
+        - Add attribute, save changes, test login, refresh ,delete entry buttons
+        - Show operational attributes checkbo
+        - attributes displayed in a grid color coded.
+        - each attribute/value row has actions icons including edit, copy, delete
+
+    - "Tree Browser"
         - A hierachical LDAP Tree-based DN selector used throughout application.
         - Expandable/collapsible tree nodes with lazy loading
         - Real-time directory tree updates
@@ -93,14 +101,16 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - A maximum of 100 entries are displayed. When more than 100 entries are in the LDAP container, a pageing feature is used to page forward and backwards.
 ```
 first.example.ldap/
-|----dc=example,dc=com/
-|    |----ou=people
-|    |----ou=groups
-|
+|--ROOT DSE
+   |----dc=example,dc=com/
+      |----ou=people
+      |----ou=groups
+
 second.example.ldap/
-|----dc=company,dc=net
-|    |----ou=admins
-|    |----ou=developers
+|---ROOT DSE
+    |----dc=company,dc=net
+      |----ou=admins
+      |----ou=developers
 ```
 
 ## Core Services

@@ -1,5 +1,84 @@
 # LDAP Web Browser
 
+## v0.6 - Implement shared Entry Details pane
+  - When displaying a selected entry from the Browse tab
+  - When displaying a selected entry from the Search tab
+  - use the common Entry Details component
+
+## v0.5 - 2025-10-24 ✅ COMPLETED - Tree Browser Component
+
+### Implemented Features
+- ✅ **Tree Browser Component** - Hierarchical LDAP navigation
+  - Created `LdapTreeGrid` component for tree-based LDAP browsing
+    - Icon-based visualization for different entry types (server, domain, organization, organizational unit, person, group, default)
+    - **Multi-server support:** Server names appear as top-level nodes
+    - Hierarchy: Server → Root DSE → Naming Contexts → LDAP entries
+    - Lazy loading with automatic child expansion
+    - 100 entry per-level limit for performance
+    - Determinate expander display based on entry type
+  
+  - Created `LdapTreeBrowser` wrapper component
+    - Header with LDAP Browser title
+    - Refresh button for tree reload
+    - Selection event propagation
+    - Support for both single-server and multi-server modes
+    - Clean API for server config management
+  
+  - Created `EntryDetailsPanel` component
+    - Displays LDAP entry attributes in sortable grid
+    - DN with copy-to-clipboard functionality
+    - Refresh button to reload entry from LDAP
+    - Error handling for missing/invalid entries
+
+- ✅ **Browse Page Implementation**
+  - Complete `BrowseView` with split layout (25% tree, 75% details)
+  - **Multi-server integration:** All selected servers automatically populate the tree
+  - Server selection integration via MainLayout
+  - Tree browser on left showing hierarchical LDAP data for multiple servers
+  - Entry details panel on right for selected entries
+  - Automatic server detection for entry details
+  - Full entry load on selection with error handling
+
+- ✅ **Search DN Selector Integration**
+  - Browse button on Search Base field opens DN selector dialog
+  - Dialog with tree browser for DN navigation
+  - Select button to choose DN from tree
+  - Selected DN automatically populates Search Base field
+  - Server selection validation with user-friendly errors
+
+- ✅ **Model Enhancements**
+  - Extended `LdapEntry` with `hasChildren` and `rdn` fields
+  - Added `getRdn()`, `getDisplayName()` methods for tree display
+  - Updated setters for tree navigation state
+
+- ✅ **Service Enhancements**
+  - Added `browseEntries()` for one-level searches with size limit
+  - Added `getNamingContexts()` for Root DSE context retrieval
+  - Added `getEntryMinimal()` for lightweight entry fetches
+  - Added `shouldShowExpanderForEntry()` for UI hints
+  - Added `clearPagingState()` for paging cleanup
+
+### Build Status
+- ✅ Compilation successful with `mvn clean compile`
+- ✅ 0 Checkstyle violations (only warnings for style suggestions)
+- ✅ All components error-free
+
+### Multi-Server Behavior
+- When multiple servers are selected from the dropdown, each server appears as a top-level node in the tree
+- Expanding a server node shows its Root DSE entry
+- Expanding Root DSE shows Naming Contexts
+- Full LDAP hierarchy browsing available under each naming context
+- Entry details automatically use the correct server configuration
+- **Browse page auto-refreshes** when server selection changes (1-second polling)
+- **DN selector dialog** shows all selected servers with proper multi-server support
+
+### Recent Fixes (2025-10-24)
+- ✅ Fixed Browse page to auto-refresh when servers are selected/deselected (UI polling every 1 second)
+- ✅ Fixed DN selector dialog to show server names as top-level nodes
+- ✅ Fixed DN selector dialog closing issue when expanding Root DSE
+- ✅ Added validation to prevent selecting server nodes or Root DSE as search base DN
+- ✅ Dialog now modal with close-on-outside-click disabled for better UX
+
 ## v0.4 - IN PROGRESS
 
 ### Implemented Features

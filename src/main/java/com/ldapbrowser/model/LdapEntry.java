@@ -14,6 +14,8 @@ public class LdapEntry {
   private String serverName;
   private Map<String, List<String>> attributes;
   private Map<String, List<String>> operationalAttributes;
+  private boolean hasChildren;
+  private String rdn;
   
   /**
    * Creates a new LDAP entry.
@@ -106,5 +108,59 @@ public class LdapEntry {
   public String getFirstAttributeValue(String name) {
     List<String> values = getAttributeValues(name);
     return values.isEmpty() ? null : values.get(0);
+  }
+  
+  /**
+   * Gets whether entry has children.
+   *
+   * @return true if entry has children
+   */
+  public boolean isHasChildren() {
+    return hasChildren;
+  }
+  
+  /**
+   * Sets whether entry has children.
+   *
+   * @param hasChildren true if entry has children
+   */
+  public void setHasChildren(boolean hasChildren) {
+    this.hasChildren = hasChildren;
+  }
+  
+  /**
+   * Gets the relative distinguished name (RDN).
+   *
+   * @return the RDN
+   */
+  public String getRdn() {
+    if (rdn != null) {
+      return rdn;
+    }
+    // Extract RDN from DN if not set
+    if (dn != null && !dn.isEmpty()) {
+      int commaIndex = dn.indexOf(',');
+      return commaIndex > 0 ? dn.substring(0, commaIndex) : dn;
+    }
+    return null;
+  }
+  
+  /**
+   * Sets the relative distinguished name (RDN).
+   *
+   * @param rdn the RDN
+   */
+  public void setRdn(String rdn) {
+    this.rdn = rdn;
+  }
+  
+  /**
+   * Gets display name for tree view.
+   *
+   * @return display name
+   */
+  public String getDisplayName() {
+    String displayRdn = getRdn();
+    return displayRdn != null ? displayRdn : dn;
   }
 }
