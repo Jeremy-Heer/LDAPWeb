@@ -1,5 +1,94 @@
 # LDAP Web Browser
 
+## v0.7 - 2025-10-25 ✅ COMPLETED - Schema Tab Implementation
+
+### Implemented Features
+- ✅ **Schema View with Top-Level Tabs**
+  - Created two-level tab structure: top-level (Manage/Compare) and sub-level tabs
+  - Implemented `SchemaView` as main container with dependency injection
+  - Automatic schema loading on view initialization
+
+- ✅ **Schema Manage Tab Component**
+  - Created `SchemaManageTab` component with 5 sub-tabs:
+    - Object Classes
+    - Attribute Types
+    - Matching Rules
+    - Matching Rule Use
+    - Syntaxes
+  
+  - **Multi-Server Support:**
+    - **Server column added to all grids** - displays source server for each schema element
+    - Loads and aggregates schema from all selected servers simultaneously
+    - Each schema element tracked with its source server via `SchemaElement` wrapper class
+    - Search filtering works across server names and schema element properties
+  
+  - **Grid Features:**
+    - Sortable and resizable columns
+    - Search functionality across all schema elements
+    - Refresh button to reload schemas
+    - Details panel showing complete information for selected element
+  
+  - **Schema Element Display:**
+    - Object Classes: Name, OID, Description, Type, Obsolete status, Server
+    - Attribute Types: Name, OID, Description, Syntax OID, Obsolete status, Server
+    - Matching Rules: Name, OID, Description, Syntax OID, Obsolete status, Server
+    - Matching Rule Use: OID, Description, Obsolete status, Server
+    - Syntaxes: OID, Description, Server
+  
+  - **Details Panel:**
+    - Comprehensive details for selected schema elements
+    - Shows superior classes, required/optional attributes (for object classes)
+    - Displays superior type, matching rules (for attribute types)
+    - Clean, labeled layout with server information prominently displayed
+
+- ✅ **Schema Compare Tab Placeholder**
+  - Created `SchemaCompareTab` component with "Under Construction" message
+  - Reserved for future schema comparison functionality
+
+- ✅ **LDAP Service Enhancement**
+  - Added `getSchema(LdapServerConfig)` method to retrieve schema from servers
+  - Added `isConnected(String)` method to check connection status
+  - Schema retrieval uses UnboundID LDAP SDK's built-in schema support
+
+- ✅ **Schema Element Wrapper**
+  - Created `SchemaElement<T>` generic wrapper class
+  - Associates any schema element type with its source server name
+  - Enables multi-server schema aggregation and display
+
+### Technical Details
+- **Component Location**: 
+  - `src/main/java/com/ldapbrowser/ui/views/SchemaView.java`
+  - `src/main/java/com/ldapbrowser/ui/components/SchemaManageTab.java`
+  - `src/main/java/com/ldapbrowser/ui/components/SchemaCompareTab.java`
+  - `src/main/java/com/ldapbrowser/model/SchemaElement.java`
+- **Service Enhancement**: `src/main/java/com/ldapbrowser/service/LdapService.java`
+- **Model Used**: Based on SchemaBrowser.java from LDAPBrowser GitHub repository
+- **Multi-Server Pattern**: Iterates through selected servers, aggregates results with server tracking
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/service/LdapService.java` - Added schema retrieval methods
+- `src/main/java/com/ldapbrowser/ui/views/SchemaView.java` - Complete rewrite with tabs
+- **New Files Created:**
+  - `src/main/java/com/ldapbrowser/ui/components/SchemaManageTab.java`
+  - `src/main/java/com/ldapbrowser/ui/components/SchemaCompareTab.java`
+  - `src/main/java/com/ldapbrowser/model/SchemaElement.java`
+
+### Build Verification
+- ✅ `mvn clean compile` - Successful (23 source files)
+- ✅ `mvn checkstyle:check` - 0 violations
+- ✅ All components compile without errors
+- ✅ Multi-server schema loading implemented and tested
+
+### User Experience Features
+- **Multi-Server Awareness**: Server column in every grid shows schema element origin
+- **Comprehensive Search**: Filter by server name or any schema element property
+- **Two-Level Navigation**: Top tabs (Manage/Compare) and sub-tabs (schema element types)
+- **Detailed Information**: Side panel with complete schema element details
+- **Professional Layout**: Clean, consistent with existing Browse/Search views
+- **Future Ready**: Compare tab placeholder for future schema comparison features
+
+---
+
 ## v0.6 - 2025-10-25 ✅ COMPLETED - Shared Entry Details Component
 
 ### Implemented Features

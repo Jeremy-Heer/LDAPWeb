@@ -57,7 +57,15 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
     - 
 
 1. **Schema**
-    - TBD
+    - Full CRUD Schema management
+    - 2 levels of tabs
+    - top level tabs "Manage" and "Compare"
+    - Manage tab - full schema browse and edit. sub tabs for object class, attributes, matching rules, matching rule use, and syntax.
+        - A grid displayes items for each of the above catagories with a search and refresh button.
+        - Selected items are displayed in a Schema Details side pane
+        - Schema Details side pane allows editing the item.
+    - Compare tab - Compares the schema for the selected servers
+        - 
 
 1. **Access**
     - TBD

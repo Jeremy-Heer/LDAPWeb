@@ -3,6 +3,7 @@ package com.ldapbrowser.service;
 import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.util.OidLookupTable;
 import com.unboundid.asn1.ASN1OctetString;
 import com.unboundid.ldap.sdk.Attribute;
 import com.unboundid.ldap.sdk.Control;
@@ -13,17 +14,18 @@ import com.unboundid.ldap.sdk.LDAPSearchException;
 import com.unboundid.ldap.sdk.Modification;
 import com.unboundid.ldap.sdk.ModificationType;
 import com.unboundid.ldap.sdk.ResultCode;
+import com.unboundid.ldap.sdk.RootDSE;
 import com.unboundid.ldap.sdk.SearchRequest;
 import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.unboundid.ldap.sdk.StartTLSPostConnectProcessor;
 import com.unboundid.ldap.sdk.controls.SimplePagedResultsControl;
+import com.unboundid.ldap.sdk.schema.Schema;
 import com.unboundid.util.ssl.SSLUtil;
 import com.unboundid.util.ssl.TrustAllTrustManager;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -742,5 +744,279 @@ public class LdapService {
     }
     
     return true;
+  }
+  
+  /**
+   * Retrieves the schema from an LDAP server.
+   * This method uses the Extended Schema Info control when supported to retrieve
+   * additional schema metadata such as X-SCHEMA-FILE.
+   *
+   * @param config server configuration
+   * @return schema object
+   * @throws LDAPException if schema retrieval fails
+   */
+  public Schema getSchema(LdapServerConfig config) throws LDAPException {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      
+      // Try to retrieve schema with Extended Schema Info control for Ping Directory
+      try {
+        String schemaDN = getSchemaSubentryDN(config);
+        if (schemaDN != null && !schemaDN.isEmpty()) {
+          SearchRequest req = new SearchRequest(
+              schemaDN,
+              SearchScope.BASE,
+              "(objectClass=*)",
+              // Request all common schema attributes
+              "attributeTypes", "objectClasses", "ldapSyntaxes", "matchingRules",
+              "matchingRuleUse", "dITContentRules", "nameForms", "dITStructureRules"
+          );
+          
+          // Add Extended Schema Info control (non-critical) to get X-SCHEMA-FILE
+          req.addControl(new Control(OidLookupTable.EXTENDED_SCHEMA_INFO_OID, false));
+          
+          SearchResult sr = pool.search(req);
+          if (sr.getEntryCount() > 0) {
+            SearchResultEntry entry = sr.getSearchEntries().get(0);
+            try {
+              // Build Schema directly from the schema subentry with extended info
+              Schema schema = new Schema(entry);
+              logger.info("Retrieved schema with extended info from {}", config.getName());
+              return schema;
+            } catch (Throwable t) {
+              // Fall through to standard retrieval
+              logger.debug("Could not parse schema from subentry, using standard retrieval", t);
+            }
+          }
+        }
+      } catch (LDAPException e) {
+        // Fall back to standard retrieval
+        logger.debug("Extended schema retrieval failed, using standard method", e);
+      }
+      
+      // Standard schema retrieval (fallback)
+      Schema schema = pool.getSchema();
+      logger.info("Retrieved schema from {}", config.getName());
+      return schema;
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(
+          ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage()
+      );
+    }
+  }
+  
+  /**
+   * Checks if connected to a server.
+   *
+   * @param serverName server name
+   * @return true if connected
+   */
+  public boolean isConnected(String serverName) {
+    return connectionPools.containsKey(serverName);
+  }
+
+  /**
+   * Checks if the server supports schema modifications.
+   *
+   * @param config server configuration
+   * @return true if schema modification is supported
+   */
+  public boolean supportsSchemaModification(LdapServerConfig config) {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      RootDSE rootDSE = pool.getRootDSE();
+      
+      if (rootDSE != null) {
+        // Check for schema modification support indicators
+        String[] supportedFeatures = rootDSE.getAttributeValues("supportedFeatures");
+        if (supportedFeatures != null) {
+          for (String feature : supportedFeatures) {
+            // Check for various schema modification OIDs
+            if ("1.3.6.1.4.1.4203.1.5.1".equals(feature) || // All Operational Attributes
+                "1.3.6.1.4.1.42.2.27.9.5.4".equals(feature)) { // Sun DS Schema Modification
+              return true;
+            }
+          }
+        }
+        
+        // Check if schema subentry is accessible
+        String schemaDN = getSchemaSubentryDN(config);
+        if (schemaDN != null) {
+          try {
+            SearchResult result = pool.search(schemaDN, SearchScope.BASE, "(objectClass=*)", "objectClass");
+            return result != null && result.getSearchEntries().size() > 0;
+          } catch (LDAPException e) {
+            logger.debug("Schema subentry not accessible: {}", e.getMessage());
+          }
+        }
+      }
+    } catch (Exception e) {
+      logger.debug("Error checking schema modification support: {}", e.getMessage());
+    }
+    return false;
+  }
+
+  /**
+   * Gets the schema subentry DN from root DSE.
+   *
+   * @param config server configuration
+   * @return schema subentry DN or null if not found
+   */
+  private String getSchemaSubentryDN(LdapServerConfig config) {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      RootDSE rootDSE = pool.getRootDSE();
+      
+      if (rootDSE != null) {
+        // Try different attributes in order of preference
+        String schemaDN = rootDSE.getAttributeValue("subschemaSubentry");
+        if (schemaDN != null) {
+          return schemaDN;
+        }
+        
+        schemaDN = rootDSE.getAttributeValue("schemaNamingContext");
+        if (schemaDN != null) {
+          return schemaDN;
+        }
+        
+        schemaDN = rootDSE.getAttributeValue("schemaSubentry");
+        if (schemaDN != null) {
+          return schemaDN;
+        }
+      }
+      
+      // Fallback to common default
+      return "cn=schema";
+    } catch (Exception e) {
+      logger.debug("Error getting schema subentry DN: {}", e.getMessage());
+      return "cn=schema";
+    }
+  }
+
+  /**
+   * Modifies an object class in the schema.
+   *
+   * @param config server configuration
+   * @param oldDefinition old object class definition
+   * @param newDefinition new object class definition
+   * @throws LDAPException if modification fails
+   */
+  public void modifyObjectClassInSchema(LdapServerConfig config, String oldDefinition,
+      String newDefinition) throws LDAPException {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      String schemaDN = getSchemaSubentryDN(config);
+      
+      if (schemaDN == null) {
+        throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
+            "Cannot determine schema subentry DN");
+      }
+      
+      // PingDirectory handles modifications via ADD operation only
+      // No need to delete the old definition first
+      Modification addModification = new Modification(ModificationType.ADD,
+          "objectClasses", newDefinition);
+      
+      pool.modify(schemaDN, addModification);
+      
+      logger.info("Modified object class in schema on {}", config.getName());
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Modifies an attribute type in the schema.
+   *
+   * @param config server configuration
+   * @param oldDefinition old attribute type definition
+   * @param newDefinition new attribute type definition
+   * @throws LDAPException if modification fails
+   */
+  public void modifyAttributeTypeInSchema(LdapServerConfig config, String oldDefinition,
+      String newDefinition) throws LDAPException {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      String schemaDN = getSchemaSubentryDN(config);
+      
+      if (schemaDN == null) {
+        throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
+            "Cannot determine schema subentry DN");
+      }
+      
+      // PingDirectory handles modifications via ADD operation only
+      // No need to delete the old definition first
+      Modification addModification = new Modification(ModificationType.ADD,
+          "attributeTypes", newDefinition);
+      
+      pool.modify(schemaDN, addModification);
+      
+      logger.info("Modified attribute type in schema on {}", config.getName());
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Adds an object class to the schema.
+   *
+   * @param config server configuration
+   * @param definition object class definition
+   * @throws LDAPException if add fails
+   */
+  public void addObjectClassToSchema(LdapServerConfig config, String definition)
+      throws LDAPException {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      String schemaDN = getSchemaSubentryDN(config);
+      
+      if (schemaDN == null) {
+        throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
+            "Cannot determine schema subentry DN");
+      }
+      
+      Modification addModification = new Modification(ModificationType.ADD,
+          "objectClasses", definition);
+      
+      pool.modify(schemaDN, addModification);
+      
+      logger.info("Added object class to schema on {}", config.getName());
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Adds an attribute type to the schema.
+   *
+   * @param config server configuration
+   * @param definition attribute type definition
+   * @throws LDAPException if add fails
+   */
+  public void addAttributeTypeToSchema(LdapServerConfig config, String definition)
+      throws LDAPException {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      String schemaDN = getSchemaSubentryDN(config);
+      
+      if (schemaDN == null) {
+        throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
+            "Cannot determine schema subentry DN");
+      }
+      
+      Modification addModification = new Modification(ModificationType.ADD,
+          "attributeTypes", definition);
+      
+      pool.modify(schemaDN, addModification);
+      
+      logger.info("Added attribute type to schema on {}", config.getName());
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage());
+    }
   }
 }
