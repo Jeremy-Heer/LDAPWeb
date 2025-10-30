@@ -1,5 +1,110 @@
 # LDAP Web Browser
 
+## v0.8 - 2025-10-30 ✅ COMPLETED - Schema Compare Tab Implementation
+
+### Implemented Features
+- ✅ **Schema Compare Tab Component**
+  - Complete implementation of schema comparison across multiple LDAP servers
+  - Based on the proven GroupSchemaTab model from the LDAPBrowser GitHub repository
+  - Enables side-by-side comparison of schema elements between selected servers
+
+- ✅ **Multi-Server Schema Comparison**
+  - **Dynamic server columns** - grid adapts to show one column per selected server
+  - Loads and compares schemas from all selected servers simultaneously
+  - Checksum-based comparison using SHA-256 for detecting differences
+  - Status column showing "Equal" or "Unequal" across servers
+  
+  - **Comparison Features:**
+    - 8-character hash display for compact comparison
+    - MISSING indicator for elements not present on a server
+    - ERROR indicator for servers that failed to load schema
+    - Visual indication of schema consistency across infrastructure
+
+- ✅ **Five Sub-Tabs for Schema Elements**
+  - **Object Classes** - Compare class definitions, superior classes, required/optional attributes
+  - **Attribute Types** - Compare attribute definitions, syntax, matching rules
+  - **Matching Rules** - Compare matching rule definitions and syntax
+  - **Matching Rule Use** - Compare matching rule usage and applicable attributes
+  - **Syntaxes** - Compare attribute syntax definitions
+
+- ✅ **Smart Schema Retrieval**
+  - Automatic detection of Extended Schema Info control support (1.3.6.1.4.1.30221.2.5.12)
+  - All-or-none decision: if any server lacks support, standard retrieval used for consistency
+  - Prevents comparison mismatches due to different schema metadata
+  - Logs control usage for troubleshooting
+
+- ✅ **Canonicalization for Accurate Comparison**
+  - Schema elements normalized before comparison using `SchemaCompareUtil`
+  - Sorts multi-valued attributes (names, superior classes, etc.)
+  - Optional extension filtering via "Ignore Extensions" checkbox
+  - Removes vendor-specific variations to focus on semantic differences
+
+- ✅ **Search and Filter**
+  - Real-time search across all schema elements
+  - Filters applied to all sub-tabs simultaneously
+  - Search by element name
+
+- ✅ **Detailed Comparison View**
+  - Split layout with details panel below main grid
+  - Select any schema element to view property-by-property comparison
+  - Shows values from each server side-by-side
+  - Comprehensive property display:
+    - Object Classes: OID, Names, Description, Type, Obsolete, Superior Classes, Required/Optional Attributes
+    - Attribute Types: OID, Names, Description, Syntax, Single Value, Usage, Matching Rules
+    - Matching Rules: OID, Names, Description, Syntax
+    - Matching Rule Use: OID, Names, Description, Applicable Attributes
+    - Syntaxes: OID, Description
+
+- ✅ **Supporting Infrastructure**
+  - **SchemaCompareUtil** - Canonicalization utility for schema elements
+  - **LoggingService** - Detailed logging for schema comparison operations
+  - **LdapService enhancements**:
+    - `connect(config)` - Ensures connection pool exists
+    - `isControlSupported(serverId, controlOid)` - Checks LDAP control support
+    - `getSchema(serverId, useExtendedControl)` - Retrieves schema with control options
+
+- ✅ **Integration with SchemaView**
+  - SchemaView updated to pass selected servers to Compare tab
+  - Automatic refresh when Compare tab is selected
+  - Seamless integration with existing Manage tab
+
+### Technical Details
+- **New Components**:
+  - `src/main/java/com/ldapbrowser/ui/components/SchemaCompareTab.java` (~830 lines)
+  - `src/main/java/com/ldapbrowser/util/SchemaCompareUtil.java` - Canonicalization utility
+  - `src/main/java/com/ldapbrowser/service/LoggingService.java` - Structured logging service
+
+- **Enhanced Components**:
+  - `src/main/java/com/ldapbrowser/service/LdapService.java` - Added control checking and schema retrieval methods
+  - `src/main/java/com/ldapbrowser/ui/views/SchemaView.java` - Updated to integrate Compare tab
+
+- **Model Pattern**: Follows GroupSchemaTab.java from LDAPBrowser GitHub repository
+- **Comparison Algorithm**: SHA-256 checksums of canonicalized schema definitions
+- **Grid Architecture**: Dynamic column generation based on selected servers
+
+### Build Verification
+- ✅ `mvn clean compile` - Successful (26 source files)
+- ✅ `mvn checkstyle:check` - 0 violations
+- ✅ All components compile without errors
+- ✅ Clean integration with existing Schema view structure
+
+### User Experience Features
+- **Visual Feedback**: Status label shows loading progress and completion status
+- **Error Handling**: Graceful handling of server connection failures
+- **Performance**: Efficient parallel schema loading from multiple servers
+- **Flexibility**: Toggle extension comparison on/off
+- **Detailed Logging**: DEBUG and TRACE level logging for troubleshooting
+- **Professional Layout**: Consistent with Browse/Search/Schema Manage views
+
+### Use Cases Enabled
+1. **Schema Drift Detection** - Quickly identify differences between development and production LDAP servers
+2. **Multi-Directory Consistency** - Ensure schema consistency across replicated or clustered LDAP environments
+3. **Migration Validation** - Verify schema compatibility before migration
+4. **Vendor Comparison** - Compare schema implementations across different LDAP vendors
+5. **Change Auditing** - Track schema changes over time by comparing snapshots
+
+---
+
 ## v0.7 - 2025-10-25 ✅ COMPLETED - Schema Tab Implementation
 
 ### Implemented Features

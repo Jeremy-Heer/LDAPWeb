@@ -805,6 +805,60 @@ public class LdapService {
       );
     }
   }
+
+  /**
+   * Retrieves the schema from an LDAP server by server ID.
+   *
+   * @param serverId server ID (name)
+   * @param useExtendedControl whether to use the Extended Schema Info control
+   * @return schema object
+   * @throws LDAPException if schema retrieval fails
+   */
+  public Schema getSchema(String serverId, boolean useExtendedControl) throws LDAPException {
+    LDAPConnectionPool pool = connectionPools.get(serverId);
+    if (pool == null) {
+      throw new LDAPException(ResultCode.CONNECT_ERROR, "Not connected to server: " + serverId);
+    }
+
+    if (useExtendedControl) {
+      try {
+        // Get root DSE to find schema DN
+        RootDSE rootDSE = pool.getRootDSE();
+        String schemaDN = rootDSE != null 
+            ? rootDSE.getAttributeValue("subschemaSubentry") 
+            : "cn=schema";
+        
+        if (schemaDN == null || schemaDN.isEmpty()) {
+          schemaDN = "cn=schema";
+        }
+
+        SearchRequest req = new SearchRequest(
+            schemaDN,
+            SearchScope.BASE,
+            "(objectClass=*)",
+            "attributeTypes", "objectClasses", "ldapSyntaxes", "matchingRules",
+            "matchingRuleUse", "dITContentRules", "nameForms", "dITStructureRules"
+        );
+        
+        req.addControl(new Control(OidLookupTable.EXTENDED_SCHEMA_INFO_OID, false));
+        
+        SearchResult sr = pool.search(req);
+        if (sr.getEntryCount() > 0) {
+          SearchResultEntry entry = sr.getSearchEntries().get(0);
+          Schema schema = new Schema(entry);
+          logger.debug("Retrieved schema with extended control from {}", serverId);
+          return schema;
+        }
+      } catch (LDAPException e) {
+        logger.debug("Extended schema retrieval failed for {}, using standard", serverId);
+      }
+    }
+    
+    // Standard retrieval
+    Schema schema = pool.getSchema();
+    logger.debug("Retrieved schema from {}", serverId);
+    return schema;
+  }
   
   /**
    * Checks if connected to a server.
@@ -814,6 +868,56 @@ public class LdapService {
    */
   public boolean isConnected(String serverName) {
     return connectionPools.containsKey(serverName);
+  }
+
+  /**
+   * Ensures connection pool exists for a server configuration.
+   *
+   * @param config server configuration
+   * @throws LDAPException if connection fails
+   */
+  public void connect(LdapServerConfig config) throws LDAPException {
+    try {
+      getConnectionPool(config);
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(
+          ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage()
+      );
+    }
+  }
+
+  /**
+   * Checks if the server supports a specific LDAP control.
+   *
+   * @param serverId server ID (name)
+   * @param controlOid control OID to check
+   * @return true if the control is supported
+   * @throws LDAPException if checking fails
+   */
+  public boolean isControlSupported(String serverId, String controlOid) throws LDAPException {
+    try {
+      LDAPConnectionPool pool = connectionPools.get(serverId);
+      if (pool == null) {
+        return false;
+      }
+      
+      RootDSE rootDSE = pool.getRootDSE();
+      if (rootDSE != null) {
+        String[] supportedControls = rootDSE.getAttributeValues("supportedControl");
+        if (supportedControls != null) {
+          for (String control : supportedControls) {
+            if (controlOid.equals(control)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    } catch (Exception e) {
+      logger.debug("Error checking control support for {}: {}", serverId, e.getMessage());
+      return false;
+    }
   }
 
   /**

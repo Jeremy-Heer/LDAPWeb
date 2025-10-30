@@ -65,7 +65,18 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - Selected items are displayed in a Schema Details side pane
         - Schema Details side pane allows editing the item.
     - Compare tab - Compares the schema for the selected servers
-        - 
+        - a search field to find items in the grid
+        - a checkbox to ignore extensions. when selected this will ignore vendor specific extensiosn suchs as X-SCHEMA-FILE
+        - a refresh button
+        - sub tabs Object Class, Attribute Types, Matching Rules, Matching Rule Use, Syntaxes
+        - when a subtab is selectected, those items are listed in a grid. For example when object class is selected, the object classes from each of 
+            the selected servers is listed in the grid
+            - Columns Name followed by a column for each server name, ending with a Status column
+            - The name column would contain the name of the itme (name of the object class for example)
+            - Each server name column would contain an 8 character hash of the schema extension for the server
+            - Status column has Equal or Unequal values indicating if the hash for each server is equal or not
+            - Each grid item is selectable to display the details for the selected item under the grid
+                - for example when a object class row is selected, each property for the object class is displayed for each of the servers
 
 1. **Access**
     - TBD
