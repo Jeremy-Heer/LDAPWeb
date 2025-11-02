@@ -7,11 +7,13 @@ import com.ldapbrowser.ui.MainLayout;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
-import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
@@ -33,24 +35,13 @@ public class ServerView extends VerticalLayout {
 
   private final ConfigurationService configService;
   private final LdapService ldapService;
-  private final Binder<LdapServerConfig> binder = new Binder<>(LdapServerConfig.class);
 
-  private ComboBox<String> serverSelector;
-  private TextField nameField;
-  private TextField hostField;
-  private IntegerField portField;
-  private TextField baseDnField;
-  private TextField bindDnField;
-  private PasswordField bindPasswordField;
-  private Checkbox useSslCheckbox;
-  private Checkbox useStartTlsCheckbox;
-
-  private Button testButton;
-  private Button saveButton;
+  private Grid<LdapServerConfig> serverGrid;
+  private Button addServerButton;
+  private Button editButton;
   private Button copyButton;
   private Button deleteButton;
-
-  private LdapServerConfig currentConfig;
+  private Button testButton;
 
   /**
    * Creates the Server view.
@@ -64,81 +55,151 @@ public class ServerView extends VerticalLayout {
 
     setSpacing(true);
     setPadding(true);
-    setMaxWidth("900px");
+    setSizeFull();
 
     H2 title = new H2("Server Configuration");
     add(title);
 
-    createServerSelector();
-    createFormLayout();
     createActionButtons();
-
-    loadNewConfiguration();
+    createServerGrid();
+    refreshServerGrid();
   }
 
   /**
-   * Creates the server selector dropdown.
+   * Creates action buttons.
    */
-  private void createServerSelector() {
-    serverSelector = new ComboBox<>("Existing Servers");
-    serverSelector.setPlaceholder("Select a server or create new");
-    serverSelector.setWidth("100%");
-    serverSelector.setClearButtonVisible(true);
-    refreshServerList();
+  private void createActionButtons() {
+    addServerButton = new Button("Add Server", event -> openServerDialog(null));
+    addServerButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-    serverSelector.addValueChangeListener(event -> {
-      String serverName = event.getValue();
-      if (serverName != null) {
-        loadConfiguration(serverName);
-      } else {
-        loadNewConfiguration();
-      }
+    editButton = new Button("Edit", event -> editSelectedServer());
+    editButton.setEnabled(false);
+
+    copyButton = new Button("Copy", event -> copySelectedServer());
+    copyButton.setEnabled(false);
+
+    deleteButton = new Button("Delete", event -> deleteSelectedServer());
+    deleteButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+    deleteButton.setEnabled(false);
+
+    testButton = new Button("Test", event -> testSelectedServer());
+    testButton.setEnabled(false);
+
+    HorizontalLayout buttonLayout = new HorizontalLayout(
+        addServerButton, editButton, copyButton, deleteButton, testButton
+    );
+    buttonLayout.setSpacing(true);
+    buttonLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+
+    add(buttonLayout);
+  }
+
+  /**
+   * Creates the server grid.
+   */
+  private void createServerGrid() {
+    serverGrid = new Grid<>(LdapServerConfig.class, false);
+    serverGrid.setHeight("600px");
+    serverGrid.setWidthFull();
+
+    serverGrid.addColumn(LdapServerConfig::getName)
+        .setHeader("Name")
+        .setSortable(true)
+        .setResizable(true);
+
+    serverGrid.addColumn(config -> config.getHost() + ":" + config.getPort())
+        .setHeader("Host:Port")
+        .setSortable(true)
+        .setResizable(true);
+
+    serverGrid.addColumn(LdapServerConfig::getBindDn)
+        .setHeader("Bind DN")
+        .setSortable(true)
+        .setResizable(true);
+
+    serverGrid.addColumn(this::getSecurityLabel)
+        .setHeader("Security")
+        .setSortable(true)
+        .setResizable(true);
+
+    serverGrid.asSingleSelect().addValueChangeListener(event -> {
+      boolean hasSelection = event.getValue() != null;
+      editButton.setEnabled(hasSelection);
+      copyButton.setEnabled(hasSelection);
+      deleteButton.setEnabled(hasSelection);
+      testButton.setEnabled(hasSelection);
     });
 
-    add(serverSelector);
+    add(serverGrid);
   }
 
   /**
-   * Creates the form layout with all fields.
+   * Gets the security label for a server config.
+   *
+   * @param config server configuration
+   * @return security label
    */
-  private void createFormLayout() {
+  private String getSecurityLabel(LdapServerConfig config) {
+    if (config.isUseSsl()) {
+      return "SSL/TLS";
+    } else if (config.isUseStartTls()) {
+      return "StartTLS";
+    } else {
+      return "None";
+    }
+  }
+
+  /**
+   * Refreshes the server grid with latest data.
+   */
+  private void refreshServerGrid() {
+    List<LdapServerConfig> configs = configService.loadConfigurations();
+    serverGrid.setItems(configs);
+  }
+
+  /**
+   * Opens the server dialog for adding or editing.
+   *
+   * @param config configuration to edit, or null for new
+   */
+  private void openServerDialog(LdapServerConfig config) {
+    Dialog dialog = new Dialog();
+    dialog.setWidth("600px");
+    dialog.setHeaderTitle(config == null ? "Add Server" : "Edit Server");
+
+    // Create form
     FormLayout formLayout = new FormLayout();
     formLayout.setResponsiveSteps(
         new FormLayout.ResponsiveStep("0", 1),
         new FormLayout.ResponsiveStep("500px", 2)
     );
 
-    // Name field
-    nameField = new TextField("Server Name");
+    TextField nameField = new TextField("Server Name");
     nameField.setRequired(true);
     nameField.setPlaceholder("e.g., Production LDAP");
 
-    // Host field
-    hostField = new TextField("Host");
+    TextField hostField = new TextField("Host");
     hostField.setRequired(true);
     hostField.setPlaceholder("e.g., ldap.example.com");
 
-    // Port field
-    portField = new IntegerField("Port");
+    IntegerField portField = new IntegerField("Port");
     portField.setValue(389);
     portField.setMin(1);
     portField.setMax(65535);
     portField.setStepButtonsVisible(true);
 
-    // Base DN field
-    baseDnField = new TextField("Base DN");
+    TextField baseDnField = new TextField("Base DN");
     baseDnField.setPlaceholder("e.g., dc=example,dc=com");
 
-    // Bind DN field
-    bindDnField = new TextField("Bind DN");
+    TextField bindDnField = new TextField("Bind DN");
     bindDnField.setPlaceholder("e.g., cn=admin,dc=example,dc=com");
 
-    // Bind Password field
-    bindPasswordField = new PasswordField("Bind Password");
+    PasswordField bindPasswordField = new PasswordField("Bind Password");
     bindPasswordField.setPlaceholder("Enter password");
 
-    // SSL checkbox
-    useSslCheckbox = new Checkbox("Use SSL (LDAPS)");
+    Checkbox useSslCheckbox = new Checkbox("Use SSL (LDAPS)");
+    Checkbox useStartTlsCheckbox = new Checkbox("Use StartTLS");
+
     useSslCheckbox.addValueChangeListener(event -> {
       if (event.getValue()) {
         portField.setValue(636);
@@ -148,21 +209,19 @@ public class ServerView extends VerticalLayout {
       }
     });
 
-    // StartTLS checkbox
-    useStartTlsCheckbox = new Checkbox("Use StartTLS");
     useStartTlsCheckbox.addValueChangeListener(event -> {
       if (event.getValue()) {
         useSslCheckbox.setValue(false);
       }
     });
 
-    // Add fields to form
     formLayout.add(nameField, hostField);
     formLayout.add(portField, baseDnField);
     formLayout.add(bindDnField, bindPasswordField);
     formLayout.add(useSslCheckbox, useStartTlsCheckbox);
 
-    // Set up data binding
+    // Create binder
+    Binder<LdapServerConfig> binder = new Binder<>(LdapServerConfig.class);
     binder.forField(nameField)
         .asRequired("Name is required")
         .bind(LdapServerConfig::getName, LdapServerConfig::setName);
@@ -180,157 +239,130 @@ public class ServerView extends VerticalLayout {
     binder.bind(useStartTlsCheckbox,
         LdapServerConfig::isUseStartTls, LdapServerConfig::setUseStartTls);
 
-    add(formLayout);
-  }
+    // Load existing config or create new
+    LdapServerConfig editConfig = config != null ? config : new LdapServerConfig();
+    binder.readBean(editConfig);
 
-  /**
-   * Creates action buttons.
-   */
-  private void createActionButtons() {
-    testButton = new Button("Test Connection", event -> testConnection());
-    testButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    saveButton = new Button("Save", event -> saveConfiguration());
+    // Create buttons
+    Button saveButton = new Button("Save", event -> {
+      if (binder.validate().isOk()) {
+        try {
+          LdapServerConfig saveConfig = new LdapServerConfig();
+          binder.writeBean(saveConfig);
+          configService.saveConfiguration(saveConfig);
+          showSuccess("Configuration saved: " + saveConfig.getName());
+          refreshServerGrid();
+          refreshNavbarServerList();
+          dialog.close();
+        } catch (com.vaadin.flow.data.binder.ValidationException e) {
+          showError("Validation error: " + e.getMessage());
+        } catch (IOException e) {
+          showError("Failed to save configuration: " + e.getMessage());
+        }
+      } else {
+        showError("Please fill in all required fields");
+      }
+    });
     saveButton.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
 
-    copyButton = new Button("Copy", event -> copyConfiguration());
+    Button cancelButton = new Button("Cancel", event -> dialog.close());
 
-    deleteButton = new Button("Delete", event -> deleteConfiguration());
-    deleteButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
-
-    HorizontalLayout buttonLayout = new HorizontalLayout(
-        testButton, saveButton, copyButton, deleteButton
-    );
+    HorizontalLayout buttonLayout = new HorizontalLayout(saveButton, cancelButton);
     buttonLayout.setSpacing(true);
 
-    add(buttonLayout);
+    VerticalLayout dialogLayout = new VerticalLayout(formLayout, buttonLayout);
+    dialogLayout.setPadding(false);
+    dialogLayout.setSpacing(true);
+
+    dialog.add(dialogLayout);
+    dialog.open();
   }
 
   /**
-   * Tests the connection to the LDAP server.
+   * Edits the selected server.
    */
-  private void testConnection() {
-    if (!binder.validate().isOk()) {
-      showError("Please fill in all required fields");
-      return;
-    }
-
-    try {
-      LdapServerConfig config = new LdapServerConfig();
-      binder.writeBean(config);
-
-      boolean success = ldapService.testConnection(config);
-      if (success) {
-        showSuccess("Connection successful!");
-      } else {
-        showError("Connection failed. Check your settings.");
-      }
-    } catch (com.vaadin.flow.data.binder.ValidationException e) {
-      showError("Validation error: " + e.getMessage());
-    } catch (Exception e) {
-      showError("Connection test failed: " + e.getMessage());
+  private void editSelectedServer() {
+    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
+    if (selected != null) {
+      openServerDialog(selected);
     }
   }
 
   /**
-   * Saves the server configuration.
+   * Copies the selected server.
    */
-  private void saveConfiguration() {
-    if (!binder.validate().isOk()) {
-      showError("Please fill in all required fields");
-      return;
-    }
-
-    try {
-      LdapServerConfig config = new LdapServerConfig();
-      binder.writeBean(config);
-
-      configService.saveConfiguration(config);
-      showSuccess("Configuration saved: " + config.getName());
-      refreshServerList();
-      currentConfig = config;
-      serverSelector.setValue(config.getName());
-
-      // Refresh the navbar server list
-      getUI().ifPresent(ui -> {
-        if (ui.getInternals().getActiveRouterTargetsChain().get(0)
-            .getElement().getComponent().isPresent()) {
-          MainLayout layout = (MainLayout) ui.getChildren()
-              .filter(component -> component instanceof MainLayout)
-              .findFirst()
-              .orElse(null);
-          if (layout != null) {
-            layout.refreshServerList();
-          }
-        }
-      });
-    } catch (com.vaadin.flow.data.binder.ValidationException e) {
-      showError("Validation error: " + e.getMessage());
-    } catch (IOException e) {
-      showError("Failed to save configuration: " + e.getMessage());
-    }
-  }
-
-  /**
-   * Copies the current configuration.
-   */
-  private void copyConfiguration() {
-    if (currentConfig != null) {
-      LdapServerConfig copy = currentConfig.copy();
-      binder.readBean(copy);
-      currentConfig = null;
-      serverSelector.clear();
+  private void copySelectedServer() {
+    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
+    if (selected != null) {
+      LdapServerConfig copy = selected.copy();
+      openServerDialog(copy);
       showSuccess("Configuration copied. Update the name and save.");
     }
   }
 
   /**
-   * Deletes the current configuration.
+   * Deletes the selected server.
    */
-  private void deleteConfiguration() {
-    if (currentConfig != null && currentConfig.getName() != null) {
+  private void deleteSelectedServer() {
+    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
+    if (selected != null && selected.getName() != null) {
+      Dialog confirmDialog = new Dialog();
+      confirmDialog.setHeaderTitle("Confirm Delete");
+      confirmDialog.add("Are you sure you want to delete server: " + selected.getName() + "?");
+
+      Button confirmButton = new Button("Delete", event -> {
+        try {
+          configService.deleteConfiguration(selected.getName());
+          showSuccess("Configuration deleted: " + selected.getName());
+          refreshServerGrid();
+          refreshNavbarServerList();
+          confirmDialog.close();
+        } catch (IOException e) {
+          showError("Failed to delete configuration: " + e.getMessage());
+        }
+      });
+      confirmButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+      Button cancelButton = new Button("Cancel", event -> confirmDialog.close());
+
+      HorizontalLayout buttonLayout = new HorizontalLayout(confirmButton, cancelButton);
+      confirmDialog.getFooter().add(buttonLayout);
+      confirmDialog.open();
+    }
+  }
+
+  /**
+   * Tests the selected server connection.
+   */
+  private void testSelectedServer() {
+    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
+    if (selected != null) {
       try {
-        configService.deleteConfiguration(currentConfig.getName());
-        showSuccess("Configuration deleted: " + currentConfig.getName());
-        refreshServerList();
-        loadNewConfiguration();
-      } catch (IOException e) {
-        showError("Failed to delete configuration: " + e.getMessage());
+        boolean success = ldapService.testConnection(selected);
+        if (success) {
+          showSuccess("Connection successful to: " + selected.getName());
+        } else {
+          showError("Connection failed to: " + selected.getName());
+        }
+      } catch (Exception e) {
+        showError("Connection test failed: " + e.getMessage());
       }
     }
   }
 
   /**
-   * Loads a configuration by name.
-   *
-   * @param name server name
+   * Refreshes the navbar server list.
    */
-  private void loadConfiguration(String name) {
-    configService.getConfiguration(name).ifPresentOrElse(config -> {
-      currentConfig = config;
-      binder.readBean(config);
-      deleteButton.setEnabled(true);
-      copyButton.setEnabled(true);
-    }, this::loadNewConfiguration);
-  }
-
-  /**
-   * Loads a new empty configuration.
-   */
-  private void loadNewConfiguration() {
-    currentConfig = new LdapServerConfig();
-    binder.readBean(currentConfig);
-    serverSelector.clear();
-    deleteButton.setEnabled(false);
-    copyButton.setEnabled(false);
-  }
-
-  /**
-   * Refreshes the server selector list.
-   */
-  private void refreshServerList() {
-    List<LdapServerConfig> configs = configService.loadConfigurations();
-    serverSelector.setItems(configs.stream().map(LdapServerConfig::getName).toList());
+  private void refreshNavbarServerList() {
+    getUI().ifPresent(ui -> {
+      MainLayout layout = (MainLayout) ui.getChildren()
+          .filter(component -> component instanceof MainLayout)
+          .findFirst()
+          .orElse(null);
+      if (layout != null) {
+        layout.refreshServerList();
+      }
+    });
   }
 
   /**

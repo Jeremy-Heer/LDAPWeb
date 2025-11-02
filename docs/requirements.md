@@ -27,12 +27,28 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - Links: Server, Search, Browse, Schema, Access, Bulk, Import/Export
 
 1. **Server**
-   - Server link in Drawer
    - Purpose is to manage LDAP server connection details
-   - Server dropdown in Navbar is updated when new servers are saved.
-   - Configuration of LDAP servers connection details
+   - Servers tab selected from drawer
+   - Displays buttons - Add Server, Edit, Copy, Delete, Test
+   - List of existing servers displayed in grid under buttons
+   - Grid columns
+        - Name
+        - Host:Port
+        - Bind DN
+        - Security (indicates if tls/ssl is used)
+   - Selected server can then be edited, copied, deleted, or connection tested.
+   - Add Server displays dialog fields to add
+        - Name
+        - host
+        - port
+        - Bind DN
+        - Password
+        - Use SSL Checkbox
+        - Use StartTLS checkbox
+        - Base DN
+   - when existing server is selected, same dialog in edit mode
+   - Server dropdown in Navbar is updated with Server updates
    - Saved into a local file connections.json
-   - Test, save, and copy actions
 
 1. **Search**
    - Search link in Drawer
@@ -79,7 +95,34 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
                 - for example when a object class row is selected, each property for the object class is displayed for each of the servers
 
 1. **Access**
-    - TBD
+    - 3 sub tabs
+        - Global Access Control
+            - Reads the Ping Directory "cn=Access Control Handler,cn=config" / "ds-cfg-global-aci"
+            - a grid display each aci Name value with a search field to filter the grid display
+            - a preview pane to the right to display details for selected aci entries
+        - Entry Accesss Control
+            - performs a subtree search for the ldap server "(aci=*)" returning each aci value
+            - results are displayed in a grid with Name, Entry DN, and Resources columns
+            - A search to filter grid
+            - A preview pane that displays aci details to the right
+                - aci details with edit and delete icons
+                - edit icon opens aci editor pop up
+                    - contains targetn entry with dn selector helper popup
+                    - ACI value with Build ACI icon that launches ACI Builder
+                        - aci builder a a UI to select each aci element
+        - Effective Rights
+            - Check effective access rights for entries using GetEffectiveRightsRequestControl
+            - Search base with DN selector popup
+            - search scoope
+            - search filter
+            - attributes
+            - Effective Rights for field with a DN selector popup
+            - search size limit with defaut value of 100
+            - search button
+            - search results displayed in a grid below form
+                - columns Entry DN, Attribute Rights, Entry Rights
+
+        - Effective Rights
 
 1. **Bulk**
     - TBD

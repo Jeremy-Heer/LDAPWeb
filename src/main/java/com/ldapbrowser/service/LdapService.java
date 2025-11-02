@@ -773,7 +773,8 @@ public class LdapService {
           );
           
           // Add Extended Schema Info control (non-critical) to get X-SCHEMA-FILE
-          req.addControl(new Control(OidLookupTable.EXTENDED_SCHEMA_INFO_OID, false));
+          // OID: 1.3.6.1.4.1.30221.2.5.12 - Extended Schema Info Request Control
+          req.addControl(new Control("1.3.6.1.4.1.30221.2.5.12", false));
           
           SearchResult sr = pool.search(req);
           if (sr.getEntryCount() > 0) {
@@ -840,7 +841,9 @@ public class LdapService {
             "matchingRuleUse", "dITContentRules", "nameForms", "dITStructureRules"
         );
         
-        req.addControl(new Control(OidLookupTable.EXTENDED_SCHEMA_INFO_OID, false));
+        // Add Extended Schema Info control (non-critical) to get X-SCHEMA-FILE
+        // OID: 1.3.6.1.4.1.30221.2.5.12 - Extended Schema Info Request Control
+        req.addControl(new Control("1.3.6.1.4.1.30221.2.5.12", false));
         
         SearchResult sr = pool.search(req);
         if (sr.getEntryCount() > 0) {

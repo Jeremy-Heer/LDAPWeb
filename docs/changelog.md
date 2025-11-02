@@ -1,5 +1,76 @@
 # LDAP Web Browser
 
+## v0.9 - Access Tab
+
+## v0.8.2 - Use OidLookupTable to retreive OID for all extended operations
+
+## v0.8.1 - 2025-10-30 ✅ COMPLETED - Server Management Enhancement
+
+### Implemented Features
+- ✅ **Redesigned Server View** - Complete overhaul of server management interface
+  - Replaced form-based layout with grid-based display
+  - Action buttons prominently displayed at top (Add Server, Edit, Copy, Delete, Test)
+  - Servers displayed in sortable, resizable grid with columns:
+    - Name - Server configuration name
+    - Host:Port - Combined host and port display
+    - Bind DN - Distinguished name for binding
+    - Security - Shows SSL/TLS, StartTLS, or None
+  
+- ✅ **Dialog-Based Server Management**
+  - Add Server button opens dialog for creating new configurations
+  - Edit button opens dialog with selected server details
+  - Copy button duplicates selected server for quick configuration cloning
+  - Delete button with confirmation dialog prevents accidental deletion
+  - Test button validates connection for selected server
+  
+- ✅ **Server Configuration Dialog Features**
+  - Modal dialog with professional layout
+  - All fields from original form (Name, Host, Port, Base DN, Bind DN, Password)
+  - SSL and StartTLS checkboxes with mutual exclusivity
+  - Automatic port adjustment (389 for standard, 636 for SSL)
+  - Form validation with required field checking
+  - Save and Cancel buttons
+  
+- ✅ **Enhanced User Experience**
+  - Grid selection enables/disables action buttons appropriately
+  - Single click to select server, double click support maintained
+  - Visual feedback for security settings in grid
+  - Automatic navbar refresh when servers are added/edited/deleted
+  - Professional, clean layout following Vaadin Lumo theme
+  - Consistent with other views (Search, Browse, Schema)
+  
+- ✅ **Preserved Functionality**
+  - All original features retained (connection testing, SSL/TLS support)
+  - ConfigurationService integration unchanged
+  - LdapService integration unchanged
+  - JSON persistence to `~/.ldapbrowser/connections.json`
+  - Session-based server selection in navbar
+
+### Technical Details
+- **Component Updates**: Complete rewrite of `ServerView.java`
+- **Grid Implementation**: Vaadin Grid component with custom columns
+- **Dialog Pattern**: Modal dialogs for all server CRUD operations
+- **Data Binding**: Binder pattern for form validation maintained
+- **Code Reduction**: Eliminated redundant field variables, simplified logic
+- **Responsive Design**: Grid and dialogs adapt to viewport size
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/views/ServerView.java` - Complete rewrite (~387 lines)
+
+### Build Verification
+- ✅ `mvn clean compile` - Successful (26 source files)
+- ✅ `mvn checkstyle:check` - 0 violations
+- ✅ All components compile without errors
+
+### User Experience Improvements
+- **Better Overview**: Grid view shows all servers at once
+- **Faster Workflow**: Action buttons always visible, no scrolling needed
+- **Safer Operations**: Confirmation dialog for destructive actions
+- **Clearer UI**: Dialog-based editing reduces visual clutter
+- **Professional Appearance**: Matches modern enterprise application standards
+
+---
+
 ## v0.8 - 2025-10-30 ✅ COMPLETED - Schema Compare Tab Implementation
 
 ### Implemented Features
