@@ -1,11 +1,18 @@
 package com.ldapbrowser.ui.views;
 
+import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.service.ConfigurationService;
+import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
-import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.Paragraph;
+import com.ldapbrowser.ui.components.GlobalAccessControlTab;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.tabs.Tab;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Access control view.
@@ -15,26 +22,94 @@ import com.vaadin.flow.router.Route;
 @PageTitle("Access | LDAP Browser")
 public class AccessView extends VerticalLayout {
 
+  private final GlobalAccessControlTab globalAccessControlTab;
+  private final Tabs topLevelTabs;
+  private final VerticalLayout contentContainer;
+  private final ConfigurationService configService;
+
   /**
    * Creates the Access view.
+   *
+   * @param ldapService LDAP service
+   * @param configService configuration service
    */
-  public AccessView() {
-    setSpacing(true);
-    setPadding(true);
+  public AccessView(LdapService ldapService, ConfigurationService configService) {
+    this.configService = configService;
+    
+    setSizeFull();
+    setPadding(false);
+    setSpacing(false);
 
-    H2 title = new H2("Access Control");
-    Paragraph description = new Paragraph(
-        "This page will allow you to manage LDAP access control and permissions."
-    );
+    // Create top-level tabs
+    topLevelTabs = new Tabs();
+    Tab globalAccessControlTabItem = new Tab("Global Access Control");
+    // Placeholder tabs for future implementation
+    Tab effectiveRightsTabItem = new Tab("Effective Rights");
+    Tab aciEditorTabItem = new Tab("ACI Editor");
+    
+    topLevelTabs.add(globalAccessControlTabItem, effectiveRightsTabItem, aciEditorTabItem);
+    
+    // Disable future tabs
+    effectiveRightsTabItem.setEnabled(false);
+    aciEditorTabItem.setEnabled(false);
 
-    Paragraph status = new Paragraph("🚧 Under Construction 🚧");
-    status.getStyle()
-        .set("font-size", "var(--lumo-font-size-xl)")
-        .set("font-weight", "bold")
-        .set("color", "var(--lumo-warning-color)")
-        .set("text-align", "center")
-        .set("padding", "var(--lumo-space-xl)");
+    // Create tab content components
+    globalAccessControlTab = new GlobalAccessControlTab(ldapService);
 
-    add(title, description, status);
+    // Content container
+    contentContainer = new VerticalLayout();
+    contentContainer.setSizeFull();
+    contentContainer.setPadding(false);
+    contentContainer.setSpacing(false);
+
+    // Show global access control tab by default
+    contentContainer.add(globalAccessControlTab);
+
+    // Tab selection listener
+    topLevelTabs.addSelectedChangeListener(event -> {
+      Tab selectedTab = event.getSelectedTab();
+      contentContainer.removeAll();
+
+      if (selectedTab == globalAccessControlTabItem) {
+        contentContainer.add(globalAccessControlTab);
+        // Load ACIs when tab is selected
+        updateGlobalAccessControlTabServers();
+      }
+      // Future tabs will be handled here
+    });
+
+    add(topLevelTabs, contentContainer);
+    setFlexGrow(1, contentContainer);
+
+    // Load ACIs on initial view
+    updateGlobalAccessControlTabServers();
+  }
+
+  /**
+   * Updates the global access control tab with currently selected servers from main layout.
+   */
+  private void updateGlobalAccessControlTabServers() {
+    Set<LdapServerConfig> selectedServers = getSelectedServers();
+    globalAccessControlTab.setSelectedServers(selectedServers);
+  }
+
+  /**
+   * Gets the currently selected servers from the main layout.
+   *
+   * @return set of selected server configurations
+   */
+  private Set<LdapServerConfig> getSelectedServers() {
+    Set<String> selectedServerNames = MainLayout.getSelectedServers();
+    Set<LdapServerConfig> selectedServers = new HashSet<>();
+    
+    // Load all configurations and filter by selected names
+    List<LdapServerConfig> allConfigs = configService.loadConfigurations();
+    for (LdapServerConfig config : allConfigs) {
+      if (selectedServerNames.contains(config.getName())) {
+        selectedServers.add(config);
+      }
+    }
+    
+    return selectedServers;
   }
 }

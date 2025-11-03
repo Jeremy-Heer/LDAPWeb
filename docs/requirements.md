@@ -97,11 +97,11 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
 1. **Access**
     - 3 sub tabs
         - Global Access Control
-            - Reads the Ping Directory "cn=Access Control Handler,cn=config" / "ds-cfg-global-aci"
-            - a grid display each aci Name value with a search field to filter the grid display
+            - Reads the Ping Directory "cn=Access Control Handler,cn=config" / "ds-cfg-global-aci" for each selected ldap server
+            - a grid display each server name, aci Name value with a search field to filter the grid display
             - a preview pane to the right to display details for selected aci entries
         - Entry Accesss Control
-            - performs a subtree search for the ldap server "(aci=*)" returning each aci value
+            - performs a subtree search wtih base of server default base for each selected ldap server "(aci=*)" returning each aci value
             - results are displayed in a grid with Name, Entry DN, and Resources columns
             - A search to filter grid
             - A preview pane that displays aci details to the right
@@ -111,18 +111,16 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
                     - ACI value with Build ACI icon that launches ACI Builder
                         - aci builder a a UI to select each aci element
         - Effective Rights
-            - Check effective access rights for entries using GetEffectiveRightsRequestControl
+            - Check effective access rights for entries using "Get Effective Rights Request Control"
             - Search base with DN selector popup
             - search scoope
             - search filter
             - attributes
             - Effective Rights for field with a DN selector popup
             - search size limit with defaut value of 100
-            - search button
+            - search button to perform the search for each selected ldap server
             - search results displayed in a grid below form
-                - columns Entry DN, Attribute Rights, Entry Rights
-
-        - Effective Rights
+                - columns Server name, Entry DN, Attribute Rights, Entry Rights
 
 1. **Bulk**
     - TBD

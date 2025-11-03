@@ -1,6 +1,50 @@
 # LDAP Web Browser
 
-## v0.9 - Access Tab
+## v0.9 - 2025-11-02 ✅ COMPLETED - Access Tab - Global Access Control
+
+### Implemented Features
+- ✅ **Global Access Control Tab** - Read-only viewer for LDAP global ACIs
+  - Displays global Access Control Instructions from `cn=Access Control Handler,cn=config`
+  - Reads `ds-cfg-global-aci` attribute from each selected LDAP server
+  - Split-pane layout with ACI list on left (60%) and details panel on right (40%)
+  - Grid display with sortable columns:
+    - Name - ACI description/name
+    - Server - Origin server name
+    - Resources - Target resources (attributes, entries, scope, filters)
+    - Rights - Allow/Deny with permissions
+    - Clients - Bind rules (users, groups, IP, auth methods)
+  - Real-time search/filter across all ACIs by name or content
+  - Detailed ACI view panel showing:
+    - Parsed components (Resources, Rights, Clients)
+    - Raw ACI definition in read-only text area
+  - Refresh button to reload ACIs from all selected servers
+  - Multi-server support - aggregates ACIs from all selected servers
+  
+- ✅ **Access View Structure**
+  - Tabbed interface with three tabs:
+    - Global Access Control (active and functional)
+    - Effective Rights (placeholder, disabled)
+    - ACI Editor (placeholder, disabled)
+  - Follows same pattern as SchemaView for consistency
+  - Automatically refreshes when servers are selected/deselected
+  
+- ✅ **Integration with Existing Components**
+  - Uses existing `AciParser` utility for parsing ACI syntax
+  - Integrates with `LdapService` for LDAP operations
+  - Works with `ConfigurationService` for server configuration
+  - Respects multi-server selection from navbar
+
+### Technical Details
+- **Component Created**: `GlobalAccessControlTab.java`
+  - Extends `VerticalLayout`
+  - Inner class `GlobalAciInfo` wraps parsed ACI data with server name
+  - Uses `SplitLayout` for responsive two-pane design
+- **Component Modified**: `AccessView.java`
+  - Converted from placeholder to functional tabbed view
+  - Implements server selection tracking
+  - Prepares structure for future Effective Rights and ACI Editor tabs
+- **LDAP Operations**: Uses base scope search on `cn=Access Control Handler,cn=config`
+- **Code Style**: Follows Google Java style, passes Checkstyle validation
 
 ## v0.8.2 - Use OidLookupTable to retreive OID for all extended operations
 
