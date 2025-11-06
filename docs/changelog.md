@@ -1,5 +1,91 @@
 # LDAP Web Browser
 
+## v0.9.2 - 2025-11-05 ✅ COMPLETED - Access / Entry Access Control Enhancement
+
+### Implemented Features
+
+#### 1. **Fixed ACI Deletion Bug** - Delete only the selected ACI attribute value
+- ✅ Modified `deleteAci` method in `EntryAccessControlTab`
+- ✅ Reads current entry with operational attributes to get all ACI values
+- ✅ Removes only the specific ACI value from the list
+- ✅ Updates entry with remaining ACI values using `modifyAttribute`
+- ✅ Deletes entire aci attribute if no values remain
+- ✅ Proper error handling for entry not found, no ACI attributes, value not found
+
+#### 2. **Comprehensive ACI Builder Dialog** - Visual ACI construction tool
+- ✅ Integrated `AciBuilderDialog.java` from LDAPBrowser project
+- ✅ "Build ACI" button on "Add Access Control Instructions" dialog
+- ✅ "Build ACI" button on "Edit Access Control Instruction" dialog  
+- ✅ Support for all ACI components:
+  - Target types: target DN, targetattr, targetfilter, targettrfilters, extop, targetcontrol, requestcriteria, targetscope
+  - Permissions: read, write, add, delete, search, compare, selfwrite, proxy, all
+  - Bind rules: userdn, groupdn, roledn, authmethod, ip, dns with negation support
+- ✅ Real-time ACI preview as components are configured
+- ✅ Populate from existing ACI for editing
+- ✅ Schema-aware attribute selection from LDAP server
+- ✅ RootDSE integration for supported controls and extended operations
+
+#### 3. **DN Selection with Tree Browser** - Enhanced DN field navigation
+- ✅ Added `LdapTreeBrowser` integration for DN field selection
+- ✅ Browse button next to Target DN fields in ACI Builder
+- ✅ Browse button next to Bind Rule DN fields (userdn, groupdn, roledn)
+- ✅ Modal dialog with full LDAP tree navigation
+- ✅ Selection automatically populates the DN text field
+
+#### 4. **LDAP Service Enhancement** - Added getRootDSE method
+- ✅ New `getRootDSE(LdapServerConfig)` method in `LdapService`
+- ✅ Returns RootDSE with server capabilities information
+- ✅ Used by ACI Builder for controls and extended operations
+- ✅ Proper exception handling for LDAP and SSL/TLS errors
+
+### Technical Details
+
+**Components Modified:**
+- `EntryAccessControlTab.java`
+  - Fixed deleteAci to use `readEntry(config, dn, true)` for operational attributes
+  - Enabled "Build ACI" button and wired to `AciBuilderDialog`
+  - Added `openAciBuilder()` method to launch dialog with pre-population support
+
+**Components Added:**
+- `AciBuilderDialog.java` (1,300+ lines)
+  - Full visual ACI builder with all PingDirectory ACI syntax support
+  - Multiple target components with dynamic controls based on type
+  - Multiple bind rule components with type-specific fields
+  - Real-time preview with syntax highlighting
+  - DN browser integration for DN-type fields
+  - Schema integration for attribute selection
+  - RootDSE integration for controls and extended operations
+
+**Service Enhanced:**
+- `LdapService.java`
+  - Added `getRootDSE(LdapServerConfig)` method
+  - Returns `RootDSE` object with server information
+  - Enables ACI Builder to query server capabilities
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/EntryAccessControlTab.java` - ACI deletion fix and builder integration (~50 lines)
+- `src/main/java/com/ldapbrowser/ui/components/AciBuilderDialog.java` - NEW - Full ACI builder (1,300+ lines)
+- `src/main/java/com/ldapbrowser/service/LdapService.java` - Added getRootDSE method (~15 lines)
+- `docs/changelog.md` - Updated with v0.9.2 completion details
+
+### Build Verification
+- ✅ Compiles successfully with Maven
+- ✅ 0 Checkstyle violations
+- ✅ All imports resolved correctly
+- ✅ Proper exception handling throughout
+- ✅ Follows Google Java style conventions
+
+## v0.9.1 - Access / Entry Access Control sub tab
+  - implement Entry Access Control sub tab features
+    - main Entry Access Control tab
+    - refresh button
+    - Add New ACI - under construction
+    - search
+    - display grid
+    - details pane
+    - details edit - under construction
+    - details delete - under construction
+
 ## v0.9 - 2025-11-02 ✅ COMPLETED - Access Tab - Global Access Control
 
 ### Implemented Features

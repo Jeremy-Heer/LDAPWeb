@@ -5,6 +5,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.GlobalAccessControlTab;
+import com.ldapbrowser.ui.components.EntryAccessControlTab;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
@@ -23,6 +24,7 @@ import java.util.Set;
 public class AccessView extends VerticalLayout {
 
   private final GlobalAccessControlTab globalAccessControlTab;
+  private final EntryAccessControlTab entryAccessControlTab;
   private final Tabs topLevelTabs;
   private final VerticalLayout contentContainer;
   private final ConfigurationService configService;
@@ -43,11 +45,13 @@ public class AccessView extends VerticalLayout {
     // Create top-level tabs
     topLevelTabs = new Tabs();
     Tab globalAccessControlTabItem = new Tab("Global Access Control");
+    Tab entryAccessControlTabItem = new Tab("Entry Access Control");
     // Placeholder tabs for future implementation
     Tab effectiveRightsTabItem = new Tab("Effective Rights");
     Tab aciEditorTabItem = new Tab("ACI Editor");
     
-    topLevelTabs.add(globalAccessControlTabItem, effectiveRightsTabItem, aciEditorTabItem);
+    topLevelTabs.add(globalAccessControlTabItem, entryAccessControlTabItem, 
+        effectiveRightsTabItem, aciEditorTabItem);
     
     // Disable future tabs
     effectiveRightsTabItem.setEnabled(false);
@@ -55,6 +59,7 @@ public class AccessView extends VerticalLayout {
 
     // Create tab content components
     globalAccessControlTab = new GlobalAccessControlTab(ldapService);
+    entryAccessControlTab = new EntryAccessControlTab(ldapService);
 
     // Content container
     contentContainer = new VerticalLayout();
@@ -74,6 +79,10 @@ public class AccessView extends VerticalLayout {
         contentContainer.add(globalAccessControlTab);
         // Load ACIs when tab is selected
         updateGlobalAccessControlTabServers();
+      } else if (selectedTab == entryAccessControlTabItem) {
+        contentContainer.add(entryAccessControlTab);
+        // Load ACIs when tab is selected
+        updateEntryAccessControlTabServers();
       }
       // Future tabs will be handled here
     });
@@ -91,6 +100,15 @@ public class AccessView extends VerticalLayout {
   private void updateGlobalAccessControlTabServers() {
     Set<LdapServerConfig> selectedServers = getSelectedServers();
     globalAccessControlTab.setSelectedServers(selectedServers);
+  }
+
+  /**
+   * Updates the entry access control tab with currently selected servers from main layout.
+   */
+  private void updateEntryAccessControlTabServers() {
+    Set<LdapServerConfig> selectedServers = getSelectedServers();
+    entryAccessControlTab.setSelectedServers(selectedServers);
+    entryAccessControlTab.loadData();
   }
 
   /**

@@ -223,8 +223,35 @@ public class LdapService {
       String filter,
       SearchScope scope
   ) throws LDAPException, GeneralSecurityException {
+    return search(config, baseDn, filter, scope, (String[]) null);
+  }
+
+  /**
+   * Searches for LDAP entries with specified attributes.
+   *
+   * @param config server configuration
+   * @param baseDn base DN for search
+   * @param filter LDAP filter
+   * @param scope search scope
+   * @param attributes specific attributes to return (null for all user attributes)
+   * @return list of LDAP entries
+   * @throws LDAPException if search fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  public List<LdapEntry> search(
+      LdapServerConfig config,
+      String baseDn,
+      String filter,
+      SearchScope scope,
+      String... attributes
+  ) throws LDAPException, GeneralSecurityException {
     LDAPConnectionPool pool = getConnectionPool(config);
-    SearchRequest searchRequest = new SearchRequest(baseDn, scope, filter);
+    SearchRequest searchRequest;
+    if (attributes != null && attributes.length > 0) {
+      searchRequest = new SearchRequest(baseDn, scope, filter, attributes);
+    } else {
+      searchRequest = new SearchRequest(baseDn, scope, filter);
+    }
     SearchResult searchResult = pool.search(searchRequest);
 
     List<LdapEntry> entries = new ArrayList<>();
@@ -888,6 +915,22 @@ public class LdapService {
           "SSL/TLS error: " + e.getMessage()
       );
     }
+  }
+
+  /**
+   * Gets the Root DSE (Directory Server Entry) from the LDAP server.
+   * The Root DSE contains server-specific information like supported controls,
+   * naming contexts, schema location, etc.
+   *
+   * @param config server configuration
+   * @return RootDSE object or null if not available
+   * @throws LDAPException if retrieval fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  public RootDSE getRootDSE(LdapServerConfig config) 
+      throws LDAPException, GeneralSecurityException {
+    LDAPConnectionPool pool = getConnectionPool(config);
+    return pool.getRootDSE();
   }
 
   /**

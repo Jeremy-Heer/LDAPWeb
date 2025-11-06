@@ -102,17 +102,21 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
             - a preview pane to the right to display details for selected aci entries
         - Entry Accesss Control
             - performs a subtree search wtih base of server default base for each selected ldap server "(aci=*)" returning each aci value
-            - results are displayed in a grid with Name, Entry DN, and Resources columns
+            - results are displayed in a grid with Server name, ACI Name, Entry DN, and Resources columns
             - A search to filter grid
-            - A preview pane that displays aci details to the right
-                - aci details with edit and delete icons
-                - edit icon opens aci editor pop up
-                    - contains targetn entry with dn selector helper popup
-                    - ACI value with Build ACI icon that launches ACI Builder
-                        - aci builder a a UI to select each aci element
+            - A details pane that displays aci details to the right for selected items in the grid
+                - buttons at the top of the preview pane
+                    - edit - under construction
+                    - delete - under construction
+            - Buttons at the top of the sub tab
+                - Refresh - refreshes the grid
+                - Add New ACI - Under Construction
+            - Comprehensive ACI Builder
+                - When adding or editing ACIs
+                - UI to build each aci components as defiend by Ping Directory
         - Effective Rights
-            - Check effective access rights for entries using "Get Effective Rights Request Control"
-            - Search base with DN selector popup
+            - Check effective access rights for entries using "Get Effective Rights Request Control" found in OID lookup table.
+            - Search base with "Tree Browser" shared component popup
             - search scoope
             - search filter
             - attributes
