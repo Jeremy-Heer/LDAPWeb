@@ -1,5 +1,68 @@
 # LDAP Web Browser
 
+## v0.9.3 - 2025-11-06 ✅ COMPLETED - Access / Effective Rights Sub-Tab
+
+### Implemented Features
+
+#### 1. **Effective Rights Tab** - Check access rights using GetEffectiveRightsRequestControl
+- ✅ Integrated `EffectiveRightsTab.java` from LDAPBrowser project
+- ✅ Updated to use `LdapTreeBrowser` for DN selection (Browse buttons)
+- ✅ Multi-server support - searches all selected servers
+- ✅ Added Server column as first column in results grid
+- ✅ Form fields:
+  - Search Base with Browse button for tree navigation
+  - Search Scope (Base, One Level, Subtree)
+  - Search Filter with default `(objectClass=*)`
+  - Attributes (all or comma-separated list)
+  - Effective Rights For DN with Browse button
+  - Search Size Limit (default 100)
+- ✅ Results display:
+  - Server name (for multi-server identification)
+  - Entry DN
+  - Attribute Rights (read, write, selfwrite_add, selfwrite_delete, compare, search)
+  - Entry Rights (add, delete, read, write, proxy)
+- ✅ Proper error handling for:
+  - Unsupported GetEffectiveRightsRequestControl
+  - Connection failures
+  - Size limit exceeded
+  - Invalid DNs
+
+### Technical Details
+
+**Components Added:**
+- `EffectiveRightsTab.java`
+  - Package updated from `com.ldapweb.ldapbrowser` to `com.ldapbrowser`
+  - Replaced `DnSelectorField` with `TextField` + Browse `Button` pattern
+  - Added `showDnBrowserDialog(TextField)` method using `LdapTreeBrowser`
+  - Updated from single `LdapServerConfig` to `Set<LdapServerConfig>`
+  - Added `setSelectedServers(Set<LdapServerConfig>)` method
+  - `performSearch()` iterates through all selected servers
+  - `searchEffectiveRights()` accepts `LdapServerConfig` parameter
+  - Added `serverName` field to `EffectiveRightsResult` inner class
+  - Grid columns: Server (sortable), Entry DN, Attribute Rights, Entry Rights
+  - Fixed method names: `isUseSsl()`, `isUseStartTls()`, `getBindPassword()`
+
+**Components Modified:**
+- `AccessView.java`
+  - Added `EffectiveRightsTab` field and instantiation
+  - Enabled "Effective Rights" tab (previously disabled placeholder)
+  - Added tab selection case for `effectiveRightsTabItem`
+  - Added `updateEffectiveRightsTabServers()` method
+  - Properly wired to selected servers from `MainLayout`
+
+**LDAP Features:**
+- Uses UnboundID LDAP SDK `GetEffectiveRightsRequestControl` (OID 1.3.6.1.4.1.42.2.27.9.5.2)
+- Processes `EffectiveRightsEntry` for rights information
+- Handles `AttributeRight` and `EntryRight` enumerations
+- Supports both SSL and StartTLS connections
+- Direct LDAP connection management for control-based searches
+
+**Multi-Server Pattern:**
+- Follows same pattern as `GlobalAccessControlTab` and `EntryAccessControlTab`
+- Aggregates results from all selected servers
+- Server name displayed in first column for identification
+- Proper error logging per server without stopping entire search
+
 ## v0.9.2 - 2025-11-05 ✅ COMPLETED - Access / Entry Access Control Enhancement
 
 ### Implemented Features

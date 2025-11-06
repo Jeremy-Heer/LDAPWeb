@@ -175,19 +175,19 @@ public class EntryAccessControlTab extends VerticalLayout {
    * Sets up the grid columns with the new ACI structure.
    */
   private void setupGridColumns() {
-    // Name column (first and leftmost)
-    aciGrid.addColumn(EntryAciInfo::getName)
-        .setHeader("Name")
-        .setAutoWidth(true)
-        .setFlexGrow(1)
-        .setSortable(true)
-        .setResizable(true);
-
-    // Server column
+    // Server column (first and leftmost)
     aciGrid.addColumn(EntryAciInfo::getServerName)
         .setHeader("Server")
         .setAutoWidth(true)
         .setFlexGrow(0)
+        .setSortable(true)
+        .setResizable(true);
+
+    // Name column
+    aciGrid.addColumn(EntryAciInfo::getName)
+        .setHeader("Name")
+        .setAutoWidth(true)
+        .setFlexGrow(1)
         .setSortable(true)
         .setResizable(true);
 
@@ -506,15 +506,16 @@ public class EntryAccessControlTab extends VerticalLayout {
       return;
     }
 
-    // For now, use the first selected server
-    LdapServerConfig serverConfig = selectedServers.iterator().next();
-
-    if (!ldapService.isConnected(serverConfig.getName())) {
-      showError("Not connected to server: " + serverConfig.getName());
+    // Check if any server is connected
+    boolean anyConnected = selectedServers.stream()
+        .anyMatch(config -> ldapService.isConnected(config.getName()));
+    
+    if (!anyConnected) {
+      showError("Not connected to any selected server");
       return;
     }
 
-    AddAciDialog dialog = new AddAciDialog(ldapService, serverConfig, this::handleAciAdded);
+    AddAciDialog dialog = new AddAciDialog(ldapService, selectedServers, this::handleAciAdded);
     dialog.open();
   }
 
@@ -522,6 +523,11 @@ public class EntryAccessControlTab extends VerticalLayout {
    * Opens the Edit ACI dialog with pre-populated data.
    */
   private void openEditAciDialog(EntryAciInfo aciInfo) {
+    if (selectedServers == null || selectedServers.isEmpty()) {
+      showError("No servers selected");
+      return;
+    }
+
     LdapServerConfig serverConfig = getServerConfigById(aciInfo.getServerId());
     
     if (serverConfig == null) {
@@ -535,7 +541,7 @@ public class EntryAccessControlTab extends VerticalLayout {
     }
 
     // Create edit dialog with existing ACI data
-    AddAciDialog dialog = new AddAciDialog(ldapService, serverConfig, 
+    AddAciDialog dialog = new AddAciDialog(ldapService, selectedServers, 
         (targetDn, newAci) -> handleAciEdited(aciInfo, targetDn, newAci), 
         aciInfo);
     dialog.open();
@@ -724,8 +730,7 @@ public class EntryAccessControlTab extends VerticalLayout {
   private static class AddAciDialog extends Dialog {
     @SuppressWarnings("unused")
     private final LdapService ldapService;
-    @SuppressWarnings("unused")
-    private final LdapServerConfig serverConfig;
+    private final Set<LdapServerConfig> selectedServers;
     private final java.util.function.BiConsumer<String, String> onAciAdded;
     private final EntryAciInfo editingAci; // null for add mode, populated for edit mode
     
@@ -737,17 +742,17 @@ public class EntryAccessControlTab extends VerticalLayout {
     private Button copyLdifButton;
 
     // Constructor for adding new ACI
-    public AddAciDialog(LdapService ldapService, LdapServerConfig serverConfig,
+    public AddAciDialog(LdapService ldapService, Set<LdapServerConfig> selectedServers,
                        java.util.function.BiConsumer<String, String> onAciAdded) {
-      this(ldapService, serverConfig, onAciAdded, null);
+      this(ldapService, selectedServers, onAciAdded, null);
     }
 
     // Constructor for editing existing ACI or adding new ACI
-    public AddAciDialog(LdapService ldapService, LdapServerConfig serverConfig,
+    public AddAciDialog(LdapService ldapService, Set<LdapServerConfig> selectedServers,
                        java.util.function.BiConsumer<String, String> onAciAdded,
                        EntryAciInfo editingAci) {
       this.ldapService = ldapService;
-      this.serverConfig = serverConfig;
+      this.selectedServers = selectedServers;
       this.onAciAdded = onAciAdded;
       this.editingAci = editingAci;
       initUI();
@@ -794,8 +799,9 @@ public class EntryAccessControlTab extends VerticalLayout {
         targetDnField.setValue(editingAci.getDn());
       }
       
-      Button browseDnButton = new Button(VaadinIcon.SEARCH.create());
+      Button browseDnButton = new Button(VaadinIcon.FOLDER_OPEN.create());
       browseDnButton.setTooltipText("Browse LDAP tree to select DN");
+      browseDnButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
       browseDnButton.addClickListener(event -> showDnBrowserDialog());
       
       dnLayout.add(targetDnField, browseDnButton);
@@ -859,14 +865,17 @@ public class EntryAccessControlTab extends VerticalLayout {
     }
 
     private void openAciBuilder() {
+      // Use the first selected server for the ACI builder
+      LdapServerConfig firstServer = selectedServers.iterator().next();
+      
       AciBuilderDialog dialog = new AciBuilderDialog(
           builtAci -> {
             aciField.setValue(builtAci);
             updateAddButtonState();
           },
           ldapService,
-          serverConfig.getName(),
-          serverConfig
+          firstServer.getName(),
+          selectedServers
       );
       
       // If editing mode, populate with existing ACI
@@ -887,7 +896,8 @@ public class EntryAccessControlTab extends VerticalLayout {
       browserDialog.setHeight("600px");
 
       LdapTreeBrowser treeBrowser = new LdapTreeBrowser(ldapService);
-      treeBrowser.setServerConfig(serverConfig);
+      treeBrowser.setServerConfigs(new ArrayList<>(selectedServers));
+      treeBrowser.loadServers();
       treeBrowser.setSizeFull();
 
       browserDialog.add(treeBrowser);

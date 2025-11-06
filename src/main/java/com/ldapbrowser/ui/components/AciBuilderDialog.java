@@ -48,7 +48,7 @@ public class AciBuilderDialog extends Dialog {
   private Consumer<String> onAciBuilt;
   private LdapService ldapService;
   private String serverId;
-  private LdapServerConfig serverConfig;
+  private Set<LdapServerConfig> selectedServers;
   
   // Target container for multiple targets
   private VerticalLayout targetsContainer;
@@ -89,13 +89,13 @@ public class AciBuilderDialog extends Dialog {
    * @param onAciBuilt callback when ACI is successfully built
    * @param ldapService service for LDAP operations
    * @param serverId the server ID for LDAP operations
-   * @param serverConfig the server configuration for LDAP operations (optional)
+   * @param selectedServers the set of selected server configurations for LDAP operations
    */
-  public AciBuilderDialog(Consumer<String> onAciBuilt, LdapService ldapService, String serverId, LdapServerConfig serverConfig) {
+  public AciBuilderDialog(Consumer<String> onAciBuilt, LdapService ldapService, String serverId, Set<LdapServerConfig> selectedServers) {
     this.onAciBuilt = onAciBuilt;
     this.ldapService = ldapService;
     this.serverId = serverId;
-    this.serverConfig = serverConfig;
+    this.selectedServers = selectedServers;
     this.targets = new ArrayList<>();
     this.bindRules = new ArrayList<>();
     initUI();
@@ -363,7 +363,7 @@ public class AciBuilderDialog extends Dialog {
    * @param targetField the text field to populate with the selected DN
    */
   private void showDnBrowserDialog(TextField targetField) {
-    if (serverConfig == null) {
+    if (selectedServers == null || selectedServers.isEmpty()) {
       showError("No server configuration available");
       return;
     }
@@ -373,12 +373,12 @@ public class AciBuilderDialog extends Dialog {
     browserDialog.setModal(true);
     browserDialog.setDraggable(true);
     browserDialog.setResizable(true);
-    browserDialog.setWidth("700px");
+    browserDialog.setWidth("800px");
     browserDialog.setHeight("600px");
 
     // Create tree browser
     LdapTreeBrowser treeBrowser = new LdapTreeBrowser(ldapService);
-    treeBrowser.setServerConfig(serverConfig);
+    treeBrowser.setServerConfigs(new ArrayList<>(selectedServers));
     treeBrowser.loadServers();
     treeBrowser.setSizeFull();
 
@@ -502,7 +502,7 @@ public class AciBuilderDialog extends Dialog {
           targetDnField.setWidthFull();
           targetDnField.addValueChangeListener(event -> updatePreview());
           
-          targetDnBrowseButton = new Button(new Icon(VaadinIcon.SEARCH));
+          targetDnBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
           targetDnBrowseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
           targetDnBrowseButton.setTooltipText("Browse directory tree");
           targetDnBrowseButton.addClickListener(event -> showDnBrowserDialog(targetDnField));
@@ -647,7 +647,11 @@ public class AciBuilderDialog extends Dialog {
       if (targetAttrCombo == null) return;
       
       try {
-        Schema schema = serverConfig != null ? ldapService.getSchema(serverConfig) : null;
+        // Use the first selected server to get schema
+        LdapServerConfig firstServer = selectedServers != null && !selectedServers.isEmpty() 
+            ? selectedServers.iterator().next() 
+            : null;
+        Schema schema = firstServer != null ? ldapService.getSchema(firstServer) : null;
         if (schema != null) {
           Collection<AttributeTypeDefinition> attributeTypes = schema.getAttributeTypes();
           List<String> attributeNames = attributeTypes.stream()
@@ -1179,7 +1183,7 @@ public class AciBuilderDialog extends Dialog {
         onUpdate.run();
       });
       
-      dnBrowseButton = new Button(new Icon(VaadinIcon.SEARCH));
+      dnBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
       dnBrowseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
       dnBrowseButton.setTooltipText("Browse directory tree");
       dnBrowseButton.addClickListener(event -> showDnBrowserDialog(dnField));
@@ -1248,12 +1252,14 @@ public class AciBuilderDialog extends Dialog {
    * @return RootDSE entry or null if not available
    */
   private RootDSE getRootDSE() {
-    if (serverConfig == null) {
+    if (selectedServers == null || selectedServers.isEmpty()) {
       return null;
     }
     
     try {
-      return ldapService.getRootDSE(serverConfig);
+      // Use the first selected server
+      LdapServerConfig firstServer = selectedServers.iterator().next();
+      return ldapService.getRootDSE(firstServer);
     } catch (LDAPException | GeneralSecurityException e) {
       return null;
     }

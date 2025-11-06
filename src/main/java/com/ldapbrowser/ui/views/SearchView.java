@@ -317,7 +317,7 @@ public class SearchView extends VerticalLayout {
 
     // Create dialog with tree browser
     Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Select DN");
+    dialog.setHeaderTitle("Select DN from Directory");
     dialog.setWidth("800px");
     dialog.setHeight("600px");
     dialog.setModal(true);

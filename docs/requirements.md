@@ -117,7 +117,7 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - Effective Rights
             - Check effective access rights for entries using "Get Effective Rights Request Control" found in OID lookup table.
             - Search base with "Tree Browser" shared component popup
-            - search scoope
+            - search scope
             - search filter
             - attributes
             - Effective Rights for field with a DN selector popup

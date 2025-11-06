@@ -7,6 +7,7 @@ import com.ldapbrowser.util.OidLookupTable;
 import com.unboundid.asn1.ASN1OctetString;
 import com.unboundid.ldap.sdk.Attribute;
 import com.unboundid.ldap.sdk.Control;
+import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.LDAPConnectionPool;
 import com.unboundid.ldap.sdk.LDAPException;
@@ -1167,6 +1168,108 @@ public class LdapService {
     } catch (GeneralSecurityException e) {
       throw new LDAPException(ResultCode.LOCAL_ERROR,
           "SSL/TLS error: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Searches for entries with effective rights information using GetEffectiveRightsRequestControl.
+   *
+   * @param config server configuration
+   * @param searchBase base DN for search
+   * @param scope search scope
+   * @param filter search filter
+   * @param attributes attributes to return (or "*" for all)
+   * @param effectiveRightsFor authorization identity (e.g., "dn: uid=user,dc=example,dc=com")
+   * @param sizeLimit maximum number of entries to return (0 for no limit)
+   * @return search result with entries and size limit exceeded flag
+   * @throws LDAPException if search fails
+   */
+  public SearchResultWithEffectiveRights searchEffectiveRights(
+      LdapServerConfig config,
+      String searchBase,
+      SearchScope scope,
+      String filter,
+      String attributes,
+      String effectiveRightsFor,
+      int sizeLimit) throws LDAPException {
+    
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      
+      // Parse attributes for the search
+      String[] attributeArray;
+      if ("*".equals(attributes.trim())) {
+        attributeArray = new String[] { "*", "aclRights" };
+      } else {
+        List<String> attrList = new ArrayList<>();
+        for (String attr : attributes.split(",")) {
+          attrList.add(attr.trim());
+        }
+        attrList.add("aclRights");
+        attributeArray = attrList.toArray(new String[0]);
+      }
+
+      // Create search request with GetEffectiveRightsRequestControl
+      SearchRequest searchRequest = new SearchRequest(
+          searchBase,
+          scope,
+          Filter.create(filter),
+          attributeArray
+      );
+      
+      searchRequest.setSizeLimit(sizeLimit);
+      searchRequest.addControl(
+          new com.unboundid.ldap.sdk.unboundidds.controls.GetEffectiveRightsRequestControl(
+              effectiveRightsFor));
+      
+      // Execute the search
+      SearchResult searchResult = pool.search(searchRequest);
+      
+      // Check if size limit was exceeded
+      boolean sizeLimitExceeded = (searchResult.getResultCode() == ResultCode.SIZE_LIMIT_EXCEEDED)
+          || (sizeLimit > 0 && searchResult.getEntryCount() >= sizeLimit);
+      
+      return new SearchResultWithEffectiveRights(searchResult.getSearchEntries(), sizeLimitExceeded);
+      
+    } catch (LDAPSearchException e) {
+      // Handle size limit exceeded - return partial results
+      if (e.getResultCode() == ResultCode.SIZE_LIMIT_EXCEEDED) {
+        SearchResult partialResult = e.getSearchResult();
+        if (partialResult != null) {
+          return new SearchResultWithEffectiveRights(partialResult.getSearchEntries(), true);
+        }
+        // If we got SIZE_LIMIT_EXCEEDED but no partial result, return empty with flag
+        return new SearchResultWithEffectiveRights(new ArrayList<>(), true);
+      } else if (e.getResultCode() == ResultCode.UNAVAILABLE_CRITICAL_EXTENSION) {
+        throw new LDAPException(ResultCode.UNAVAILABLE_CRITICAL_EXTENSION,
+            "Server does not support GetEffectiveRightsRequestControl", e);
+      }
+      throw e;
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Result holder for effective rights search with size limit information.
+   */
+  public static class SearchResultWithEffectiveRights {
+    private final List<SearchResultEntry> entries;
+    private final boolean sizeLimitExceeded;
+
+    public SearchResultWithEffectiveRights(List<SearchResultEntry> entries, 
+        boolean sizeLimitExceeded) {
+      this.entries = entries;
+      this.sizeLimitExceeded = sizeLimitExceeded;
+    }
+
+    public List<SearchResultEntry> getEntries() {
+      return entries;
+    }
+
+    public boolean isSizeLimitExceeded() {
+      return sizeLimitExceeded;
     }
   }
 }
