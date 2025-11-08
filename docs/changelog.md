@@ -1,5 +1,110 @@
 # LDAP Web Browser
 
+## v0.10.3 - 2025-11-08 ✅ COMPLETED - Bulk Tab - Group Memberships sub tab
+
+### Implemented Features
+
+#### 1. **Bulk Group Memberships Tab** - Add/remove users to/from LDAP groups
+- ✅ Integrated `BulkGroupMembershipsTab.java` from LDAPBrowser project with full adaptation:
+  - Package updated from `com.ldapweb.ldapbrowser` to `com.ldapbrowser`
+  - Multi-server support - operations execute against all selected servers
+  - Results aggregation: shows total successes/errors across all servers
+  - Per-server error logging and reporting
+  
+- ✅ **Group Membership Configuration:**
+  - Group Name (cn) field - specify the target group
+  - User Base DN with LdapTreeBrowser dialog for easy DN selection
+  - Group Base DN with LdapTreeBrowser dialog for easy DN selection
+  - Operation selector: Add Members or Remove Members
+  - User list text area - enter user IDs (UIDs) one per line
+  - File upload - upload text file with user IDs
+  - Continue on error option
+  - Permissive modify request control option
+  
+- ✅ **Multi-Server Execution:**
+  - Iterates through all selected servers from MainLayout
+  - Aggregates results: "X successes and Y errors across N server(s)"
+  - Per-server logging of operations via LoggingService
+  - Error isolation - continues processing remaining servers on failure
+  
+- ✅ **Group Type Support:**
+  - posixGroup - modifies memberUid attribute
+  - groupOfNames - modifies member attribute (DN-based)
+  - groupOfUniqueNames - modifies uniqueMember attribute (DN-based)
+  - groupOfUrls - modifies attributes based on memberURL filter
+  
+- ✅ **User Validation:**
+  - Validates all users exist before modification
+  - Searches for users in specified base DN
+  - Obtains exact UIDs and DNs
+  - Reports users not found
+  - Reports multiple users with same UID (error)
+  
+- ✅ **User Interface:**
+  - Progress indicator during processing
+  - Real-time status updates during validation and processing
+  - Success/Error/Info notifications with detailed messages
+  - Error report generation for failures
+  
+- ✅ **DN Selection with LdapTreeBrowser:**
+  - Browse buttons next to User Base DN and Group Base DN fields
+  - Modal dialog with full LDAP tree navigation
+  - Selection automatically populates the DN text field
+  - Uses first selected server for tree browsing
+
+#### 2. **Integration with BulkView**
+- ✅ Added `BulkGroupMembershipsTab` as fourth tab (after Import, Search, Generate)
+- ✅ Wired to `updateTabServers()` for automatic server configuration updates
+- ✅ Replaced placeholder tab with fully functional implementation
+- ✅ Proper Spring dependency injection with field initialization
+
+### Technical Details
+
+**Components Modified:**
+- `BulkView.java`
+  - Added `BulkGroupMembershipsTab` field and instantiation
+  - Added to TabSheet as "Group Memberships" tab
+  - Wired to `updateTabServers()` method
+  - Removed unused `createPlaceholder()` method
+  - Removed unused `Paragraph` import
+
+**Components Added:**
+- `BulkGroupMembershipsTab.java` (817 lines)
+  - Multi-server support with `List<LdapServerConfig>`
+  - `setServerConfigs(List<LdapServerConfig>)` method for server configuration
+  - `performBulkGroupOperation()` - main orchestration with multi-server iteration
+  - `processBulkGroupMembership(serverConfig, ...)` - per-server processing returning int[3]
+  - `processPosixGroup(serverConfig, ...)` - handles posixGroup modifications
+  - `processGroupOfNames(serverConfig, ...)` - handles groupOfNames modifications
+  - `processGroupOfUniqueNames(serverConfig, ...)` - handles groupOfUniqueNames modifications
+  - `processGroupOfUrls(serverConfig, ...)` - handles groupOfUrls (dynamic groups)
+  - `showDnBrowserDialog(TextField)` - DN selection with LdapTreeBrowser
+  - Comprehensive error handling and logging
+
+**LDAP Operations:**
+- Uses `ldapService.search(config, baseDn, filter, scope, attributes)` for searches
+- Uses `ldapService.modifyEntry(config, dn, modifications, controls)` for modifications
+- Each operation executed per server in the selected server list
+- Supports PermissiveModifyRequestControl (OID 1.2.840.113556.1.4.1413)
+
+**Multi-Server Pattern:**
+- All operations execute against every selected server
+- Results show: "X successes and Y errors across N server(s)"
+- Per-server error details logged when failures occur
+- Each server logs operations independently via LoggingService
+- Error isolation - continues processing remaining servers on failure
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/views/BulkView.java` - Added Group Memberships tab (~15 lines changed)
+- `src/main/java/com/ldapbrowser/ui/components/BulkGroupMembershipsTab.java` - NEW - Full implementation (817 lines)
+- `docs/changelog.md` - Updated with v0.10.3 completion details
+
+### Build Verification
+- ✅ Compiles successfully with Maven
+- ✅ All imports resolved correctly
+- ✅ Proper exception handling throughout
+- ✅ Follows Google Java style conventions
+
 ## v0.10.2 - 2025-11-08 ✅ COMPLETED - Bulk Tab - Generate sub tab
 
 ### Implemented Features

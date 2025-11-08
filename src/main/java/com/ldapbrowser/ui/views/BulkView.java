@@ -9,7 +9,6 @@ import com.ldapbrowser.ui.components.BulkGenerateTab;
 import com.ldapbrowser.ui.components.BulkSearchTab;
 import com.ldapbrowser.ui.components.ImportTab;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.TabSheet;
 import com.vaadin.flow.router.PageTitle;
@@ -30,6 +29,7 @@ public class BulkView extends VerticalLayout {
   private final ImportTab importTab;
   private final BulkSearchTab searchTab;
   private final BulkGenerateTab generateTab;
+  private final com.ldapbrowser.ui.components.BulkGroupMembershipsTab groupMembershipsTab;
 
   /**
    * Creates the Bulk view.
@@ -44,6 +44,8 @@ public class BulkView extends VerticalLayout {
     this.importTab = new ImportTab(ldapService, loggingService);
     this.searchTab = new BulkSearchTab(ldapService, loggingService);
     this.generateTab = new BulkGenerateTab(ldapService, loggingService);
+    this.groupMembershipsTab = 
+        new com.ldapbrowser.ui.components.BulkGroupMembershipsTab(ldapService, loggingService);
 
     setSpacing(true);
     setPadding(true);
@@ -64,31 +66,13 @@ public class BulkView extends VerticalLayout {
     // Add Generate tab
     tabSheet.add("Generate", generateTab);
 
-    // Add placeholder tabs for future features
-    VerticalLayout groupMembershipsPlaceholder = createPlaceholder("Group Memberships");
-    tabSheet.add("Group Memberships", groupMembershipsPlaceholder);
+    // Add Group Memberships tab
+    tabSheet.add("Group Memberships", groupMembershipsTab);
 
     add(tabSheet);
 
     // Initialize server configurations
     updateTabServers();
-  }
-
-  private VerticalLayout createPlaceholder(String feature) {
-    VerticalLayout layout = new VerticalLayout();
-    layout.setSizeFull();
-    layout.setPadding(true);
-
-    Paragraph status = new Paragraph("🚧 " + feature + " - Under Construction 🚧");
-    status.getStyle()
-        .set("font-size", "var(--lumo-font-size-xl)")
-        .set("font-weight", "bold")
-        .set("color", "var(--lumo-warning-color)")
-        .set("text-align", "center")
-        .set("padding", "var(--lumo-space-xl)");
-
-    layout.add(status);
-    return layout;
   }
 
   /**
@@ -99,6 +83,7 @@ public class BulkView extends VerticalLayout {
     importTab.setServerConfigs(selectedServers);
     searchTab.setServerConfigs(selectedServers);
     generateTab.setServerConfigs(selectedServers);
+    groupMembershipsTab.setServerConfigs(selectedServers);
   }
 
   /**
