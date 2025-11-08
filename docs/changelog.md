@@ -1,5 +1,92 @@
 # LDAP Web Browser
 
+## v0.10 - 2025-11-07 ✅ COMPLETED - Bulk Tab
+
+### Implemented Features
+
+#### 1. **Bulk Operations View** - Tabbed interface for bulk LDAP operations
+- ✅ Created `BulkView` with `TabSheet` containing 4 sub-tabs:
+  - Import (fully functional)
+  - Search (placeholder - under construction)
+  - Generate (placeholder - under construction)
+  - Group Memberships (placeholder - under construction)
+- ✅ Multi-server support - operations execute against all selected servers from MainLayout
+- ✅ Follows same pattern as `AccessView` for server selection integration
+- ✅ Proper Spring dependency injection with `@SpringComponent` and `@UIScope`
+
+#### 2. **Import Tab** - Import LDAP data from LDIF and CSV files
+- ✅ Integrated `ImportTab.java` from LDAPBrowser project with full adaptation:
+  - Package updated from `com.ldapweb.ldapbrowser` to `com.ldapbrowser`
+  - Changed from single `LdapServerConfig` to `List<LdapServerConfig>` for multi-server
+  - Added `setServerConfigs(List<LdapServerConfig>)` method for server configuration
+  - Updated all LDAP operations to iterate through selected servers
+  - Results aggregation: shows total successes/errors across all servers
+  
+- ✅ **LDIF Import Mode:**
+  - File upload or text input for LDIF content
+  - Supports ADD, MODIFY, DELETE change types
+  - Optional LDAP controls:
+    - No Operation control (OID 1.3.6.1.4.1.4203.1.10.2) for validation
+    - Permissive Modify control (OID 1.2.840.113556.1.4.1413) for fault tolerance
+  - Continue on error option for processing all entries despite failures
+  - Per-server error reporting in results
+
+- ✅ **CSV Import with LDIF Templates:**
+  - Upload CSV file with data
+  - Create LDIF template with {C1}, {C2}, {DN} variable substitution
+  - Preview CSV data in grid (supports any number of columns as C1, C2, C3, etc.)
+  - Two DN resolution methods:
+    - CSV Column: Use first column value as DN directly
+    - LDAP Search: Search for entry matching filter and use result DN
+  - Template generates LDIF for each CSV row
+  - Same control support as LDIF mode (No Operation, Permissive Modify)
+  - Continue on error option
+  - Per-server and per-row error reporting
+
+#### 3. **Service Layer Enhancements**
+- ✅ **LdapService.java** additions:
+  - `addEntry(LdapServerConfig config, LdapEntry entry)` - Creates new LDAP entries
+  - `modifyEntry(LdapServerConfig config, String dn, List<Modification> modifications, Control... controls)` - Modifies entries with optional LDAP controls
+  - `isControlSupported(LdapServerConfig config, String controlOid)` - Overload accepting config object
+  
+- ✅ **LoggingService.java** additions:
+  - `logImport(String serverName, String source, int entriesProcessed)` - Logs import operations
+  - `logWarning(String category, String message)` - Logs warning-level messages
+
+### Technical Details
+
+**Components Added:**
+- `BulkView.java`
+  - TabSheet with 4 tabs (Import active, others placeholder)
+  - Constructor injection: `ConfigurationService`, `ImportTab`
+  - `updateImportTabServers()` method syncs selected servers from MainLayout
+  - `getSelectedServers()` method filters configurations by MainLayout selection
+  - `createPlaceholder()` helper for under-construction tabs
+
+- `ImportTab.java` (997 lines)
+  - `@SpringComponent` and `@UIScope` annotations for Vaadin DI
+  - Three import modes: LDIF File, LDIF Text, CSV Template
+  - File upload components using `MemoryBuffer`
+  - CSV parsing with dynamic column detection
+  - LDIF template variable substitution engine
+  - UnboundID `LDIFReader` and `LDIFChangeRecord` processing
+  - Multi-server iteration with aggregated results
+  - Progress indicators during import operations
+  - Comprehensive error handling and user feedback
+
+**LDAP Features:**
+- Uses UnboundID LDAP SDK for LDIF parsing and LDAP controls
+- Support for ADD/MODIFY/DELETE change types from LDIF
+- DN resolution via direct CSV column or LDAP search
+- Control validation before use (checks server support)
+- Batch processing with error isolation (continue on error)
+
+**Multi-Server Pattern:**
+- All import operations execute against every selected server
+- Results show: "X successes and Y errors across N server(s)"
+- Per-server error details displayed when failures occur
+- Each server logs operations independently via LoggingService
+
 ## v0.9.3 - 2025-11-06 ✅ COMPLETED - Access / Effective Rights Sub-Tab
 
 ### Implemented Features

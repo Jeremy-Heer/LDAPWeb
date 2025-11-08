@@ -423,6 +423,57 @@ public class LdapService {
   }
 
   /**
+   * Adds a new LDAP entry.
+   *
+   * @param config server configuration
+   * @param entry the entry to add
+   * @throws LDAPException if add fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  public void addEntry(LdapServerConfig config, LdapEntry entry)
+      throws LDAPException, GeneralSecurityException {
+    LDAPConnectionPool pool = getConnectionPool(config);
+    
+    // Build list of attributes from the entry
+    List<com.unboundid.ldap.sdk.Attribute> attrs = new ArrayList<>();
+    for (Map.Entry<String, List<String>> attrEntry : entry.getAttributes().entrySet()) {
+      attrs.add(new com.unboundid.ldap.sdk.Attribute(
+          attrEntry.getKey(),
+          attrEntry.getValue().toArray(new String[0])
+      ));
+    }
+    
+    pool.add(entry.getDn(), attrs);
+    logger.info("Added entry {}", entry.getDn());
+  }
+
+  /**
+   * Modifies an LDAP entry with optional controls.
+   *
+   * @param config server configuration
+   * @param dn distinguished name
+   * @param modifications list of modifications
+   * @param controls optional LDAP controls
+   * @throws LDAPException if modify fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  public void modifyEntry(LdapServerConfig config, String dn,
+      List<com.unboundid.ldap.sdk.Modification> modifications, Control... controls)
+      throws LDAPException, GeneralSecurityException {
+    LDAPConnectionPool pool = getConnectionPool(config);
+    
+    if (controls != null && controls.length > 0) {
+      com.unboundid.ldap.sdk.ModifyRequest modifyRequest = 
+          new com.unboundid.ldap.sdk.ModifyRequest(dn, modifications, controls);
+      pool.modify(modifyRequest);
+    } else {
+      pool.modify(dn, modifications);
+    }
+    
+    logger.info("Modified entry {} with {} modifications", dn, modifications.size());
+  }
+
+  /**
    * Tests bind with credentials.
    *
    * @param config server configuration
@@ -965,6 +1016,19 @@ public class LdapService {
       logger.debug("Error checking control support for {}: {}", serverId, e.getMessage());
       return false;
     }
+  }
+
+  /**
+   * Checks if the server supports a specific LDAP control.
+   *
+   * @param config server configuration
+   * @param controlOid control OID to check
+   * @return true if the control is supported
+   * @throws LDAPException if checking fails
+   */
+  public boolean isControlSupported(LdapServerConfig config, String controlOid) 
+      throws LDAPException {
+    return isControlSupported(config.getName(), controlOid);
   }
 
   /**

@@ -141,4 +141,26 @@ public class LoggingService {
     logger.debug("[SCHEMA] Element '{}' ({}) missing from server: {}", 
         elementName, elementType, serverName);
   }
+
+  /**
+   * Logs import operation.
+   *
+   * @param serverName the server name
+   * @param source the import source
+   * @param entriesProcessed the number of entries processed
+   */
+  public void logImport(String serverName, String source, int entriesProcessed) {
+    logger.info("[IMPORT] Server: {} | Source: {} | Entries: {}", 
+        serverName, source, entriesProcessed);
+  }
+
+  /**
+   * Logs warning message.
+   *
+   * @param category the category or context of the log
+   * @param message the message to log
+   */
+  public void logWarning(String category, String message) {
+    logger.warn("[{}] {}", category, message);
+  }
 }

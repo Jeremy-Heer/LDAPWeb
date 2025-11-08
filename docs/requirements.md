@@ -127,9 +127,46 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
                 - columns Server name, Entry DN, Attribute Rights, Entry Rights
 
 1. **Bulk**
-    - TBD
+    - Bulk modify operations to each connected ldap server
+    - Import - Sub tab
+        - Import Type drop down options:
+            - Upload LDIF
+                - An upload dialog to provide an ldif to inport
+                - Check boxes to "Continue on error", "Permissive modify request control", "No operation request control"
+                - Import LDIF button
+            - Enter LDIF
+                - a text area to create/paste an LDIF directly into the page
+                - Check boxes to "Continue on error", "Permissive modify request control", "No operation request control"
+                - Import LDIF button
+            - Input CSV
+                - an upload dialog to provide a CSV file to inport
+                - Columns are used for varialbe interpopulation
+                    - "{C1}" = first columnt
+                    - "{C2}" = second columnt
+                    - etc.
+                - DN Method dropdown
+                    - CSV Column
+                        - You provide the DN as one of the columnts (For example, use {C1} if the first column contains the DN value)
+                    - CSV Column and Search
+                        - opens a search base / and filter dialogs
+                        - the DN results of this search is used
+                        - use the "{DN}" to represent the DN returned from the search
+                        - column values can be used in the search. Example: (&(objectClass=person)(uid={C1}))
+                - A "LDIF Template" text area to construct the ldif template to perform on each row in the CSV
+                - A "Preview LDIF" text area that is generated based on first few rows to allow user to understand the expected change
+                - Import CSV button
+    - Search - Sub tab
+        - Performs a searchs and executes an LDIF template on each returend entry from the search
+    - Generate - Sub tab
+        - using a counter start / end, executes an LDIF teamplate
+        - LDIF template text area
+        - {COUNT}, can be used in the LDIF template to represent the count number
+        - LDIF Preview
+        - Load button
+    - Group Memberships - Sub tab
+        - provides the ability to enter or upload a text file that contains a list of users to add or remove to the specified group
 
-1. **Import/Export**
+1. **Export**
     - TBD
 
 1. **Shared Components**
