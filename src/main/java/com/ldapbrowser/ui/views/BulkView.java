@@ -5,6 +5,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.components.BulkGenerateTab;
 import com.ldapbrowser.ui.components.BulkSearchTab;
 import com.ldapbrowser.ui.components.ImportTab;
 import com.vaadin.flow.component.html.H2;
@@ -28,6 +29,7 @@ public class BulkView extends VerticalLayout {
   private final ConfigurationService configService;
   private final ImportTab importTab;
   private final BulkSearchTab searchTab;
+  private final BulkGenerateTab generateTab;
 
   /**
    * Creates the Bulk view.
@@ -41,6 +43,7 @@ public class BulkView extends VerticalLayout {
     this.configService = configService;
     this.importTab = new ImportTab(ldapService, loggingService);
     this.searchTab = new BulkSearchTab(ldapService, loggingService);
+    this.generateTab = new BulkGenerateTab(ldapService, loggingService);
 
     setSpacing(true);
     setPadding(true);
@@ -58,10 +61,10 @@ public class BulkView extends VerticalLayout {
     // Add Search tab
     tabSheet.add("Search", searchTab);
 
-    // Add placeholder tabs for future features
-    VerticalLayout generatePlaceholder = createPlaceholder("Generate");
-    tabSheet.add("Generate", generatePlaceholder);
+    // Add Generate tab
+    tabSheet.add("Generate", generateTab);
 
+    // Add placeholder tabs for future features
     VerticalLayout groupMembershipsPlaceholder = createPlaceholder("Group Memberships");
     tabSheet.add("Group Memberships", groupMembershipsPlaceholder);
 
@@ -95,6 +98,7 @@ public class BulkView extends VerticalLayout {
     List<LdapServerConfig> selectedServers = getSelectedServers();
     importTab.setServerConfigs(selectedServers);
     searchTab.setServerConfigs(selectedServers);
+    generateTab.setServerConfigs(selectedServers);
   }
 
   /**

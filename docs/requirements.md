@@ -165,6 +165,11 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - Load button
     - Group Memberships - Sub tab
         - provides the ability to enter or upload a text file that contains a list of users to add or remove to the specified group
+        - multiple group types supported
+            - posixGroup
+            - groupOfUniqueNames
+            - groupOfNames
+            - groupOfUrls
 
 1. **Export**
     - TBD
