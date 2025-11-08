@@ -1,5 +1,71 @@
 # LDAP Web Browser
 
+## v0.10.2 - Bulk - Generate sub tab
+  - implement the Generate sub tab
+
+## v0.10.1 - 2025-11-08 ✅ COMPLETED - Bulk Tab - Search sub tab
+
+### Implemented Features
+
+#### 1. **Bulk Search Tab** - Perform bulk LDAP search operations
+- ✅ Integrated `BulkSearchTab.java` from LDAPBrowser project with full adaptation:
+  - Package updated from `com.ldapweb.ldapbrowser` to `com.ldapbrowser`
+  - Changed from single `LdapServerConfig` to `List<LdapServerConfig>` for multi-server
+  - Replaced `DnSelectorField` with `TextField` + browse button using `LdapTreeBrowser`
+  - Updated all LDAP operations to iterate through selected servers
+  - Results aggregation: shows total successes/errors across all servers
+  
+- ✅ **Search Configuration:**
+  - Search base DN with tree browser dialog for easy DN selection
+  - LDAP filter input
+  - Search scope selector (BASE, ONE, SUB, CHILDREN)
+  - Target attribute selection for operations
+  
+- ✅ **Two Operation Modes:**
+  
+  **Preview Mode** (default):
+  - Generates LDIF representation of search results from all servers
+  - Shows entries with server name headers for multi-server scenarios
+  - LDIF includes DN and selected attributes for each entry
+  - No modifications are made to LDAP
+  
+  **Execute Changes Mode** (checkbox enabled):
+  - Performs actual LDAP operations on search results
+  - Supports LDIF templates with variable substitution
+  - Operation types:
+    - Modify: Apply LDIF modifications to matching entries
+    - Add: Create new entries using LDIF template
+    - Delete: Remove matching entries (no template needed)
+  - Template variables:
+    - {DN} - Full DN of the search result entry
+    - {ATTRIBUTE:attributeName} - Value of any attribute from search result
+    - Example: Replace attribute with value from another attribute
+  - Optional LDAP controls:
+    - No Operation control (OID 1.3.6.1.4.1.4203.1.10.2) for validation
+    - Permissive Modify control (OID 1.2.840.113556.1.4.1413) for fault tolerance
+  - Continue on error option for processing all entries despite failures
+  - Results show: "X successes and Y errors across N server(s)"
+  
+- ✅ **Integration with BulkView:**
+  - Added to TabSheet as second tab alongside Import
+  - Receives server configuration updates via `setServerConfigs()`
+  - Proper instantiation with Spring dependency injection
+  - `updateTabServers()` method now updates both Import and Search tabs
+
+#### 2. **Technical Implementation Details**
+- ✅ All LDAP method calls corrected:
+  - `search(config, baseDn, filter, scope)` for LDAP searches
+  - `modifyEntry(config, dn, modifications, controls)` for modifications with optional controls
+  - `addEntry(config, entry)` for adding entries
+  - `deleteEntry(config, dn)` for deletions
+- ✅ LdapTreeBrowser integration:
+  - Constructor: `new LdapTreeBrowser(ldapService)`
+  - Server configuration: `browser.setServerConfig(config)`
+  - Selection listener: `browser.addSelectionListener(event -> targetField.setValue(event.getSelectedDn()))`
+- ✅ Results textarea displays combined LDIF output with server headers
+- ✅ Error handling and logging for all operations
+- ✅ Proper validation of required fields before execution
+
 ## v0.10 - 2025-11-07 ✅ COMPLETED - Bulk Tab
 
 ### Implemented Features

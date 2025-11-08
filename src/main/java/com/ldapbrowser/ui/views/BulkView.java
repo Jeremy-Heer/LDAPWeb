@@ -5,6 +5,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.components.BulkSearchTab;
 import com.ldapbrowser.ui.components.ImportTab;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
@@ -26,6 +27,7 @@ public class BulkView extends VerticalLayout {
 
   private final ConfigurationService configService;
   private final ImportTab importTab;
+  private final BulkSearchTab searchTab;
 
   /**
    * Creates the Bulk view.
@@ -38,6 +40,7 @@ public class BulkView extends VerticalLayout {
       LoggingService loggingService) {
     this.configService = configService;
     this.importTab = new ImportTab(ldapService, loggingService);
+    this.searchTab = new BulkSearchTab(ldapService, loggingService);
 
     setSpacing(true);
     setPadding(true);
@@ -52,10 +55,10 @@ public class BulkView extends VerticalLayout {
     // Add Import tab
     tabSheet.add("Import", importTab);
 
-    // Add placeholder tabs for future features
-    VerticalLayout searchPlaceholder = createPlaceholder("Search");
-    tabSheet.add("Search", searchPlaceholder);
+    // Add Search tab
+    tabSheet.add("Search", searchTab);
 
+    // Add placeholder tabs for future features
     VerticalLayout generatePlaceholder = createPlaceholder("Generate");
     tabSheet.add("Generate", generatePlaceholder);
 
@@ -65,7 +68,7 @@ public class BulkView extends VerticalLayout {
     add(tabSheet);
 
     // Initialize server configurations
-    updateImportTabServers();
+    updateTabServers();
   }
 
   private VerticalLayout createPlaceholder(String feature) {
@@ -86,11 +89,21 @@ public class BulkView extends VerticalLayout {
   }
 
   /**
-   * Updates the server configurations for the import tab.
+   * Updates the server configurations for all tabs.
    */
-  public void updateImportTabServers() {
+  public void updateTabServers() {
     List<LdapServerConfig> selectedServers = getSelectedServers();
     importTab.setServerConfigs(selectedServers);
+    searchTab.setServerConfigs(selectedServers);
+  }
+
+  /**
+   * Updates the server configurations for the import tab.
+   * @deprecated Use {@link #updateTabServers()} instead.
+   */
+  @Deprecated
+  public void updateImportTabServers() {
+    updateTabServers();
   }
 
   private List<LdapServerConfig> getSelectedServers() {
