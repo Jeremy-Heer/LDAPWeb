@@ -19,7 +19,8 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.sidenav.SideNav;
+import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.router.RouterLink;
 import com.vaadin.flow.server.VaadinSession;
 import java.util.HashSet;
@@ -93,34 +94,39 @@ public class MainLayout extends AppLayout {
   }
 
   /**
-   * Creates the drawer with navigation links.
+   * Creates the drawer with navigation links using SideNav.
    */
   private void createDrawer() {
-    VerticalLayout drawerLayout = new VerticalLayout();
-    drawerLayout.setPadding(true);
-    drawerLayout.setSpacing(true);
+    SideNav sideNav = new SideNav();
+    
+    // Create navigation items with icons
+    SideNavItem serverItem = new SideNavItem("Server", ServerView.class, 
+        VaadinIcon.SERVER.create());
+    SideNavItem searchItem = new SideNavItem("Search", SearchView.class, 
+        VaadinIcon.SEARCH.create());
+    SideNavItem browseItem = new SideNavItem("Browse", BrowseView.class, 
+        VaadinIcon.TREE_TABLE.create());
+    SideNavItem schemaItem = new SideNavItem("Schema", SchemaView.class, 
+        VaadinIcon.DATABASE.create());
+    SideNavItem accessItem = new SideNavItem("Access", AccessView.class, 
+        VaadinIcon.KEY.create());
+    SideNavItem bulkItem = new SideNavItem("Bulk", BulkView.class, 
+        VaadinIcon.PACKAGE.create());
+    SideNavItem exportItem = new SideNavItem("Export", ExportView.class, 
+        VaadinIcon.DOWNLOAD.create());
 
-    // Navigation links
-    RouterLink serverLink = new RouterLink("Server", ServerView.class);
-    RouterLink searchLink = new RouterLink("Search", SearchView.class);
-    RouterLink browseLink = new RouterLink("Browse", BrowseView.class);
-    RouterLink schemaLink = new RouterLink("Schema", SchemaView.class);
-    RouterLink accessLink = new RouterLink("Access", AccessView.class);
-    RouterLink bulkLink = new RouterLink("Bulk", BulkView.class);
-    RouterLink exportLink = new RouterLink("Export", ExportView.class);
-
-    // Add all links to drawer
-    drawerLayout.add(
-        serverLink,
-        searchLink,
-        browseLink,
-        schemaLink,
-        accessLink,
-        bulkLink,
-        exportLink
+    // Add all items to SideNav
+    sideNav.addItem(
+        serverItem,
+        searchItem,
+        browseItem,
+        schemaItem,
+        accessItem,
+        bulkItem,
+        exportItem
     );
 
-    addToDrawer(drawerLayout);
+    addToDrawer(sideNav);
   }
 
   /**
