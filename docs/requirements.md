@@ -172,7 +172,9 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
             - groupOfUrls
 
 1. **Export**
-    - TBD
+    - Export data from LDAP to CSV, JSON, LDIF, DN List
+    - Select data using either a search or input CSV
+    - When using an input CSV, the CSV columns can be used with the search filter
 
 1. **Shared Components**
 

@@ -5,7 +5,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.ui.views.AccessView;
 import com.ldapbrowser.ui.views.BrowseView;
 import com.ldapbrowser.ui.views.BulkView;
-import com.ldapbrowser.ui.views.ImportExportView;
+import com.ldapbrowser.ui.views.ExportView;
 import com.ldapbrowser.ui.views.SchemaView;
 import com.ldapbrowser.ui.views.SearchView;
 import com.ldapbrowser.ui.views.ServerView;
@@ -107,7 +107,7 @@ public class MainLayout extends AppLayout {
     RouterLink schemaLink = new RouterLink("Schema", SchemaView.class);
     RouterLink accessLink = new RouterLink("Access", AccessView.class);
     RouterLink bulkLink = new RouterLink("Bulk", BulkView.class);
-    RouterLink importExportLink = new RouterLink("Import/Export", ImportExportView.class);
+    RouterLink exportLink = new RouterLink("Export", ExportView.class);
 
     // Add all links to drawer
     drawerLayout.add(
@@ -117,7 +117,7 @@ public class MainLayout extends AppLayout {
         schemaLink,
         accessLink,
         bulkLink,
-        importExportLink
+        exportLink
     );
 
     addToDrawer(drawerLayout);

@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.11 - Export tab
+
 ## v0.10.3 - 2025-11-08 ✅ COMPLETED - Bulk Tab - Group Memberships sub tab
 
 ### Implemented Features
