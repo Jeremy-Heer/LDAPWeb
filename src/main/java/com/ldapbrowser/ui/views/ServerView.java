@@ -183,7 +183,6 @@ public class ServerView extends VerticalLayout {
     hostField.setPlaceholder("e.g., ldap.example.com");
 
     IntegerField portField = new IntegerField("Port");
-    portField.setValue(389);
     portField.setMin(1);
     portField.setMax(65535);
     portField.setStepButtonsVisible(true);
@@ -202,10 +201,7 @@ public class ServerView extends VerticalLayout {
 
     useSslCheckbox.addValueChangeListener(event -> {
       if (event.getValue()) {
-        portField.setValue(636);
         useStartTlsCheckbox.setValue(false);
-      } else {
-        portField.setValue(389);
       }
     });
 

@@ -35,6 +35,9 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
   // Track which server config each entry belongs to
   private final Map<LdapEntry, LdapServerConfig> entryServerMap = new HashMap<>();
 
+  // Include private naming contexts flag
+  private boolean includePrivateNamingContexts = false;
+
   /**
    * Creates a new LDAP tree grid.
    *
@@ -384,6 +387,15 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
   }
 
   /**
+   * Sets whether to include private naming contexts in the tree.
+   *
+   * @param include true to include private naming contexts
+   */
+  public void setIncludePrivateNamingContexts(boolean include) {
+    this.includePrivateNamingContexts = include;
+  }
+
+  /**
    * Loads server entries as top-level nodes.
    * Each server will have a Root DSE child with naming contexts.
    *
@@ -546,6 +558,14 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     getUI().ifPresent(ui -> ui.access(() -> {
       try {
         List<String> namingContextDns = ldapService.getNamingContexts(serverConfig);
+        
+        // Include private naming contexts if checkbox is selected
+        if (includePrivateNamingContexts) {
+          List<String> privateContextDns = ldapService.getPrivateNamingContexts(serverConfig);
+          namingContextDns = new ArrayList<>(namingContextDns);
+          namingContextDns.addAll(privateContextDns);
+        }
+        
         List<LdapEntry> namingContexts = new ArrayList<>();
 
         for (String ctx : namingContextDns) {

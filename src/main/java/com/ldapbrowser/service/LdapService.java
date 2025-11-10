@@ -753,6 +753,44 @@ public class LdapService {
       );
     }
   }
+
+  /**
+   * Gets private naming contexts from Root DSE.
+   *
+   * @param config server configuration
+   * @return list of private naming contexts
+   * @throws LDAPException if operation fails
+   */
+  public List<String> getPrivateNamingContexts(LdapServerConfig config) throws LDAPException {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      SearchRequest searchRequest = new SearchRequest(
+          "",
+          SearchScope.BASE,
+          "(objectClass=*)",
+          "ds-private-naming-contexts"
+      );
+      
+      SearchResult searchResult = pool.search(searchRequest);
+      if (searchResult.getEntryCount() == 0) {
+        return new ArrayList<>();
+      }
+      
+      SearchResultEntry rootDse = searchResult.getSearchEntries().get(0);
+      Attribute privateContextsAttr = rootDse.getAttribute("ds-private-naming-contexts");
+      
+      if (privateContextsAttr != null) {
+        return List.of(privateContextsAttr.getValues());
+      }
+      
+      return new ArrayList<>();
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(
+          com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage()
+      );
+    }
+  }
   
   /**
    * Gets entry with minimal attributes.

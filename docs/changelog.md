@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.13 - Private naming contexts added to tree grid
+
 ## v0.12 - Updated drawer to use SideNav Vaadin component
 
 ## v0.11 - Export tab
