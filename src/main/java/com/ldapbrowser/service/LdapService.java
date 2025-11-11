@@ -50,6 +50,9 @@ public class LdapService {
 
   private final Map<String, LDAPConnectionPool> connectionPools = new ConcurrentHashMap<>();
   
+  // Schema cache management - stores schema per server for performance
+  private final Map<String, Schema> schemaCache = new ConcurrentHashMap<>();
+  
   // Paging state management for LDAP paged search control (thread-safe for multi-server usage)
   private final Map<String, byte[]> pagingCookies = new ConcurrentHashMap<>();
   private final Map<String, Integer> currentPages = new ConcurrentHashMap<>();
@@ -126,6 +129,7 @@ public class LdapService {
 
   /**
    * Gets or creates a connection pool for the server.
+   * When a new connection pool is created, the schema is automatically fetched and cached.
    *
    * @param config server configuration
    * @return connection pool
@@ -135,8 +139,9 @@ public class LdapService {
   public LDAPConnectionPool getConnectionPool(LdapServerConfig config)
       throws LDAPException, GeneralSecurityException {
     String key = config.getName();
+    boolean isNewConnection = !connectionPools.containsKey(key);
 
-    return connectionPools.computeIfAbsent(key, k -> {
+    LDAPConnectionPool pool = connectionPools.computeIfAbsent(key, k -> {
       try {
         LDAPConnection connection = createConnection(config);
 
@@ -152,7 +157,7 @@ public class LdapService {
           postConnectProcessor = new StartTLSPostConnectProcessor(sslContext);
         }
 
-        LDAPConnectionPool pool = new LDAPConnectionPool(
+        LDAPConnectionPool newPool = new LDAPConnectionPool(
             connection,
             INITIAL_POOL_SIZE,
             MAX_POOL_SIZE,
@@ -160,12 +165,26 @@ public class LdapService {
         );
 
         logger.info("Created connection pool for {}", config.getName());
-        return pool;
+        return newPool;
       } catch (LDAPException | GeneralSecurityException e) {
         logger.error("Failed to create connection pool for {}", config.getName(), e);
         throw new RuntimeException("Failed to create connection pool", e);
       }
     });
+    
+    // If this is a new connection, fetch and cache the schema
+    if (isNewConnection && !schemaCache.containsKey(key)) {
+      try {
+        fetchSchemaFromServer(config);
+        schemaCache.put(key, fetchSchemaFromServer(config));
+        logger.debug("Pre-fetched and cached schema for {}", config.getName());
+      } catch (LDAPException e) {
+        // Log but don't fail - schema can be fetched later if needed
+        logger.warn("Failed to pre-fetch schema for {}: {}", config.getName(), e.getMessage());
+      }
+    }
+    
+    return pool;
   }
 
   /**
@@ -179,6 +198,8 @@ public class LdapService {
       pool.close();
       logger.info("Closed connection pool for {}", serverName);
     }
+    // Also clear the schema cache for this server
+    clearSchemaCache(serverName);
   }
 
   /**
@@ -190,6 +211,8 @@ public class LdapService {
       logger.info("Closed connection pool for {}", name);
     });
     connectionPools.clear();
+    // Also clear all schema caches
+    clearAllSchemaCaches();
   }
 
   /**
@@ -864,15 +887,41 @@ public class LdapService {
   }
   
   /**
-   * Retrieves the schema from an LDAP server.
+   * Retrieves the schema from an LDAP server with caching.
    * This method uses the Extended Schema Info control when supported to retrieve
    * additional schema metadata such as X-SCHEMA-FILE.
+   * The schema is cached per server for performance.
    *
    * @param config server configuration
    * @return schema object
    * @throws LDAPException if schema retrieval fails
    */
   public Schema getSchema(LdapServerConfig config) throws LDAPException {
+    // Check cache first
+    String cacheKey = config.getName();
+    Schema cachedSchema = schemaCache.get(cacheKey);
+    if (cachedSchema != null) {
+      return cachedSchema;
+    }
+    
+    // Not in cache, fetch from server
+    Schema schema = fetchSchemaFromServer(config);
+    
+    // Cache the schema
+    schemaCache.put(cacheKey, schema);
+    
+    return schema;
+  }
+  
+  /**
+   * Fetches the schema directly from the LDAP server without using cache.
+   * This method uses the Extended Schema Info control when supported.
+   *
+   * @param config server configuration
+   * @return schema object
+   * @throws LDAPException if schema retrieval fails
+   */
+  private Schema fetchSchemaFromServer(LdapServerConfig config) throws LDAPException {
     try {
       LDAPConnectionPool pool = getConnectionPool(config);
       
@@ -922,6 +971,39 @@ public class LdapService {
           "SSL/TLS error: " + e.getMessage()
       );
     }
+  }
+  
+  /**
+   * Refreshes the cached schema for a server by re-fetching from LDAP.
+   *
+   * @param config server configuration
+   * @return refreshed schema object
+   * @throws LDAPException if schema retrieval fails
+   */
+  public Schema refreshSchema(LdapServerConfig config) throws LDAPException {
+    String cacheKey = config.getName();
+    Schema schema = fetchSchemaFromServer(config);
+    schemaCache.put(cacheKey, schema);
+    logger.info("Refreshed schema cache for {}", config.getName());
+    return schema;
+  }
+  
+  /**
+   * Clears the cached schema for a specific server.
+   *
+   * @param serverName server name
+   */
+  public void clearSchemaCache(String serverName) {
+    schemaCache.remove(serverName);
+    logger.debug("Cleared schema cache for {}", serverName);
+  }
+  
+  /**
+   * Clears all cached schemas.
+   */
+  public void clearAllSchemaCaches() {
+    schemaCache.clear();
+    logger.debug("Cleared all schema caches");
   }
 
   /**

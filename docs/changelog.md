@@ -1,5 +1,87 @@
 # LDAP Web Browser
 
+## v0.16 - 2025-11-11 ✅ COMPLETED - Schema Aware Entry Editor
+
+### Implemented Features
+
+#### 1. **Per-Server Schema Caching in LdapService**
+- ✅ Added `schemaCache` map to store Schema objects per server
+- ✅ Schema automatically fetched and cached when connection pool is created
+- ✅ `getSchema()` method now checks cache before fetching from LDAP
+- ✅ New `fetchSchemaFromServer()` private method for actual LDAP retrieval
+- ✅ New `refreshSchema()` method to force re-fetch from LDAP server
+- ✅ New `clearSchemaCache()` and `clearAllSchemaCaches()` methods
+- ✅ Schema cache automatically cleared when connection pools are closed
+- ✅ Pre-fetching of schema on first connection for better performance
+
+#### 2. **Schema-Aware Attribute Color Coding in EntryEditor**
+- ✅ Added schema-based attribute classification system
+- ✅ New `AttributeClassification` enum (REQUIRED, OPTIONAL, OPERATIONAL, UNKNOWN)
+- ✅ New `classifyAttribute()` method that:
+  - Checks if attribute is operational (schema or heuristic)
+  - Gets cached schema from LdapService
+  - Analyzes entry's objectClasses to determine required/optional attributes
+  - Returns appropriate classification
+
+- ✅ Updated `createAttributeNameComponent()` to color-code attributes:
+  - **Red (#d32f2f)** - Required attributes (MUST attributes from objectClass)
+  - **Blue (#1976d2)** - Optional attributes (MAY attributes from objectClass)
+  - **Orange (#f57c00)** - Operational/system attributes
+  - **Default color** - Unknown attributes (not in schema or no schema available)
+  
+- ✅ Added hover tooltips indicating attribute type
+- ✅ Uses cached schema for performance (no repeated LDAP calls)
+
+#### 3. **Technical Benefits**
+- **Performance**: Schema fetched once per server and cached in memory
+- **Consistency**: All UI components can use same cached schema
+- **Accuracy**: Color coding based on actual LDAP schema, not heuristics
+- **User Experience**: Visual indication of attribute requirements
+- **Extensibility**: Schema cache available for future schema-aware dialogs
+
+### Technical Details
+
+**LdapService.java modifications:**
+- Added `schemaCache` field: `Map<String, Schema>`
+- Modified `getConnectionPool()` to pre-fetch schema on new connections
+- Modified `getSchema()` to check cache first
+- Added `fetchSchemaFromServer()` for actual retrieval logic
+- Added `refreshSchema()` for cache refresh
+- Added cache management methods
+- Modified `closeConnectionPool()` and `closeAllConnectionPools()` to clear caches
+
+**EntryEditor.java modifications:**
+- Added imports for Schema, AttributeTypeDefinition, ObjectClassDefinition
+- Added `AttributeClassification` enum
+- Added `classifyAttribute()` method (~60 lines)
+- Modified `createAttributeNameComponent()` to use schema classification
+- Color coding based on attribute role in schema
+
+**Schema Classification Logic:**
+1. Check if operational attribute (heuristic or schema)
+2. Retrieve cached schema from LdapService
+3. Get entry's objectClass values
+4. Build sets of MUST and MAY attributes from all objectClasses
+5. Classify attribute as REQUIRED, OPTIONAL, OPERATIONAL, or UNKNOWN
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/service/LdapService.java` - Schema caching (~120 lines changed/added)
+- `src/main/java/com/ldapbrowser/ui/components/EntryEditor.java` - Schema-aware coloring (~100 lines changed/added)
+- `docs/changelog.md` - Updated with v0.16 completion details
+
+### Build Verification
+- ✅ Compiles successfully with Maven
+- ✅ 0 new Checkstyle violations
+- ✅ All imports resolved correctly
+- ✅ Proper exception handling throughout
+- ✅ Follows Google Java style conventions
+
+### Future Enhancements
+- Schema-aware attribute editor dialogs (validation, syntax checking)
+- Schema-aware entry creation wizard
+- Attribute auto-completion based on objectClass schema
+- Syntax-specific value editors (DN picker, date picker, etc.)
+
 ## V0.15.1 - Edit Search bug
 
 ## v0.15 - Search / browse UI improvements

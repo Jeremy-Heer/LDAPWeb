@@ -6,9 +6,13 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.unboundid.ldap.sdk.Modification;
 import com.unboundid.ldap.sdk.ModificationType;
+import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
+import com.unboundid.ldap.sdk.schema.ObjectClassDefinition;
+import com.unboundid.ldap.sdk.schema.Schema;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -21,13 +25,14 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
-import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -236,6 +241,25 @@ public class EntryEditor extends VerticalLayout {
 
     if (entry != null) {
       dnLabel.setText("DN: " + entry.getDn());
+      
+      // If operational attributes checkbox is already checked, fetch entry with operational attributes
+      if (showOperationalAttributesCheckbox.getValue() && serverConfig != null) {
+        try {
+          LdapEntry entryWithOperational = ldapService.readEntry(
+              serverConfig,
+              entry.getDn(),
+              true
+          );
+          if (entryWithOperational != null) {
+            entryWithOperational.setServerName(entry.getServerName());
+            this.fullEntry = entryWithOperational;
+          }
+        } catch (Exception e) {
+          logger.debug("Failed to fetch operational attributes: {}", e.getMessage());
+          // Continue with the entry we have
+        }
+      }
+      
       refreshAttributeDisplay();
       setButtonsEnabled(true);
       copyDnButton.setEnabled(true);
@@ -282,18 +306,22 @@ public class EntryEditor extends VerticalLayout {
       rows.add(new AttributeRow(attrName, attr.getValue()));
     }
 
-    // Sort attributes: objectClass first, then alphabetically
+    // Sort attributes: by classification (required, optional, operational), then alphabetically
     rows.sort((row1, row2) -> {
       String attr1 = row1.getName();
       String attr2 = row2.getName();
 
-      if ("objectClass".equalsIgnoreCase(attr1)) {
-        return -1;
-      }
-      if ("objectClass".equalsIgnoreCase(attr2)) {
-        return 1;
+      // Get classifications for both attributes
+      AttributeClassification class1 = classifyAttribute(attr1);
+      AttributeClassification class2 = classifyAttribute(attr2);
+
+      // Compare by classification first
+      int classCompare = Integer.compare(class1.ordinal(), class2.ordinal());
+      if (classCompare != 0) {
+        return classCompare;
       }
 
+      // Within same classification, sort alphabetically
       return attr1.compareToIgnoreCase(attr2);
     });
 
@@ -316,14 +344,117 @@ public class EntryEditor extends VerticalLayout {
     Span nameSpan = new Span(row.getName());
     nameSpan.getStyle().set("font-weight", "500");
 
-    // Color code: objectClass special, operational attributes orange
-    if ("objectClass".equalsIgnoreCase(row.getName())) {
-      nameSpan.getStyle().set("color", "#d32f2f");
-    } else if (isOperationalAttribute(row.getName())) {
-      nameSpan.getStyle().set("color", "#f57c00");
+    // Get attribute classification from schema
+    AttributeClassification classification = classifyAttribute(row.getName());
+    
+    // Color code based on schema classification
+    switch (classification) {
+      case REQUIRED:
+        nameSpan.getStyle().set("color", "#d32f2f"); // Red for required
+        nameSpan.getElement().setAttribute("title", "Required attribute");
+        break;
+      case OPTIONAL:
+        nameSpan.getStyle().set("color", "#1976d2"); // Blue for optional
+        nameSpan.getElement().setAttribute("title", "Optional attribute");
+        break;
+      case OPERATIONAL:
+        nameSpan.getStyle().set("color", "#f57c00"); // Orange for operational
+        nameSpan.getElement().setAttribute("title", "Operational attribute");
+        break;
+      case UNKNOWN:
+      default:
+        // Default color for unknown attributes
+        nameSpan.getElement().setAttribute("title", "Attribute");
+        break;
     }
 
     return nameSpan;
+  }
+  
+  /**
+   * Classification of LDAP attributes based on schema.
+   */
+  private enum AttributeClassification {
+    REQUIRED,    // Required by one or more object classes
+    OPTIONAL,    // Optional (allowed but not required)
+    OPERATIONAL, // Operational/system attribute
+    UNKNOWN      // Not found in schema or no schema available
+  }
+  
+  /**
+   * Classifies an attribute based on the server's schema.
+   *
+   * @param attributeName the attribute name to classify
+   * @return the classification of the attribute
+   */
+  private AttributeClassification classifyAttribute(String attributeName) {
+    // First check if it's a known operational attribute
+    if (isOperationalAttribute(attributeName)) {
+      return AttributeClassification.OPERATIONAL;
+    }
+    
+    // If no server config, return unknown
+    if (serverConfig == null || currentEntry == null) {
+      return AttributeClassification.UNKNOWN;
+    }
+    
+    try {
+      // Get the schema from cache
+      Schema schema = ldapService.getSchema(serverConfig);
+      if (schema == null) {
+        return AttributeClassification.UNKNOWN;
+      }
+      
+      // Check if the attribute type is operational in the schema
+      AttributeTypeDefinition attrType = schema.getAttributeType(attributeName);
+      if (attrType != null && attrType.isOperational()) {
+        return AttributeClassification.OPERATIONAL;
+      }
+      
+      // Get the object classes for this entry
+      List<String> objectClasses = currentEntry.getAttributeValues("objectClass");
+      if (objectClasses == null || objectClasses.isEmpty()) {
+        return AttributeClassification.UNKNOWN;
+      }
+      
+      // Build sets of required and optional attributes from all object classes
+      Set<String> requiredAttributes = new HashSet<>();
+      Set<String> optionalAttributes = new HashSet<>();
+      
+      for (String ocName : objectClasses) {
+        ObjectClassDefinition oc = schema.getObjectClass(ocName);
+        if (oc != null) {
+          // Add required attributes
+          String[] required = oc.getRequiredAttributes();
+          if (required != null) {
+            for (String attr : required) {
+              requiredAttributes.add(attr.toLowerCase());
+            }
+          }
+          
+          // Add optional attributes
+          String[] optional = oc.getOptionalAttributes();
+          if (optional != null) {
+            for (String attr : optional) {
+              optionalAttributes.add(attr.toLowerCase());
+            }
+          }
+        }
+      }
+      
+      // Check if this attribute is required or optional
+      String lowerAttrName = attributeName.toLowerCase();
+      if (requiredAttributes.contains(lowerAttrName)) {
+        return AttributeClassification.REQUIRED;
+      } else if (optionalAttributes.contains(lowerAttrName)) {
+        return AttributeClassification.OPTIONAL;
+      }
+      
+    } catch (Exception e) {
+      logger.debug("Error classifying attribute {}: {}", attributeName, e.getMessage());
+    }
+    
+    return AttributeClassification.UNKNOWN;
   }
 
   private VerticalLayout createValueComponent(AttributeRow row) {
@@ -369,8 +500,20 @@ public class EntryEditor extends VerticalLayout {
     Dialog dialog = new Dialog();
     dialog.setHeaderTitle("Add Attribute");
 
-    TextField nameField = new TextField("Attribute Name");
+    // Get valid attributes from schema
+    List<String> validAttributes = getValidAttributesFromSchema();
+    
+    ComboBox<String> nameField = new ComboBox<>("Attribute Name");
     nameField.setWidthFull();
+    nameField.setItems(validAttributes);
+    nameField.setAllowCustomValue(true);
+    nameField.addCustomValueSetListener(event -> {
+      String customValue = event.getDetail();
+      if (customValue != null && !customValue.trim().isEmpty()) {
+        nameField.setValue(customValue);
+      }
+    });
+    nameField.setPlaceholder("Select or type attribute name");
 
     TextArea valueArea = new TextArea("Values (one per line)");
     valueArea.setWidthFull();
@@ -411,6 +554,64 @@ public class EntryEditor extends VerticalLayout {
     dialog.add(layout);
     dialog.getFooter().add(cancelButton, saveButton);
     dialog.open();
+  }
+  
+  /**
+   * Gets list of valid attributes from schema based on entry's objectClasses.
+   *
+   * @return list of valid attribute names
+   */
+  private List<String> getValidAttributesFromSchema() {
+    List<String> validAttributes = new ArrayList<>();
+    
+    if (serverConfig == null || currentEntry == null) {
+      return validAttributes;
+    }
+    
+    try {
+      Schema schema = ldapService.getSchema(serverConfig);
+      if (schema == null) {
+        return validAttributes;
+      }
+      
+      List<String> objectClasses = currentEntry.getAttributeValues("objectClass");
+      if (objectClasses == null || objectClasses.isEmpty()) {
+        return validAttributes;
+      }
+      
+      Set<String> attributeSet = new HashSet<>();
+      
+      // Collect all MUST and MAY attributes from all objectClasses
+      for (String ocName : objectClasses) {
+        ObjectClassDefinition oc = schema.getObjectClass(ocName);
+        if (oc != null) {
+          // Add required attributes
+          String[] required = oc.getRequiredAttributes();
+          if (required != null) {
+            for (String attr : required) {
+              attributeSet.add(attr);
+            }
+          }
+          
+          // Add optional attributes
+          String[] optional = oc.getOptionalAttributes();
+          if (optional != null) {
+            for (String attr : optional) {
+              attributeSet.add(attr);
+            }
+          }
+        }
+      }
+      
+      // Convert to sorted list
+      validAttributes.addAll(attributeSet);
+      validAttributes.sort(String.CASE_INSENSITIVE_ORDER);
+      
+    } catch (Exception e) {
+      logger.debug("Error getting valid attributes from schema: {}", e.getMessage());
+    }
+    
+    return validAttributes;
   }
 
   private void openEditAttributeDialog(AttributeRow row) {
