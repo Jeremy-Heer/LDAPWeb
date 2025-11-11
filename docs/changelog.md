@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## V0.15.1 - Edit Search bug
+
 ## v0.15 - Search / browse UI improvements
 
 ## v0.14 - 2025-11-11 ✅ COMPLETED - Multi Browser Tab Support

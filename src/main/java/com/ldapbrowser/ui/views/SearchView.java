@@ -12,7 +12,6 @@ import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -112,9 +111,24 @@ public class SearchView extends VerticalLayout {
     compactSearchRow.setDefaultVerticalComponentAlignment(Alignment.END);
     compactSearchRow.setSpacing(true);
 
+    // Search Base with Browse button
+    HorizontalLayout searchBaseLayout = new HorizontalLayout();
+    searchBaseLayout.setWidthFull();
+    searchBaseLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    searchBaseLayout.setSpacing(false);
+    searchBaseLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+    
     searchBaseField = new TextField("Search Base");
     searchBaseField.setWidthFull();
     searchBaseField.setPlaceholder("dc=example,dc=com");
+
+    Button browseButton = new Button(VaadinIcon.FOLDER_OPEN.create());
+    browseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    browseButton.setTooltipText("Select DN from Directory");
+    browseButton.addClickListener(e -> showBrowseDialog());
+
+    searchBaseLayout.add(searchBaseField, browseButton);
+    searchBaseLayout.expand(searchBaseField);
 
     filterField = new TextField("Filter");
     filterField.setWidthFull();
@@ -138,8 +152,8 @@ public class SearchView extends VerticalLayout {
     });
     scopeSelect.setWidth("150px");
 
-    compactSearchRow.add(searchBaseField, filterField, scopeSelect);
-    compactSearchRow.setFlexGrow(2, searchBaseField);
+    compactSearchRow.add(searchBaseLayout, filterField, scopeSelect);
+    compactSearchRow.setFlexGrow(3, searchBaseLayout);
     compactSearchRow.setFlexGrow(2, filterField);
     compactSearchRow.setFlexGrow(0, scopeSelect);
 
@@ -148,20 +162,20 @@ public class SearchView extends VerticalLayout {
     searchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     searchButton.addClickListener(e -> performSearch());
 
-    Button editSearchButton = new Button("Edit Search", VaadinIcon.EDIT.create());
-    editSearchButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    editSearchButton.addClickListener(e -> showEditSearchDialog());
+    Button filterBuilderButton = new Button("Filter Builder", VaadinIcon.FILTER.create());
+    filterBuilderButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    filterBuilderButton.addClickListener(e -> showFilterBuilderDialog());
 
-    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton, editSearchButton);
+    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton, filterBuilderButton);
     buttonLayout.setSpacing(true);
 
     formLayout.add(compactSearchRow, buttonLayout);
     return formLayout;
   }
 
-  private void showEditSearchDialog() {
+  private void showFilterBuilderDialog() {
     Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Edit Search");
+    dialog.setHeaderTitle("Filter Builder");
     dialog.setWidth("900px");
     dialog.setHeight("700px");
     dialog.setModal(true);
@@ -172,57 +186,13 @@ public class SearchView extends VerticalLayout {
     dialogLayout.setPadding(true);
     dialogLayout.setSpacing(true);
 
-    // Search base with browse button
-    HorizontalLayout searchBaseLayout = new HorizontalLayout();
-    searchBaseLayout.setWidthFull();
-    searchBaseLayout.setAlignItems(Alignment.END);
-
-    TextField dialogSearchBaseField = new TextField("Search Base");
-    dialogSearchBaseField.setWidthFull();
-    dialogSearchBaseField.setPlaceholder("dc=example,dc=com");
-    dialogSearchBaseField.setValue(searchBaseField.getValue() != null ? searchBaseField.getValue() : "");
-
-    Button browseButton = new Button("Browse", VaadinIcon.FOLDER_OPEN.create());
-    browseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    browseButton.addClickListener(e -> {
-      showBrowseDialog();
-      // Update the dialog field when browse dialog closes
-      dialogSearchBaseField.setValue(searchBaseField.getValue() != null ? searchBaseField.getValue() : "");
-    });
-
-    searchBaseLayout.add(dialogSearchBaseField, browseButton);
-    searchBaseLayout.expand(dialogSearchBaseField);
-
-    // Filter field
+    // Filter field (manual entry)
     TextField dialogFilterField = new TextField("Filter");
     dialogFilterField.setWidthFull();
     dialogFilterField.setPlaceholder("(objectClass=*)");
     dialogFilterField.setValue(filterField.getValue() != null ? filterField.getValue() : "");
 
-    // Scope selector
-    Select<SearchScope> dialogScopeSelect = new Select<>();
-    dialogScopeSelect.setLabel("Scope");
-    dialogScopeSelect.setItems(SearchScope.values());
-    dialogScopeSelect.setValue(scopeSelect.getValue());
-    dialogScopeSelect.setItemLabelGenerator(scope -> {
-      if (scope == SearchScope.BASE) {
-        return "Base";
-      } else if (scope == SearchScope.ONE) {
-        return "One Level";
-      } else if (scope == SearchScope.SUB) {
-        return "Subtree";
-      } else if (scope == SearchScope.SUBORDINATE_SUBTREE) {
-        return "Subordinate";
-      }
-      return scope.toString();
-    });
-
-    FormLayout searchFields = new FormLayout();
-    searchFields.setWidthFull();
-    searchFields.add(searchBaseLayout, dialogFilterField, dialogScopeSelect);
-    searchFields.setColspan(searchBaseLayout, 2);
-
-    // Filter builder
+    // Filter builder component
     AdvancedSearchBuilder filterBuilder = new AdvancedSearchBuilder(ldapService);
     filterBuilder.getStyle()
         .set("border", "1px solid var(--lumo-contrast-20pct)")
@@ -230,20 +200,13 @@ public class SearchView extends VerticalLayout {
         .set("background-color", "var(--lumo-contrast-5pct)")
         .set("padding", "var(--lumo-space-m)");
     
-    // Set current search base in filter builder
-    String currentBase = dialogSearchBaseField.getValue();
+    // Set current search base in filter builder if available
+    String currentBase = searchBaseField.getValue();
     if (currentBase != null && !currentBase.isEmpty()) {
       filterBuilder.setSearchBase(currentBase);
     }
 
-    // Sync search base changes
-    dialogSearchBaseField.addValueChangeListener(e -> {
-      if (e.getValue() != null && !e.getValue().isEmpty()) {
-        filterBuilder.setSearchBase(e.getValue());
-      }
-    });
-
-    // Button to apply filter from builder
+    // Button to apply filter from builder to the text field
     Button applyFilterButton = new Button("Apply Filter from Builder", VaadinIcon.ARROW_DOWN.create());
     applyFilterButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
     applyFilterButton.addClickListener(e -> {
@@ -256,17 +219,15 @@ public class SearchView extends VerticalLayout {
     HorizontalLayout filterBuilderHeader = new HorizontalLayout();
     filterBuilderHeader.setWidthFull();
     filterBuilderHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
-    filterBuilderHeader.add(new com.vaadin.flow.component.html.H4("Filter Builder"), applyFilterButton);
+    filterBuilderHeader.add(new com.vaadin.flow.component.html.H4("Visual Filter Builder"), applyFilterButton);
     filterBuilderHeader.setFlexGrow(1, filterBuilderHeader.getComponentAt(0));
 
-    dialogLayout.add(searchFields, filterBuilderHeader, filterBuilder);
+    dialogLayout.add(dialogFilterField, filterBuilderHeader, filterBuilder);
     dialogLayout.setFlexGrow(1, filterBuilder);
 
     // Dialog buttons in header
     Button applyButton = new Button("Apply", e -> {
-      searchBaseField.setValue(dialogSearchBaseField.getValue());
       filterField.setValue(dialogFilterField.getValue());
-      scopeSelect.setValue(dialogScopeSelect.getValue());
       dialog.close();
     });
     applyButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
