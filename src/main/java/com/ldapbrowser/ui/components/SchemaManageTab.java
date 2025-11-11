@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -103,7 +104,7 @@ public class SchemaManageTab extends VerticalLayout {
 
     refreshButton = new Button("Refresh", new Icon(VaadinIcon.REFRESH));
     refreshButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
-    refreshButton.addClickListener(e -> loadSchemas());
+    refreshButton.addClickListener(e -> refreshSchemaCache());
 
     // Add schema element buttons
     addObjectClassButton = new Button("Add Object Class", new Icon(VaadinIcon.PLUS));
@@ -499,6 +500,37 @@ public class SchemaManageTab extends VerticalLayout {
 
     add(mainLayout);
     setFlexGrow(1, mainLayout);
+  }
+
+  /**
+   * Refreshes the schema cache from the LDAP server and reloads the UI.
+   */
+  private void refreshSchemaCache() {
+    Set<String> selectedServers = MainLayout.getSelectedServers();
+    if (selectedServers == null || selectedServers.isEmpty()) {
+      showError("No servers selected");
+      return;
+    }
+
+    try {
+      // Refresh schema cache for each selected server
+      for (String serverName : selectedServers) {
+        configService.getConfiguration(serverName).ifPresent(config -> {
+          try {
+            ldapService.refreshSchema(config);
+            logger.info("Refreshed schema cache for server: {}", serverName);
+          } catch (Exception ex) {
+            logger.warn("Failed to refresh schema cache for {}: {}", serverName, ex.getMessage());
+            showError("Failed to refresh schema for " + serverName + ": " + ex.getMessage());
+          }
+        });
+      }
+      
+      // Now reload the UI with the refreshed cache
+      loadSchemas();
+    } catch (Exception e) {
+      showError("Failed to refresh schema cache: " + e.getMessage());
+    }
   }
 
   /**
@@ -1098,12 +1130,13 @@ public class SchemaManageTab extends VerticalLayout {
     form.setSpacing(true);
 
     // Check if server supports schema modification
-    boolean canModify = false;
+    boolean canModifyTemp = false;
     try {
-      canModify = ldapService.supportsSchemaModification(config);
+      canModifyTemp = ldapService.supportsSchemaModification(config);
     } catch (Exception e) {
       logger.warn("Error checking schema modification support", e);
     }
+    final boolean canModify = canModifyTemp;
 
     if (!canModify) {
       Span warningMessage = new Span(
@@ -1133,27 +1166,47 @@ public class SchemaManageTab extends VerticalLayout {
     descField.setWidthFull();
     descField.setReadOnly(!canModify);
 
-    TextField typeField = new TextField("Type");
+    ComboBox<String> typeField = new ComboBox<>("Type");
+    typeField.setItems("STRUCTURAL", "AUXILIARY", "ABSTRACT");
     typeField.setValue(oc.getObjectClassType() != null
-        ? oc.getObjectClassType().getName() : "");
+        ? oc.getObjectClassType().getName() : "STRUCTURAL");
     typeField.setWidthFull();
     typeField.setReadOnly(!canModify);
 
-    TextField superiorField = new TextField("Superior Classes (comma-separated)");
-    superiorField.setValue(oc.getSuperiorClasses() != null
-        ? String.join(", ", oc.getSuperiorClasses()) : "");
+    // Get available schema elements for selectors
+    List<String> availableObjectClasses = getAvailableObjectClassNames();
+    List<String> availableAttributes = getAvailableAttributeTypeNames();
+
+    // Superior classes with multi-select
+    MultiSelectComboBox<String> superiorField = createSchemaMultiSelect(
+        "Superior Classes",
+        "Choose from existing object classes...",
+        availableObjectClasses);
+    if (oc.getSuperiorClasses() != null && oc.getSuperiorClasses().length > 0) {
+      superiorField.setValue(new HashSet<>(Arrays.asList(oc.getSuperiorClasses())));
+    }
     superiorField.setWidthFull();
     superiorField.setReadOnly(!canModify);
 
-    TextField requiredField = new TextField("Required Attributes (comma-separated)");
-    requiredField.setValue(oc.getRequiredAttributes() != null
-        ? String.join(", ", oc.getRequiredAttributes()) : "");
+    // Required attributes with multi-select
+    MultiSelectComboBox<String> requiredField = createSchemaMultiSelect(
+        "Required Attributes (MUST)",
+        "Choose from existing attributes...",
+        availableAttributes);
+    if (oc.getRequiredAttributes() != null && oc.getRequiredAttributes().length > 0) {
+      requiredField.setValue(new HashSet<>(Arrays.asList(oc.getRequiredAttributes())));
+    }
     requiredField.setWidthFull();
     requiredField.setReadOnly(!canModify);
 
-    TextField optionalField = new TextField("Optional Attributes (comma-separated)");
-    optionalField.setValue(oc.getOptionalAttributes() != null
-        ? String.join(", ", oc.getOptionalAttributes()) : "");
+    // Optional attributes with multi-select
+    MultiSelectComboBox<String> optionalField = createSchemaMultiSelect(
+        "Optional Attributes (MAY)",
+        "Choose from existing attributes...",
+        availableAttributes);
+    if (oc.getOptionalAttributes() != null && oc.getOptionalAttributes().length > 0) {
+      optionalField.setValue(new HashSet<>(Arrays.asList(oc.getOptionalAttributes())));
+    }
     optionalField.setWidthFull();
     optionalField.setReadOnly(!canModify);
 
@@ -1163,8 +1216,133 @@ public class SchemaManageTab extends VerticalLayout {
     schemaFileField.setWidthFull();
     schemaFileField.setReadOnly(true);
 
+    // Raw schema definition field with two-way binding and paste button
+    VerticalLayout rawSchemaContainer = new VerticalLayout();
+    rawSchemaContainer.setPadding(false);
+    rawSchemaContainer.setSpacing(false);
+    
+    HorizontalLayout rawSchemaHeader = new HorizontalLayout();
+    rawSchemaHeader.setWidthFull();
+    rawSchemaHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    rawSchemaHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span rawSchemaLabel = new Span("Raw Schema Definition");
+    rawSchemaLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button pasteButton = new Button(new Icon(VaadinIcon.PASTE));
+    pasteButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    pasteButton.setTooltipText("Paste from clipboard");
+    pasteButton.setEnabled(canModify);
+    
+    rawSchemaHeader.add(rawSchemaLabel, pasteButton);
+    rawSchemaHeader.setFlexGrow(1, rawSchemaLabel);
+    
+    TextArea rawSchemaField = new TextArea();
+    rawSchemaField.setWidthFull();
+    rawSchemaField.setHeight("200px");
+    rawSchemaField.getStyle().set("font-family", "monospace");
+    rawSchemaField.setReadOnly(!canModify);
+    
+    // Add paste functionality
+    pasteButton.addClickListener(e -> {
+      rawSchemaField.getElement().executeJs(
+          "navigator.clipboard.readText().then(text => {" +
+          "  this.value = text;" +
+          "  this.dispatchEvent(new Event('change', { bubbles: true }));" +
+          "});",
+          rawSchemaField.getElement()
+      );
+    });
+    
+    rawSchemaContainer.add(rawSchemaHeader, rawSchemaField);
+    
+    // Initialize raw schema field with current definition
+    Set<String> initialSuperiorSet = superiorField.getValue();
+    String initialSuperiorStr = initialSuperiorSet != null && !initialSuperiorSet.isEmpty()
+        ? String.join(", ", initialSuperiorSet) : "";
+    Set<String> initialRequiredSet = requiredField.getValue();
+    String initialRequiredStr = initialRequiredSet != null && !initialRequiredSet.isEmpty()
+        ? String.join(", ", initialRequiredSet) : "";
+    Set<String> initialOptionalSet = optionalField.getValue();
+    String initialOptionalStr = initialOptionalSet != null && !initialOptionalSet.isEmpty()
+        ? String.join(", ", initialOptionalSet) : "";
+    
+    rawSchemaField.setValue(buildObjectClassDefinition(
+        oidField.getValue(),
+        namesField.getValue(),
+        descField.getValue(),
+        typeField.getValue(),
+        initialSuperiorStr,
+        initialRequiredStr,
+        initialOptionalStr,
+        filterWritableExtensions(oc.getExtensions())
+    ));
+
+    // Track if we're updating from raw schema to prevent circular updates
+    final boolean[] updatingFromRaw = {false};
+
+    // Lambda to update raw schema when UI fields change
+    Runnable updateRawSchemaFromUI = () -> {
+      if (!rawSchemaField.isReadOnly() && !updatingFromRaw[0]) {
+        Set<String> superior = superiorField.getValue();
+        String superiorValues = superior != null && !superior.isEmpty()
+            ? String.join(", ", superior) : "";
+        Set<String> required = requiredField.getValue();
+        String requiredValues = required != null && !required.isEmpty()
+            ? String.join(", ", required) : "";
+        Set<String> optional = optionalField.getValue();
+        String optionalValues = optional != null && !optional.isEmpty()
+            ? String.join(", ", optional) : "";
+        
+        String newRaw = buildObjectClassDefinition(
+            oidField.getValue(),
+            namesField.getValue(),
+            descField.getValue(),
+            typeField.getValue(),
+            superiorValues,
+            requiredValues,
+            optionalValues,
+            filterWritableExtensions(oc.getExtensions())
+        );
+        
+        // Only update if different to prevent infinite loop
+        if (!rawSchemaField.getValue().equals(newRaw)) {
+          rawSchemaField.setValue(newRaw);
+        }
+      }
+    };
+
+    namesField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    descField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    typeField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    superiorField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    requiredField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    optionalField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+
+    // Add listener to parse raw schema and update UI fields
+    rawSchemaField.addValueChangeListener(event -> {
+      if (canModify && event.isFromClient()) {
+        try {
+          updatingFromRaw[0] = true;
+          String rawValue = event.getValue();
+          if (rawValue != null && !rawValue.trim().isEmpty()) {
+            parseAndUpdateObjectClassFields(rawValue, namesField, descField,
+                typeField, superiorField, requiredField, optionalField);
+          }
+        } catch (Exception ex) {
+          logger.debug("Error parsing raw schema: {}", ex.getMessage());
+          // Don't show error - allow invalid intermediate states while typing
+        } finally {
+          updatingFromRaw[0] = false;
+        }
+      }
+    });
+
     form.add(oidField, namesField, descField, typeField, superiorField,
-        requiredField, optionalField, schemaFileField);
+        requiredField, optionalField, schemaFileField, rawSchemaContainer);
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
     
@@ -1173,20 +1351,43 @@ public class SchemaManageTab extends VerticalLayout {
         try {
           // Build new definition string
           String oldDefinition = getRawDefinitionString(oc);
+          
+          // Convert Set values to comma-separated strings
+          Set<String> superiorSet = superiorField.getValue();
+          String superiorStr = superiorSet != null && !superiorSet.isEmpty()
+              ? String.join(", ", superiorSet) : "";
+          
+          Set<String> requiredSet = requiredField.getValue();
+          String requiredStr = requiredSet != null && !requiredSet.isEmpty()
+              ? String.join(", ", requiredSet) : "";
+          
+          Set<String> optionalSet = optionalField.getValue();
+          String optionalStr = optionalSet != null && !optionalSet.isEmpty()
+              ? String.join(", ", optionalSet) : "";
+          
           String newDefinition = buildObjectClassDefinition(
               oidField.getValue(),
               namesField.getValue(),
               descField.getValue(),
               typeField.getValue(),
-              superiorField.getValue(),
-              requiredField.getValue(),
-              optionalField.getValue(),
+              superiorStr,
+              requiredStr,
+              optionalStr,
               filterWritableExtensions(oc.getExtensions())
           );
           
           // Only modify if definition changed
           if (!normalizeDefinition(oldDefinition).equals(normalizeDefinition(newDefinition))) {
             ldapService.modifyObjectClassInSchema(config, oldDefinition, newDefinition);
+            
+            // Refresh the schema cache to pick up the modification
+            try {
+              ldapService.refreshSchema(config);
+            } catch (Exception rex) {
+              logger.warn("Failed to refresh schema cache after modification for {}: {}", 
+                  config.getName(), rex.getMessage());
+            }
+            
             Notification.show("Object class updated successfully", 3000,
                 Notification.Position.BOTTOM_START);
             dialog.close();
@@ -1232,12 +1433,13 @@ public class SchemaManageTab extends VerticalLayout {
     form.setSpacing(true);
 
     // Check if server supports schema modification
-    boolean canModify = false;
+    boolean canModifyTemp = false;
     try {
-      canModify = ldapService.supportsSchemaModification(config);
+      canModifyTemp = ldapService.supportsSchemaModification(config);
     } catch (Exception e) {
       logger.warn("Error checking schema modification support", e);
     }
+    final boolean canModify = canModifyTemp;
 
     if (!canModify) {
       Span warningMessage = new Span(
@@ -1306,8 +1508,121 @@ public class SchemaManageTab extends VerticalLayout {
     schemaFileField.setWidthFull();
     schemaFileField.setReadOnly(true);
 
+    // Raw schema definition field with two-way binding and paste button
+    VerticalLayout rawSchemaContainer = new VerticalLayout();
+    rawSchemaContainer.setPadding(false);
+    rawSchemaContainer.setSpacing(false);
+    
+    HorizontalLayout rawSchemaHeader = new HorizontalLayout();
+    rawSchemaHeader.setWidthFull();
+    rawSchemaHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    rawSchemaHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span rawSchemaLabel = new Span("Raw Schema Definition");
+    rawSchemaLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button pasteButton = new Button(new Icon(VaadinIcon.PASTE));
+    pasteButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    pasteButton.setTooltipText("Paste from clipboard");
+    pasteButton.setEnabled(canModify);
+    
+    rawSchemaHeader.add(rawSchemaLabel, pasteButton);
+    rawSchemaHeader.setFlexGrow(1, rawSchemaLabel);
+    
+    TextArea rawSchemaField = new TextArea();
+    rawSchemaField.setWidthFull();
+    rawSchemaField.setHeight("200px");
+    rawSchemaField.getStyle().set("font-family", "monospace");
+    rawSchemaField.setReadOnly(!canModify);
+    
+    // Add paste functionality
+    pasteButton.addClickListener(e -> {
+      rawSchemaField.getElement().executeJs(
+          "navigator.clipboard.readText().then(text => {" +
+          "  this.value = text;" +
+          "  this.dispatchEvent(new Event('change', { bubbles: true }));" +
+          "});",
+          rawSchemaField.getElement()
+      );
+    });
+    
+    rawSchemaContainer.add(rawSchemaHeader, rawSchemaField);
+    
+    // Initialize raw schema field with current definition
+    rawSchemaField.setValue(buildAttributeTypeDefinition(
+        oidField.getValue(),
+        namesField.getValue(),
+        descField.getValue(),
+        syntaxField.getValue(),
+        superiorField.getValue(),
+        equalityField.getValue(),
+        orderingField.getValue(),
+        substringField.getValue(),
+        usageField.getValue(),
+        filterWritableExtensions(at.getExtensions())
+    ));
+
+    // Track if we're updating from raw schema to prevent circular updates
+    final boolean[] updatingFromRaw = {false};
+
+    // Lambda to update raw schema when UI fields change
+    Runnable updateRawSchemaFromUI = () -> {
+      if (!rawSchemaField.isReadOnly() && !updatingFromRaw[0]) {
+        String newRaw = buildAttributeTypeDefinition(
+            oidField.getValue(),
+            namesField.getValue(),
+            descField.getValue(),
+            syntaxField.getValue(),
+            superiorField.getValue(),
+            equalityField.getValue(),
+            orderingField.getValue(),
+            substringField.getValue(),
+            usageField.getValue(),
+            filterWritableExtensions(at.getExtensions())
+        );
+        
+        // Only update if different to prevent infinite loop
+        if (!rawSchemaField.getValue().equals(newRaw)) {
+          rawSchemaField.setValue(newRaw);
+        }
+      }
+    };
+
+    namesField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    descField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    syntaxField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    superiorField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    equalityField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    orderingField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    substringField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    usageField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+
+    // Add listener to parse raw schema and update UI fields
+    rawSchemaField.addValueChangeListener(event -> {
+      if (canModify && event.isFromClient()) {
+        try {
+          updatingFromRaw[0] = true;
+          String rawValue = event.getValue();
+          if (rawValue != null && !rawValue.trim().isEmpty()) {
+            parseAndUpdateAttributeTypeFields(rawValue, namesField, descField,
+                syntaxField, superiorField, equalityField, orderingField,
+                substringField, usageField);
+          }
+        } catch (Exception ex) {
+          logger.debug("Error parsing raw schema: {}", ex.getMessage());
+          // Don't show error - allow invalid intermediate states while typing
+        } finally {
+          updatingFromRaw[0] = false;
+        }
+      }
+    });
+
     form.add(oidField, namesField, descField, syntaxField, superiorField,
-        equalityField, orderingField, substringField, usageField, schemaFileField);
+        equalityField, orderingField, substringField, usageField, schemaFileField,
+        rawSchemaContainer);
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
     
@@ -1332,6 +1647,15 @@ public class SchemaManageTab extends VerticalLayout {
           // Only modify if definition changed
           if (!normalizeDefinition(oldDefinition).equals(normalizeDefinition(newDefinition))) {
             ldapService.modifyAttributeTypeInSchema(config, oldDefinition, newDefinition);
+            
+            // Refresh the schema cache to pick up the modification
+            try {
+              ldapService.refreshSchema(config);
+            } catch (Exception rex) {
+              logger.warn("Failed to refresh schema cache after modification for {}: {}", 
+                  config.getName(), rex.getMessage());
+            }
+            
             Notification.show("Attribute type updated successfully", 3000,
                 Notification.Position.BOTTOM_START);
             dialog.close();
@@ -1453,15 +1777,48 @@ public class SchemaManageTab extends VerticalLayout {
   private void addRawDefinition(VerticalLayout details, Object schemaElement) {
     String raw = getRawDefinitionString(schemaElement);
     if (raw != null && !raw.trim().isEmpty()) {
-      TextArea rawArea = new TextArea("Raw Definition");
+      // Create header with copy button
+      HorizontalLayout rawHeader = new HorizontalLayout();
+      rawHeader.setWidthFull();
+      rawHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+      rawHeader.getStyle().set("margin-top", "8px");
+      
+      Span rawLabel = new Span("Raw Definition");
+      rawLabel.getStyle()
+          .set("font-weight", "500")
+          .set("font-size", "var(--lumo-font-size-s)");
+      
+      Button copyButton = new Button(new Icon(VaadinIcon.COPY));
+      copyButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+      copyButton.setTooltipText("Copy to clipboard");
+      copyButton.addClickListener(e -> {
+        copyButton.getElement().executeJs(
+            "navigator.clipboard.writeText($0).then(() => {" +
+            "  const notification = document.createElement('vaadin-notification');" +
+            "  notification.renderer = function(root) {" +
+            "    root.textContent = 'Copied to clipboard';" +
+            "  };" +
+            "  notification.position = 'bottom-start';" +
+            "  notification.duration = 2000;" +
+            "  notification.open();" +
+            "});",
+            raw
+        );
+      });
+      
+      rawHeader.add(rawLabel, copyButton);
+      rawHeader.setFlexGrow(1, rawLabel);
+      
+      TextArea rawArea = new TextArea();
       rawArea.setValue(raw);
       rawArea.setReadOnly(true);
       rawArea.setWidthFull();
-      rawArea.setHeight("140px");
+      rawArea.setHeight("200px");
       // Use monospace and preserve whitespace
       rawArea.getStyle().set("font-family", "monospace");
       rawArea.getElement().getStyle().set("white-space", "pre");
-      details.add(rawArea);
+      
+      details.add(rawHeader, rawArea);
     }
   }
 
@@ -1999,9 +2356,124 @@ public class SchemaManageTab extends VerticalLayout {
     schemaFileField.setValue("99-user.ldif");
     schemaFileField.setHelperText("Schema file name for X-SCHEMA-FILE extension");
 
+    // Raw schema definition field with two-way binding and paste button
+    VerticalLayout rawSchemaContainer = new VerticalLayout();
+    rawSchemaContainer.setPadding(false);
+    rawSchemaContainer.setSpacing(false);
+    
+    HorizontalLayout rawSchemaHeader = new HorizontalLayout();
+    rawSchemaHeader.setWidthFull();
+    rawSchemaHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    rawSchemaHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span rawSchemaLabel = new Span("Raw Schema Definition");
+    rawSchemaLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button pasteButton = new Button(new Icon(VaadinIcon.PASTE));
+    pasteButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    pasteButton.setTooltipText("Paste from clipboard");
+    
+    rawSchemaHeader.add(rawSchemaLabel, pasteButton);
+    rawSchemaHeader.setFlexGrow(1, rawSchemaLabel);
+    
+    TextArea rawSchemaField = new TextArea();
+    rawSchemaField.setWidthFull();
+    rawSchemaField.setHeight("200px");
+    rawSchemaField.getStyle().set("font-family", "monospace");
+    
+    // Initialize with empty/minimal definition
+    rawSchemaField.setValue("( )");
+    
+    // Add paste functionality
+    pasteButton.addClickListener(e -> {
+      rawSchemaField.getElement().executeJs(
+          "navigator.clipboard.readText().then(text => {" +
+          "  this.value = text;" +
+          "  this.dispatchEvent(new Event('change', { bubbles: true }));" +
+          "});",
+          rawSchemaField.getElement()
+      );
+    });
+    
+    rawSchemaContainer.add(rawSchemaHeader, rawSchemaField);
+
+    // Track if we're updating from raw schema to prevent circular updates
+    final boolean[] updatingFromRaw = {false};
+
+    // Lambda to update raw schema when UI fields change
+    Runnable updateRawSchemaFromUI = () -> {
+      if (!updatingFromRaw[0]) {
+        Set<String> superior = superiorClassesSelector.getValue();
+        String superiorValues = superior != null && !superior.isEmpty()
+            ? String.join(", ", superior) : "";
+        Set<String> required = requiredAttributesSelector.getValue();
+        String requiredValues = required != null && !required.isEmpty()
+            ? String.join(", ", required) : "";
+        Set<String> optional = optionalAttributesSelector.getValue();
+        String optionalValues = optional != null && !optional.isEmpty()
+            ? String.join(", ", optional) : "";
+        
+        // Build extension map for schema file
+        Map<String, String[]> extensions = new HashMap<>();
+        if (schemaFileField.getValue() != null
+            && !schemaFileField.getValue().trim().isEmpty()) {
+          extensions.put("X-SCHEMA-FILE", new String[]{schemaFileField.getValue().trim()});
+        }
+        
+        String newRaw = buildObjectClassDefinition(
+            oidField.getValue(),
+            nameField.getValue(),
+            descriptionField.getValue(),
+            typeComboBox.getValue(),
+            superiorValues,
+            requiredValues,
+            optionalValues,
+            extensions
+        );
+        
+        // Only update if different to prevent infinite loop
+        if (!rawSchemaField.getValue().equals(newRaw)) {
+          rawSchemaField.setValue(newRaw);
+        }
+      }
+    };
+
+    nameField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    oidField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    descriptionField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    typeComboBox.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    obsoleteCheckbox.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    superiorClassesSelector.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    requiredAttributesSelector.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    optionalAttributesSelector.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    schemaFileField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+
+    // Add listener to parse raw schema and update UI fields
+    rawSchemaField.addValueChangeListener(event -> {
+      if (event.isFromClient()) {
+        try {
+          updatingFromRaw[0] = true;
+          String rawValue = event.getValue();
+          if (rawValue != null && !rawValue.trim().isEmpty()) {
+            parseAndUpdateObjectClassFieldsForAdd(rawValue, nameField, oidField,
+                descriptionField, typeComboBox, superiorClassesSelector,
+                requiredAttributesSelector, optionalAttributesSelector);
+          }
+        } catch (Exception ex) {
+          logger.debug("Error parsing raw schema: {}", ex.getMessage());
+          // Don't show error - allow invalid intermediate states while typing
+        } finally {
+          updatingFromRaw[0] = false;
+        }
+      }
+    });
+
     formLayout.add(nameField, oidField, descriptionField, typeComboBox, obsoleteCheckbox,
         superiorClassesSelector, requiredAttributesSelector, optionalAttributesSelector,
-        schemaFileField);
+        schemaFileField, rawSchemaContainer);
 
     // Buttons
     Button saveButton = new Button("Add Object Class", e -> {
@@ -2091,9 +2563,122 @@ public class SchemaManageTab extends VerticalLayout {
     schemaFileField.setValue("99-user.ldif");
     schemaFileField.setHelperText("Schema file name for X-SCHEMA-FILE extension");
 
+    // Raw schema definition field with two-way binding and paste button
+    VerticalLayout rawSchemaContainer = new VerticalLayout();
+    rawSchemaContainer.setPadding(false);
+    rawSchemaContainer.setSpacing(false);
+    
+    HorizontalLayout rawSchemaHeader = new HorizontalLayout();
+    rawSchemaHeader.setWidthFull();
+    rawSchemaHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    rawSchemaHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span rawSchemaLabel = new Span("Raw Schema Definition");
+    rawSchemaLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button pasteButton = new Button(new Icon(VaadinIcon.PASTE));
+    pasteButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    pasteButton.setTooltipText("Paste from clipboard");
+    
+    rawSchemaHeader.add(rawSchemaLabel, pasteButton);
+    rawSchemaHeader.setFlexGrow(1, rawSchemaLabel);
+    
+    TextArea rawSchemaField = new TextArea();
+    rawSchemaField.setWidthFull();
+    rawSchemaField.setHeight("200px");
+    rawSchemaField.getStyle().set("font-family", "monospace");
+    
+    // Initialize with empty/minimal definition
+    rawSchemaField.setValue("( )");
+    
+    // Add paste functionality
+    pasteButton.addClickListener(e -> {
+      rawSchemaField.getElement().executeJs(
+          "navigator.clipboard.readText().then(text => {" +
+          "  this.value = text;" +
+          "  this.dispatchEvent(new Event('change', { bubbles: true }));" +
+          "});",
+          rawSchemaField.getElement()
+      );
+    });
+    
+    rawSchemaContainer.add(rawSchemaHeader, rawSchemaField);
+
+    // Track if we're updating from raw schema to prevent circular updates
+    final boolean[] updatingFromRaw = {false};
+
+    // Lambda to update raw schema when UI fields change
+    Runnable updateRawSchemaFromUI = () -> {
+      if (!updatingFromRaw[0]) {
+        // Build extension map for schema file
+        Map<String, String[]> extensions = new HashMap<>();
+        if (schemaFileField.getValue() != null
+            && !schemaFileField.getValue().trim().isEmpty()) {
+          extensions.put("X-SCHEMA-FILE", new String[]{schemaFileField.getValue().trim()});
+        }
+        
+        // Extract OID from syntax selector (may have description)
+        String syntaxOid = extractOidOrName(syntaxOidSelector.getValue());
+        String superiorType = extractOidOrName(superiorTypeSelector.getValue());
+        
+        String newRaw = buildAttributeTypeDefinition(
+            oidField.getValue(),
+            nameField.getValue(),
+            descriptionField.getValue(),
+            syntaxOid,
+            superiorType,
+            "", // equality
+            "", // ordering
+            "", // substring
+            usageComboBox.getValue(),
+            extensions
+        );
+        
+        // Only update if different to prevent infinite loop
+        if (!rawSchemaField.getValue().equals(newRaw)) {
+          rawSchemaField.setValue(newRaw);
+        }
+      }
+    };
+
+    nameField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    oidField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    descriptionField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    syntaxOidSelector.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    superiorTypeSelector.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    usageComboBox.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    singleValuedCheckbox.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    obsoleteCheckbox.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    collectiveCheckbox.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    noUserModificationCheckbox.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+    schemaFileField.addValueChangeListener(e -> updateRawSchemaFromUI.run());
+
+    // Add listener to parse raw schema and update UI fields
+    rawSchemaField.addValueChangeListener(event -> {
+      if (event.isFromClient()) {
+        try {
+          updatingFromRaw[0] = true;
+          String rawValue = event.getValue();
+          if (rawValue != null && !rawValue.trim().isEmpty()) {
+            parseAndUpdateAttributeTypeFieldsForAdd(rawValue, nameField, oidField,
+                descriptionField, syntaxOidSelector, superiorTypeSelector,
+                usageComboBox);
+          }
+        } catch (Exception ex) {
+          logger.debug("Error parsing raw schema: {}", ex.getMessage());
+          // Don't show error - allow invalid intermediate states while typing
+        } finally {
+          updatingFromRaw[0] = false;
+        }
+      }
+    });
+
     formLayout.add(nameField, oidField, descriptionField, syntaxOidSelector,
         superiorTypeSelector, usageComboBox, singleValuedCheckbox, obsoleteCheckbox,
-        collectiveCheckbox, noUserModificationCheckbox, schemaFileField);
+        collectiveCheckbox, noUserModificationCheckbox, schemaFileField, rawSchemaContainer);
 
     // Buttons
     Button saveButton = new Button("Add Attribute Type", e -> {
@@ -2262,6 +2847,15 @@ public class SchemaManageTab extends VerticalLayout {
         
         try {
           ldapService.addObjectClassToSchema(config, objectClassDef.toString());
+          
+          // Refresh the schema cache to pick up the new object class
+          try {
+            ldapService.refreshSchema(config);
+          } catch (Exception rex) {
+            logger.warn("Failed to refresh schema cache after adding object class for {}: {}", 
+                serverName, rex.getMessage());
+          }
+          
           successCount++;
         } catch (Exception e) {
           failCount++;
@@ -2273,7 +2867,7 @@ public class SchemaManageTab extends VerticalLayout {
         }
       }
 
-      // Reload schema
+      // Reload schema display
       loadSchemas();
       
       // Show appropriate message
@@ -2419,6 +3013,15 @@ public class SchemaManageTab extends VerticalLayout {
 
         try {
           ldapService.addAttributeTypeToSchema(config, attributeDef.toString());
+          
+          // Refresh the schema cache to pick up the new attribute type
+          try {
+            ldapService.refreshSchema(config);
+          } catch (Exception rex) {
+            logger.warn("Failed to refresh schema cache after adding attribute type for {}: {}", 
+                serverName, rex.getMessage());
+          }
+          
           successCount++;
         } catch (Exception e) {
           failCount++;
@@ -2429,7 +3032,7 @@ public class SchemaManageTab extends VerticalLayout {
         }
       }
 
-      // Reload schema
+      // Reload schema display
       loadSchemas();
 
       // Show appropriate message based on results
@@ -2449,6 +3052,303 @@ public class SchemaManageTab extends VerticalLayout {
       showError("Failed to add attribute type: " + e.getMessage());
       logger.error("Failed to add attribute type", e);
       return false;
+    }
+  }
+
+  /**
+   * Parse raw object class definition and update UI fields.
+   *
+   * @param rawDefinition raw LDAP schema definition
+   * @param namesField names field
+   * @param descField description field
+   * @param typeField type field
+   * @param superiorField superior classes field
+   * @param requiredField required attributes field
+   * @param optionalField optional attributes field
+   */
+  private void parseAndUpdateObjectClassFields(String rawDefinition,
+      TextField namesField, TextArea descField, ComboBox<String> typeField,
+      MultiSelectComboBox<String> superiorField,
+      MultiSelectComboBox<String> requiredField,
+      MultiSelectComboBox<String> optionalField) {
+    try {
+      // Parse using UnboundID SDK
+      ObjectClassDefinition parsed = new ObjectClassDefinition(rawDefinition);
+      
+      // Update names
+      String[] names = parsed.getNames();
+      if (names != null && names.length > 0) {
+        namesField.setValue(String.join(", ", names));
+      } else {
+        namesField.clear();
+      }
+      
+      // Update description
+      if (parsed.getDescription() != null) {
+        descField.setValue(parsed.getDescription());
+      } else {
+        descField.clear();
+      }
+      
+      // Update type
+      if (parsed.getObjectClassType() != null) {
+        typeField.setValue(parsed.getObjectClassType().getName());
+      }
+      
+      // Update superior classes
+      String[] superiors = parsed.getSuperiorClasses();
+      if (superiors != null && superiors.length > 0) {
+        superiorField.setValue(new HashSet<>(Arrays.asList(superiors)));
+      } else {
+        superiorField.clear();
+      }
+      
+      // Update required attributes
+      String[] required = parsed.getRequiredAttributes();
+      if (required != null && required.length > 0) {
+        requiredField.setValue(new HashSet<>(Arrays.asList(required)));
+      } else {
+        requiredField.clear();
+      }
+      
+      // Update optional attributes
+      String[] optional = parsed.getOptionalAttributes();
+      if (optional != null && optional.length > 0) {
+        optionalField.setValue(new HashSet<>(Arrays.asList(optional)));
+      } else {
+        optionalField.clear();
+      }
+    } catch (Exception e) {
+      logger.debug("Failed to parse object class definition: {}", e.getMessage());
+      // Don't update fields if parsing fails
+    }
+  }
+
+  /**
+   * Parse raw attribute type definition and update UI fields.
+   *
+   * @param rawDefinition raw LDAP schema definition
+   * @param namesField names field
+   * @param descField description field
+   * @param syntaxField syntax OID field
+   * @param superiorField superior type field
+   * @param equalityField equality matching rule field
+   * @param orderingField ordering matching rule field
+   * @param substringField substring matching rule field
+   * @param usageField usage field
+   */
+  private void parseAndUpdateAttributeTypeFields(String rawDefinition,
+      TextField namesField, TextArea descField, TextField syntaxField,
+      TextField superiorField, TextField equalityField, TextField orderingField,
+      TextField substringField, TextField usageField) {
+    try {
+      // Parse using UnboundID SDK
+      AttributeTypeDefinition parsed = new AttributeTypeDefinition(rawDefinition);
+      
+      // Update names
+      String[] names = parsed.getNames();
+      if (names != null && names.length > 0) {
+        namesField.setValue(String.join(", ", names));
+      } else {
+        namesField.clear();
+      }
+      
+      // Update description
+      if (parsed.getDescription() != null) {
+        descField.setValue(parsed.getDescription());
+      } else {
+        descField.clear();
+      }
+      
+      // Update syntax OID
+      if (parsed.getSyntaxOID() != null) {
+        syntaxField.setValue(parsed.getSyntaxOID());
+      } else {
+        syntaxField.clear();
+      }
+      
+      // Update superior type
+      if (parsed.getSuperiorType() != null) {
+        superiorField.setValue(parsed.getSuperiorType());
+      } else {
+        superiorField.clear();
+      }
+      
+      // Update equality matching rule
+      if (parsed.getEqualityMatchingRule() != null) {
+        equalityField.setValue(parsed.getEqualityMatchingRule());
+      } else {
+        equalityField.clear();
+      }
+      
+      // Update ordering matching rule
+      if (parsed.getOrderingMatchingRule() != null) {
+        orderingField.setValue(parsed.getOrderingMatchingRule());
+      } else {
+        orderingField.clear();
+      }
+      
+      // Update substring matching rule
+      if (parsed.getSubstringMatchingRule() != null) {
+        substringField.setValue(parsed.getSubstringMatchingRule());
+      } else {
+        substringField.clear();
+      }
+      
+      // Update usage
+      if (parsed.getUsage() != null) {
+        usageField.setValue(parsed.getUsage().getName());
+      } else {
+        usageField.clear();
+      }
+    } catch (Exception e) {
+      logger.debug("Failed to parse attribute type definition: {}", e.getMessage());
+      // Don't update fields if parsing fails
+    }
+  }
+
+  /**
+   * Parse raw object class definition and update UI fields for Add dialog.
+   *
+   * @param rawDefinition raw LDAP schema definition
+   * @param nameField name field
+   * @param oidField OID field
+   * @param descField description field
+   * @param typeField type field
+   * @param superiorField superior classes field
+   * @param requiredField required attributes field
+   * @param optionalField optional attributes field
+   */
+  private void parseAndUpdateObjectClassFieldsForAdd(String rawDefinition,
+      TextField nameField, TextField oidField, TextField descField,
+      ComboBox<String> typeField,
+      MultiSelectComboBox<String> superiorField,
+      MultiSelectComboBox<String> requiredField,
+      MultiSelectComboBox<String> optionalField) {
+    try {
+      // Parse using UnboundID SDK
+      ObjectClassDefinition parsed = new ObjectClassDefinition(rawDefinition);
+      
+      // Update OID
+      if (parsed.getOID() != null) {
+        oidField.setValue(parsed.getOID());
+      } else {
+        oidField.clear();
+      }
+      
+      // Update names
+      String[] names = parsed.getNames();
+      if (names != null && names.length > 0) {
+        nameField.setValue(names[0]); // Use first name for the name field
+      } else {
+        nameField.clear();
+      }
+      
+      // Update description
+      if (parsed.getDescription() != null) {
+        descField.setValue(parsed.getDescription());
+      } else {
+        descField.clear();
+      }
+      
+      // Update type
+      if (parsed.getObjectClassType() != null) {
+        typeField.setValue(parsed.getObjectClassType().getName());
+      }
+      
+      // Update superior classes
+      String[] superiors = parsed.getSuperiorClasses();
+      if (superiors != null && superiors.length > 0) {
+        superiorField.setValue(new HashSet<>(Arrays.asList(superiors)));
+      } else {
+        superiorField.clear();
+      }
+      
+      // Update required attributes
+      String[] required = parsed.getRequiredAttributes();
+      if (required != null && required.length > 0) {
+        requiredField.setValue(new HashSet<>(Arrays.asList(required)));
+      } else {
+        requiredField.clear();
+      }
+      
+      // Update optional attributes
+      String[] optional = parsed.getOptionalAttributes();
+      if (optional != null && optional.length > 0) {
+        optionalField.setValue(new HashSet<>(Arrays.asList(optional)));
+      } else {
+        optionalField.clear();
+      }
+    } catch (Exception e) {
+      logger.debug("Failed to parse object class definition: {}", e.getMessage());
+      // Don't update fields if parsing fails
+    }
+  }
+
+  /**
+   * Parse raw attribute type definition and update UI fields for Add dialog.
+   *
+   * @param rawDefinition raw LDAP schema definition
+   * @param nameField name field
+   * @param oidField OID field
+   * @param descField description field
+   * @param syntaxField syntax OID field
+   * @param superiorField superior type field
+   * @param usageField usage field
+   */
+  private void parseAndUpdateAttributeTypeFieldsForAdd(String rawDefinition,
+      TextField nameField, TextField oidField, TextField descField,
+      ComboBox<String> syntaxField, ComboBox<String> superiorField,
+      ComboBox<String> usageField) {
+    try {
+      // Parse using UnboundID SDK
+      AttributeTypeDefinition parsed = new AttributeTypeDefinition(rawDefinition);
+      
+      // Update OID
+      if (parsed.getOID() != null) {
+        oidField.setValue(parsed.getOID());
+      } else {
+        oidField.clear();
+      }
+      
+      // Update names
+      String[] names = parsed.getNames();
+      if (names != null && names.length > 0) {
+        nameField.setValue(names[0]); // Use first name for the name field
+      } else {
+        nameField.clear();
+      }
+      
+      // Update description
+      if (parsed.getDescription() != null) {
+        descField.setValue(parsed.getDescription());
+      } else {
+        descField.clear();
+      }
+      
+      // Update syntax OID
+      if (parsed.getSyntaxOID() != null) {
+        syntaxField.setValue(parsed.getSyntaxOID());
+      } else {
+        syntaxField.clear();
+      }
+      
+      // Update superior type
+      if (parsed.getSuperiorType() != null) {
+        superiorField.setValue(parsed.getSuperiorType());
+      } else {
+        superiorField.clear();
+      }
+      
+      // Update usage
+      if (parsed.getUsage() != null) {
+        usageField.setValue(parsed.getUsage().getName());
+      } else {
+        usageField.clear();
+      }
+    } catch (Exception e) {
+      logger.debug("Failed to parse attribute type definition: {}", e.getMessage());
+      // Don't update fields if parsing fails
     }
   }
 }

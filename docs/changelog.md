@@ -1,5 +1,9 @@
 # LDAP Web Browser
 
+## v0.17 - Schema tab optomization
+  - reload schema cache
+  - raw schema edit on add / edit object class / attribute types
+
 ## v0.16 - 2025-11-11 ✅ COMPLETED - Schema Aware Entry Editor
 
 ### Implemented Features
