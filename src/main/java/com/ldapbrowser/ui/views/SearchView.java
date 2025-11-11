@@ -51,7 +51,6 @@ public class SearchView extends VerticalLayout {
   private Button searchButton;
   private Grid<LdapEntry> resultsGrid;
   private EntryEditor entryEditor;
-  private AdvancedSearchBuilder filterBuilderPanel;
   private List<LdapEntry> currentResults;
 
   /**
@@ -93,6 +92,7 @@ public class SearchView extends VerticalLayout {
 
     // Entry editor
     entryEditor = new EntryEditor(ldapService, configService);
+    entryEditor.setExpandListener(this::showExpandedEntryDialog);
 
     splitLayout.addToPrimary(resultsLayout);
     splitLayout.addToSecondary(entryEditor);
@@ -106,28 +106,20 @@ public class SearchView extends VerticalLayout {
     formLayout.setPadding(true);
     formLayout.setSpacing(true);
 
-    // Search base with browse button
-    HorizontalLayout searchBaseLayout = new HorizontalLayout();
-    searchBaseLayout.setWidthFull();
-    searchBaseLayout.setAlignItems(Alignment.END);
+    // First row: compact search fields
+    HorizontalLayout compactSearchRow = new HorizontalLayout();
+    compactSearchRow.setWidthFull();
+    compactSearchRow.setDefaultVerticalComponentAlignment(Alignment.END);
+    compactSearchRow.setSpacing(true);
 
     searchBaseField = new TextField("Search Base");
     searchBaseField.setWidthFull();
     searchBaseField.setPlaceholder("dc=example,dc=com");
 
-    Button browseButton = new Button("Browse", VaadinIcon.FOLDER_OPEN.create());
-    browseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    browseButton.addClickListener(e -> showBrowseDialog());
-
-    searchBaseLayout.add(searchBaseField, browseButton);
-    searchBaseLayout.expand(searchBaseField);
-
-    // Filter field
     filterField = new TextField("Filter");
     filterField.setWidthFull();
     filterField.setPlaceholder("(objectClass=*)");
 
-    // Scope selector
     scopeSelect = new Select<>();
     scopeSelect.setLabel("Scope");
     scopeSelect.setItems(SearchScope.values());
@@ -144,48 +136,147 @@ public class SearchView extends VerticalLayout {
       }
       return scope.toString();
     });
+    scopeSelect.setWidth("150px");
 
-    // Search button
+    compactSearchRow.add(searchBaseField, filterField, scopeSelect);
+    compactSearchRow.setFlexGrow(2, searchBaseField);
+    compactSearchRow.setFlexGrow(2, filterField);
+    compactSearchRow.setFlexGrow(0, scopeSelect);
+
+    // Second row: action buttons
     searchButton = new Button("Search", VaadinIcon.SEARCH.create());
     searchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     searchButton.addClickListener(e -> performSearch());
 
-    // Filter builder button
-    Button filterBuilderButton = new Button("Filter Builder", VaadinIcon.FILTER.create());
-    filterBuilderButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    filterBuilderButton.addClickListener(e -> toggleFilterBuilder());
+    Button editSearchButton = new Button("Edit Search", VaadinIcon.EDIT.create());
+    editSearchButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    editSearchButton.addClickListener(e -> showEditSearchDialog());
 
-    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton, filterBuilderButton);
+    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton, editSearchButton);
+    buttonLayout.setSpacing(true);
 
-    FormLayout searchFields = new FormLayout();
-    searchFields.setWidthFull();
-    searchFields.add(searchBaseLayout, filterField, scopeSelect);
-    searchFields.setColspan(searchBaseLayout, 2);
-
-    // Advanced filter builder panel (initially hidden)
-    filterBuilderPanel = createFilterBuilderPanel();
-    filterBuilderPanel.setVisible(false);
-
-    formLayout.add(searchFields, buttonLayout, filterBuilderPanel);
+    formLayout.add(compactSearchRow, buttonLayout);
     return formLayout;
   }
 
-  private AdvancedSearchBuilder createFilterBuilderPanel() {
-    AdvancedSearchBuilder builder = new AdvancedSearchBuilder(ldapService);
-    builder.getStyle()
+  private void showEditSearchDialog() {
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Edit Search");
+    dialog.setWidth("900px");
+    dialog.setHeight("700px");
+    dialog.setModal(true);
+    dialog.setCloseOnOutsideClick(false);
+
+    VerticalLayout dialogLayout = new VerticalLayout();
+    dialogLayout.setSizeFull();
+    dialogLayout.setPadding(true);
+    dialogLayout.setSpacing(true);
+
+    // Search base with browse button
+    HorizontalLayout searchBaseLayout = new HorizontalLayout();
+    searchBaseLayout.setWidthFull();
+    searchBaseLayout.setAlignItems(Alignment.END);
+
+    TextField dialogSearchBaseField = new TextField("Search Base");
+    dialogSearchBaseField.setWidthFull();
+    dialogSearchBaseField.setPlaceholder("dc=example,dc=com");
+    dialogSearchBaseField.setValue(searchBaseField.getValue() != null ? searchBaseField.getValue() : "");
+
+    Button browseButton = new Button("Browse", VaadinIcon.FOLDER_OPEN.create());
+    browseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    browseButton.addClickListener(e -> {
+      showBrowseDialog();
+      // Update the dialog field when browse dialog closes
+      dialogSearchBaseField.setValue(searchBaseField.getValue() != null ? searchBaseField.getValue() : "");
+    });
+
+    searchBaseLayout.add(dialogSearchBaseField, browseButton);
+    searchBaseLayout.expand(dialogSearchBaseField);
+
+    // Filter field
+    TextField dialogFilterField = new TextField("Filter");
+    dialogFilterField.setWidthFull();
+    dialogFilterField.setPlaceholder("(objectClass=*)");
+    dialogFilterField.setValue(filterField.getValue() != null ? filterField.getValue() : "");
+
+    // Scope selector
+    Select<SearchScope> dialogScopeSelect = new Select<>();
+    dialogScopeSelect.setLabel("Scope");
+    dialogScopeSelect.setItems(SearchScope.values());
+    dialogScopeSelect.setValue(scopeSelect.getValue());
+    dialogScopeSelect.setItemLabelGenerator(scope -> {
+      if (scope == SearchScope.BASE) {
+        return "Base";
+      } else if (scope == SearchScope.ONE) {
+        return "One Level";
+      } else if (scope == SearchScope.SUB) {
+        return "Subtree";
+      } else if (scope == SearchScope.SUBORDINATE_SUBTREE) {
+        return "Subordinate";
+      }
+      return scope.toString();
+    });
+
+    FormLayout searchFields = new FormLayout();
+    searchFields.setWidthFull();
+    searchFields.add(searchBaseLayout, dialogFilterField, dialogScopeSelect);
+    searchFields.setColspan(searchBaseLayout, 2);
+
+    // Filter builder
+    AdvancedSearchBuilder filterBuilder = new AdvancedSearchBuilder(ldapService);
+    filterBuilder.getStyle()
         .set("border", "1px solid var(--lumo-contrast-20pct)")
         .set("border-radius", "var(--lumo-border-radius-m)")
         .set("background-color", "var(--lumo-contrast-5pct)")
         .set("padding", "var(--lumo-space-m)");
     
-    // Sync the search base with the main search form
-    searchBaseField.addValueChangeListener(e -> {
+    // Set current search base in filter builder
+    String currentBase = dialogSearchBaseField.getValue();
+    if (currentBase != null && !currentBase.isEmpty()) {
+      filterBuilder.setSearchBase(currentBase);
+    }
+
+    // Sync search base changes
+    dialogSearchBaseField.addValueChangeListener(e -> {
       if (e.getValue() != null && !e.getValue().isEmpty()) {
-        builder.setSearchBase(e.getValue());
+        filterBuilder.setSearchBase(e.getValue());
       }
     });
-    
-    return builder;
+
+    // Button to apply filter from builder
+    Button applyFilterButton = new Button("Apply Filter from Builder", VaadinIcon.ARROW_DOWN.create());
+    applyFilterButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    applyFilterButton.addClickListener(e -> {
+      String generatedFilter = filterBuilder.getGeneratedFilter();
+      if (generatedFilter != null && !generatedFilter.isEmpty()) {
+        dialogFilterField.setValue(generatedFilter);
+      }
+    });
+
+    HorizontalLayout filterBuilderHeader = new HorizontalLayout();
+    filterBuilderHeader.setWidthFull();
+    filterBuilderHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    filterBuilderHeader.add(new com.vaadin.flow.component.html.H4("Filter Builder"), applyFilterButton);
+    filterBuilderHeader.setFlexGrow(1, filterBuilderHeader.getComponentAt(0));
+
+    dialogLayout.add(searchFields, filterBuilderHeader, filterBuilder);
+    dialogLayout.setFlexGrow(1, filterBuilder);
+
+    // Dialog buttons in header
+    Button applyButton = new Button("Apply", e -> {
+      searchBaseField.setValue(dialogSearchBaseField.getValue());
+      filterField.setValue(dialogFilterField.getValue());
+      scopeSelect.setValue(dialogScopeSelect.getValue());
+      dialog.close();
+    });
+    applyButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button cancelButton = new Button("Cancel", e -> dialog.close());
+
+    dialog.getHeader().add(applyButton, cancelButton);
+
+    dialog.add(dialogLayout);
+    dialog.open();
   }
 
   private Grid<LdapEntry> createResultsGrid() {
@@ -228,6 +319,46 @@ public class SearchView extends VerticalLayout {
           entryEditor.setServerConfig(config);
           entryEditor.editEntry(entry);
         });
+  }
+
+  private void showExpandedEntryDialog() {
+    // Get the current entry from the editor
+    LdapEntry currentEntry = entryEditor.getCurrentEntry();
+    LdapServerConfig currentConfig = entryEditor.getServerConfig();
+    
+    if (currentEntry == null || currentConfig == null) {
+      return;
+    }
+
+    // Create a dialog with a full-size entry editor
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Entry: " + currentEntry.getRdn());
+    dialog.setWidth("90%");
+    dialog.setHeight("90%");
+    dialog.setModal(true);
+
+    // Create a new entry editor for the dialog
+    EntryEditor dialogEditor = new EntryEditor(ldapService, configService);
+    dialogEditor.setServerConfig(currentConfig);
+    dialogEditor.editEntry(currentEntry);
+    dialogEditor.setSizeFull();
+
+    // Close button
+    Button closeButton = new Button("Close", e -> dialog.close());
+    closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+    HorizontalLayout buttonBar = new HorizontalLayout(closeButton);
+    buttonBar.setJustifyContentMode(JustifyContentMode.END);
+    buttonBar.setPadding(true);
+
+    VerticalLayout dialogLayout = new VerticalLayout(dialogEditor, buttonBar);
+    dialogLayout.setSizeFull();
+    dialogLayout.setPadding(false);
+    dialogLayout.setSpacing(false);
+    dialogLayout.expand(dialogEditor);
+
+    dialog.add(dialogLayout);
+    dialog.open();
   }
 
   private void performSearch() {
@@ -404,27 +535,4 @@ public class SearchView extends VerticalLayout {
     return true;
   }
 
-  private void toggleFilterBuilder() {
-    filterBuilderPanel.setVisible(!filterBuilderPanel.isVisible());
-    
-    // If showing the builder, populate it with current search base
-    if (filterBuilderPanel.isVisible()) {
-      String currentBase = searchBaseField.getValue();
-      if (currentBase != null && !currentBase.isEmpty()) {
-        filterBuilderPanel.setSearchBase(currentBase);
-      }
-      
-      // If there's a filter in the builder, use it
-      String generatedFilter = filterBuilderPanel.getGeneratedFilter();
-      if (generatedFilter != null && !generatedFilter.isEmpty()) {
-        filterField.setValue(generatedFilter);
-      }
-    } else {
-      // When hiding, update the main filter with generated filter if available
-      String generatedFilter = filterBuilderPanel.getGeneratedFilter();
-      if (generatedFilter != null && !generatedFilter.isEmpty()) {
-        filterField.setValue(generatedFilter);
-      }
-    }
-  }
 }

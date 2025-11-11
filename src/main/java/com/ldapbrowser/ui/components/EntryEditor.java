@@ -53,6 +53,7 @@ public class EntryEditor extends VerticalLayout {
   // UI Components
   private Span dnLabel;
   private Button copyDnButton;
+  private Button expandButton;
   private Button addAttributeButton;
   private Button saveButton;
   private Button testLoginButton;
@@ -60,6 +61,9 @@ public class EntryEditor extends VerticalLayout {
   private Button deleteEntryButton;
   private Checkbox showOperationalAttributesCheckbox;
   private Grid<AttributeRow> attributeGrid;
+  
+  // Listener for expand action
+  private Runnable expandListener;
 
   /**
    * Creates entry editor.
@@ -87,6 +91,16 @@ public class EntryEditor extends VerticalLayout {
     copyDnButton.getElement().setAttribute("title", "Copy DN to clipboard");
     copyDnButton.setEnabled(false);
     copyDnButton.addClickListener(e -> copyDnToClipboard());
+
+    expandButton = new Button(new Icon(VaadinIcon.EXPAND_SQUARE));
+    expandButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    expandButton.getElement().setAttribute("title", "Expand in dialog");
+    expandButton.setEnabled(false);
+    expandButton.addClickListener(e -> {
+      if (expandListener != null) {
+        expandListener.run();
+      }
+    });
 
     // Operational attributes checkbox
     showOperationalAttributesCheckbox = new Checkbox("Show operational attributes");
@@ -144,12 +158,12 @@ public class EntryEditor extends VerticalLayout {
     setPadding(false);
     setSpacing(true);
 
-    // Header with DN and copy button
+    // Header with DN, copy button, and expand button
     HorizontalLayout dnRow = new HorizontalLayout();
     dnRow.setDefaultVerticalComponentAlignment(Alignment.CENTER);
     dnRow.setPadding(false);
     dnRow.setSpacing(true);
-    dnRow.add(dnLabel, copyDnButton);
+    dnRow.add(dnLabel, copyDnButton, expandButton);
     dnRow.setFlexGrow(1, dnLabel);
 
     // Action buttons with operational attributes checkbox on the right
@@ -184,6 +198,33 @@ public class EntryEditor extends VerticalLayout {
   }
 
   /**
+   * Gets the current server configuration.
+   *
+   * @return the current server config
+   */
+  public LdapServerConfig getServerConfig() {
+    return this.serverConfig;
+  }
+
+  /**
+   * Gets the current entry being edited.
+   *
+   * @return the current LDAP entry
+   */
+  public LdapEntry getCurrentEntry() {
+    return this.currentEntry;
+  }
+
+  /**
+   * Sets the expand listener that will be called when the expand button is clicked.
+   *
+   * @param listener the runnable to execute when expand is clicked
+   */
+  public void setExpandListener(Runnable listener) {
+    this.expandListener = listener;
+  }
+
+  /**
    * Edits an LDAP entry.
    *
    * @param entry entry to edit
@@ -198,6 +239,7 @@ public class EntryEditor extends VerticalLayout {
       refreshAttributeDisplay();
       setButtonsEnabled(true);
       copyDnButton.setEnabled(true);
+      expandButton.setEnabled(true);
       showOperationalAttributesCheckbox.setEnabled(true);
     } else {
       clear();
@@ -215,6 +257,7 @@ public class EntryEditor extends VerticalLayout {
     attributeGrid.setItems(Collections.emptyList());
     setButtonsEnabled(false);
     copyDnButton.setEnabled(false);
+    expandButton.setEnabled(false);
     showOperationalAttributesCheckbox.setEnabled(false);
     showOperationalAttributesCheckbox.setValue(false);
   }

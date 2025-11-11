@@ -10,9 +10,14 @@ import com.ldapbrowser.ui.components.LdapTreeBrowser;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -104,6 +109,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
     // Create attribute editor
     entryEditor = new EntryEditor(ldapService, configService);
+    entryEditor.setExpandListener(this::showExpandedEntryDialog);
   }
 
   private void setupLayout() {
@@ -195,6 +201,46 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
       // Show basic entry info
       entryEditor.editEntry(entry);
     }
+  }
+
+  private void showExpandedEntryDialog() {
+    // Get the current entry from the editor
+    LdapEntry currentEntry = entryEditor.getCurrentEntry();
+    LdapServerConfig currentConfig = entryEditor.getServerConfig();
+    
+    if (currentEntry == null || currentConfig == null) {
+      return;
+    }
+
+    // Create a dialog with a full-size entry editor
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Entry: " + currentEntry.getRdn());
+    dialog.setWidth("90%");
+    dialog.setHeight("90%");
+    dialog.setModal(true);
+
+    // Create a new entry editor for the dialog
+    EntryEditor dialogEditor = new EntryEditor(ldapService, configService);
+    dialogEditor.setServerConfig(currentConfig);
+    dialogEditor.editEntry(currentEntry);
+    dialogEditor.setSizeFull();
+
+    // Close button
+    Button closeButton = new Button("Close", e -> dialog.close());
+    closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+    HorizontalLayout buttonBar = new HorizontalLayout(closeButton);
+    buttonBar.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+    buttonBar.setPadding(true);
+
+    VerticalLayout dialogLayout = new VerticalLayout(dialogEditor, buttonBar);
+    dialogLayout.setSizeFull();
+    dialogLayout.setPadding(false);
+    dialogLayout.setSpacing(false);
+    dialogLayout.expand(dialogEditor);
+
+    dialog.add(dialogLayout);
+    dialog.open();
   }
 
   private void showNoServersSelected() {
