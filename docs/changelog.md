@@ -1,5 +1,74 @@
 # LDAP Web Browser
 
+## v0.14 - 2025-11-11 ✅ COMPLETED - Multi Browser Tab Support
+
+### Implemented Features
+
+#### 1. **UI-Scoped State Management** - Phase 1 Implementation
+- ✅ Converted from VaadinSession-scoped to UI-scoped state management
+- ✅ Each browser tab maintains its own independent server selection
+- ✅ State isolation prevents bleedover between tabs
+- ✅ Backward-compatible implementation using UI-specific session keys
+
+#### 2. **Technical Changes**
+
+**MainLayout.java:**
+- ✅ Added `getSelectedServersKey()` helper method
+  - Generates UI-specific keys: `selectedServers_<UIId>`
+  - Ensures each browser tab has isolated state
+  
+- ✅ Modified `updateSelection()` method
+  - Uses UI-scoped key via `getSelectedServersKey()`
+  - Stores selection per UI instance
+  
+- ✅ Modified `refreshServerList()` method
+  - Restores selection using UI-scoped key
+  - Preserves tab-specific state on refresh
+  
+- ✅ Modified static `getSelectedServers()` method
+  - Retrieves selection using UI-scoped key
+  - Returns empty set if no selection for current UI
+
+- ✅ Added UI detach listener for cleanup
+  - Automatically removes UI-scoped state when tab closes
+  - Prevents memory leaks from abandoned sessions
+
+#### 3. **Benefits**
+- Each browser tab operates independently
+- No more shared state between tabs
+- Server selection in one tab doesn't affect others
+- Clean session management with automatic cleanup
+- Foundation for Phase 2 (URL parameter sync) and Phase 3 (browser history)
+
+### Technical Details
+
+**Key Pattern:**
+```java
+String uiKey = SELECTED_SERVERS_KEY + "_" + UI.getCurrent().getUIId();
+```
+
+**State Storage:**
+- Still uses VaadinSession for storage
+- Key differentiation provides isolation
+- Each UI (tab) gets unique key
+
+**Files Modified:**
+- `src/main/java/com/ldapbrowser/ui/MainLayout.java` - UI-scoped state management (~40 lines changed)
+- `docs/changelog.md` - Updated with v0.14 completion details
+
+### Build Verification
+- ✅ Compiles successfully with Maven
+- ✅ 0 new Checkstyle violations
+- ✅ All imports resolved correctly
+- ✅ Proper exception handling throughout
+- ✅ Follows Google Java style conventions
+
+### Future Enhancements (Phase 2 & 3)
+- URL parameter synchronization for bookmarkable server selections
+- Browser back/forward button support
+- Page refresh state preservation
+- @PreserveOnRefresh annotation per view
+
 ## v0.13 - Private naming contexts added to tree grid
 
 ## v0.12 - Updated drawer to use SideNav Vaadin component

@@ -21,6 +21,7 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.router.RouterLink;
 import com.vaadin.flow.server.VaadinSession;
 import java.util.HashSet;
@@ -47,6 +48,22 @@ public class MainLayout extends AppLayout {
     this.configService = configService;
     createHeader();
     createDrawer();
+    
+    // Clean up UI-scoped state on detach
+    UI.getCurrent().addDetachListener(event -> {
+      String uiKey = getSelectedServersKey();
+      VaadinSession.getCurrent().setAttribute(uiKey, null);
+    });
+  }
+  
+  /**
+   * Gets the UI-scoped key for selected servers.
+   * Each browser tab gets its own UI instance and thus its own state.
+   *
+   * @return UI-specific key for selected servers
+   */
+  private String getSelectedServersKey() {
+    return SELECTED_SERVERS_KEY + "_" + UI.getCurrent().getUIId();
   }
 
   /**
@@ -75,7 +92,7 @@ public class MainLayout extends AppLayout {
     // Listen for selection changes
     serverSelect.addSelectionListener(event -> {
       Set<String> selected = event.getValue();
-      VaadinSession.getCurrent().setAttribute(SELECTED_SERVERS_KEY, new HashSet<>(selected));
+      VaadinSession.getCurrent().setAttribute(getSelectedServersKey(), new HashSet<>(selected));
       updateSelectedServersDisplay();
     });
 
@@ -141,10 +158,10 @@ public class MainLayout extends AppLayout {
       serverSelect.setEnabled(false);
     } else {
       serverSelect.setEnabled(true);
-      // Restore previous selection
+      // Restore previous selection for this UI/tab
       @SuppressWarnings("unchecked")
       Set<String> previousSelection = (Set<String>) VaadinSession.getCurrent()
-          .getAttribute(SELECTED_SERVERS_KEY);
+          .getAttribute(getSelectedServersKey());
       if (previousSelection != null) {
         serverSelect.select(previousSelection.stream()
             .filter(serverNames::contains)
@@ -215,14 +232,16 @@ public class MainLayout extends AppLayout {
   }
 
   /**
-   * Gets the currently selected server names.
+   * Gets the currently selected server names for this UI/tab.
+   * Each browser tab maintains its own independent server selection.
    *
    * @return set of selected server names
    */
   public static Set<String> getSelectedServers() {
+    String uiKey = SELECTED_SERVERS_KEY + "_" + UI.getCurrent().getUIId();
     @SuppressWarnings("unchecked")
     Set<String> selected = (Set<String>) VaadinSession.getCurrent()
-        .getAttribute(SELECTED_SERVERS_KEY);
+        .getAttribute(uiKey);
     return selected != null ? selected : new HashSet<>();
   }
 }
