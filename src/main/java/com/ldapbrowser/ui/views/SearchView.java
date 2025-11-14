@@ -54,6 +54,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   private Select<SearchScope> scopeSelect;
   private MultiSelectComboBox<String> returnAttributesField;
   private Button searchButton;
+  private TextField gridFilterField;
   private Grid<LdapEntry> resultsGrid;
   private EntryEditor entryEditor;
   private List<LdapEntry> currentResults;
@@ -208,7 +209,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     compactSearchRow.setFlexGrow(0, scopeSelect);
     compactSearchRow.setFlexGrow(1, returnAttributesField);
 
-    // Second row: action buttons
+    // Second row: action buttons and grid filter
     searchButton = new Button("Search", VaadinIcon.SEARCH.create());
     searchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     searchButton.addClickListener(e -> performSearch());
@@ -217,8 +218,16 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     filterBuilderButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
     filterBuilderButton.addClickListener(e -> showFilterBuilderDialog());
 
-    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton, filterBuilderButton);
+    gridFilterField = new TextField();
+    gridFilterField.setPlaceholder("Filter results...");
+    gridFilterField.setPrefixComponent(VaadinIcon.SEARCH.create());
+    gridFilterField.setClearButtonVisible(true);
+    gridFilterField.setWidth("300px");
+    gridFilterField.addValueChangeListener(e -> filterResults(e.getValue()));
+
+    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton, filterBuilderButton, gridFilterField);
     buttonLayout.setSpacing(true);
+    buttonLayout.setDefaultVerticalComponentAlignment(Alignment.CENTER);
 
     formLayout.add(compactSearchRow, buttonLayout);
     return formLayout;
@@ -423,6 +432,49 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     dialog.open();
   }
 
+  private void filterResults(String filterText) {
+    if (filterText == null || filterText.isEmpty()) {
+      // No filter, show all results
+      resultsGrid.setItems(currentResults);
+      return;
+    }
+
+    // Filter results based on the text
+    String lowerCaseFilter = filterText.toLowerCase();
+    List<LdapEntry> filteredResults = currentResults.stream()
+        .filter(entry -> {
+          // Check if DN matches
+          if (entry.getDn().toLowerCase().contains(lowerCaseFilter)) {
+            return true;
+          }
+          // Check if RDN matches
+          if (entry.getRdn() != null && entry.getRdn().toLowerCase().contains(lowerCaseFilter)) {
+            return true;
+          }
+          // Check if server name matches
+          if (entry.getServerName().toLowerCase().contains(lowerCaseFilter)) {
+            return true;
+          }
+          // Check if any attribute value matches
+          for (Map.Entry<String, List<String>> attr : entry.getAttributes().entrySet()) {
+            // Check attribute name
+            if (attr.getKey().toLowerCase().contains(lowerCaseFilter)) {
+              return true;
+            }
+            // Check attribute values
+            for (String value : attr.getValue()) {
+              if (value.toLowerCase().contains(lowerCaseFilter)) {
+                return true;
+              }
+            }
+          }
+          return false;
+        })
+        .collect(java.util.stream.Collectors.toList());
+
+    resultsGrid.setItems(filteredResults);
+  }
+
   private void performSearch() {
     String baseDn = searchBaseField.getValue();
     String filter = filterField.getValue();
@@ -491,6 +543,9 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
         selectedAttributes != null ? selectedAttributes : new ArrayList<>());
     updateGridColumns(resultsGrid, selectedAttributesList);
 
+    // Clear the grid filter when new search is performed
+    gridFilterField.clear();
+    
     resultsGrid.setItems(currentResults);
     Notification.show(
         "Search complete: " + currentResults.size() + " entries found",

@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.18.1 - Add filter results to search view
+
 ## v0.18 - Search enhancments
   - add Return attributes dropdown and adjust grid columns for these
   - Add search from here link on entry details
