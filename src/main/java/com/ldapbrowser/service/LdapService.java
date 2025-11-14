@@ -22,6 +22,7 @@ import com.unboundid.ldap.sdk.SearchResultEntry;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.unboundid.ldap.sdk.StartTLSPostConnectProcessor;
 import com.unboundid.ldap.sdk.controls.SimplePagedResultsControl;
+import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
 import com.unboundid.ldap.sdk.schema.Schema;
 import com.unboundid.util.ssl.SSLUtil;
 import com.unboundid.util.ssl.TrustAllTrustManager;
@@ -331,12 +332,18 @@ public class LdapService {
     SearchResultEntry entry = searchResult.getSearchEntries().get(0);
     LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
 
-    // Add regular attributes
+    // Get schema to properly classify attributes
+    Schema schema = null;
+    try {
+      schema = getSchema(config);
+    } catch (LDAPException e) {
+      logger.warn("Failed to retrieve schema for operational attribute detection: {}", 
+          e.getMessage());
+    }
+
+    // Add attributes, classifying them as operational or user attributes
     for (Attribute attr : entry.getAttributes()) {
-      boolean isOperational = attr.getName().startsWith("create")
-          || attr.getName().startsWith("modify")
-          || attr.getName().equals("entryUUID")
-          || attr.getName().equals("entryDN");
+      boolean isOperational = isOperationalAttribute(attr.getName(), schema);
       
       for (String value : attr.getValues()) {
         if (isOperational && includeOperational) {
@@ -1463,6 +1470,35 @@ public class LdapService {
       throw new LDAPException(ResultCode.LOCAL_ERROR,
           "SSL/TLS error: " + e.getMessage());
     }
+  }
+
+  /**
+   * Determines if an attribute is operational based on its schema definition.
+   * An attribute is operational if its usage is directoryOperation, dSAOperation,
+   * or distributedOperation (anything other than userApplications).
+   *
+   * @param attributeName the attribute name to check
+   * @param schema the schema to use for lookup (may be null)
+   * @return true if the attribute is operational according to schema
+   */
+  private boolean isOperationalAttribute(String attributeName, Schema schema) {
+    if (schema == null) {
+      return false;
+    }
+    
+    AttributeTypeDefinition attrDef = schema.getAttributeType(attributeName);
+    if (attrDef == null) {
+      return false;
+    }
+    
+    // Check usage - operational attributes have usage other than "userApplications"
+    if (attrDef.getUsage() != null) {
+      String usage = attrDef.getUsage().getName();
+      // Operational attributes have usage: directoryOperation, dSAOperation, or distributedOperation
+      return !usage.equalsIgnoreCase("userApplications");
+    }
+    
+    return false;
   }
 
   /**

@@ -315,6 +315,7 @@ public class EntryEditor extends VerticalLayout {
     List<AttributeRow> rows = new ArrayList<>();
     boolean showOperational = showOperationalAttributesCheckbox.getValue();
 
+    // Add regular attributes
     for (Map.Entry<String, List<String>> attr : fullEntry.getAttributes().entrySet()) {
       String attrName = attr.getKey();
       
@@ -324,6 +325,13 @@ public class EntryEditor extends VerticalLayout {
       }
 
       rows.add(new AttributeRow(attrName, attr.getValue()));
+    }
+    
+    // Add operational attributes if checkbox is checked
+    if (showOperational && fullEntry.getOperationalAttributes() != null) {
+      for (Map.Entry<String, List<String>> attr : fullEntry.getOperationalAttributes().entrySet()) {
+        rows.add(new AttributeRow(attr.getKey(), attr.getValue()));
+      }
     }
 
     // Sort attributes: by classification (required, optional, operational), then alphabetically
@@ -348,16 +356,43 @@ public class EntryEditor extends VerticalLayout {
     attributeGrid.setItems(rows);
   }
 
+  /**
+   * Determines if an attribute is operational based on its schema definition.
+   * An attribute is operational if its usage is directoryOperation, dSAOperation,
+   * or distributedOperation (anything other than userApplications).
+   *
+   * @param attributeName the attribute name to check
+   * @return true if the attribute is operational according to schema
+   */
   private boolean isOperationalAttribute(String attributeName) {
-    String lowerName = attributeName.toLowerCase();
-    return lowerName.startsWith("create")
-        || lowerName.startsWith("modify")
-        || lowerName.equals("entryuuid")
-        || lowerName.equals("entrydn")
-        || lowerName.equals("entrycsn")
-        || lowerName.equals("hassubordinates")
-        || lowerName.equals("subschemasubentry")
-        || lowerName.equals("structuralobjectclass");
+    if (serverConfig == null) {
+      return false;
+    }
+    
+    try {
+      Schema schema = ldapService.getSchema(serverConfig);
+      if (schema == null) {
+        return false;
+      }
+      
+      AttributeTypeDefinition attrDef = schema.getAttributeType(attributeName);
+      if (attrDef == null) {
+        return false;
+      }
+      
+      // Check usage - operational attributes have usage other than "userApplications"
+      if (attrDef.getUsage() != null) {
+        String usage = attrDef.getUsage().getName();
+        // Operational attributes have usage: directoryOperation, dSAOperation, or distributedOperation
+        return !usage.equalsIgnoreCase("userApplications");
+      }
+      
+      return false;
+    } catch (Exception e) {
+      logger.debug("Failed to determine operational status for attribute {}: {}", 
+          attributeName, e.getMessage());
+      return false;
+    }
   }
 
   private Span createAttributeNameComponent(AttributeRow row) {
@@ -956,7 +991,7 @@ public class EntryEditor extends VerticalLayout {
       StringBuilder ldifText = new StringBuilder();
       ldifText.append("dn: ").append(entryToCopy.getDn()).append("\n");
 
-      // Sort attributes for consistent output
+      // Sort regular attributes for consistent output
       List<String> attributeNames = new ArrayList<>(entryToCopy.getAttributes().keySet());
       attributeNames.sort(String.CASE_INSENSITIVE_ORDER);
 
@@ -970,6 +1005,22 @@ public class EntryEditor extends VerticalLayout {
         if (values != null) {
           for (String value : values) {
             ldifText.append(attrName).append(": ").append(value).append("\n");
+          }
+        }
+      }
+      
+      // Add operational attributes if requested
+      if (includeOperational && entryToCopy.getOperationalAttributes() != null) {
+        List<String> operationalNames = 
+            new ArrayList<>(entryToCopy.getOperationalAttributes().keySet());
+        operationalNames.sort(String.CASE_INSENSITIVE_ORDER);
+        
+        for (String attrName : operationalNames) {
+          List<String> values = entryToCopy.getOperationalAttributes().get(attrName);
+          if (values != null) {
+            for (String value : values) {
+              ldifText.append(attrName).append(": ").append(value).append("\n");
+            }
           }
         }
       }
