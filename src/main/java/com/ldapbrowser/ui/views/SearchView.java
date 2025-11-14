@@ -18,15 +18,20 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.QueryParameters;
 import com.vaadin.flow.router.Route;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +42,7 @@ import org.slf4j.LoggerFactory;
  */
 @Route(value = "search", layout = MainLayout.class)
 @PageTitle("Search | LDAP Browser")
-public class SearchView extends VerticalLayout {
+public class SearchView extends VerticalLayout implements BeforeEnterObserver {
 
   private static final Logger logger = LoggerFactory.getLogger(SearchView.class);
 
@@ -47,6 +52,7 @@ public class SearchView extends VerticalLayout {
   private TextField searchBaseField;
   private TextField filterField;
   private Select<SearchScope> scopeSelect;
+  private MultiSelectComboBox<String> returnAttributesField;
   private Button searchButton;
   private Grid<LdapEntry> resultsGrid;
   private EntryEditor entryEditor;
@@ -152,10 +158,55 @@ public class SearchView extends VerticalLayout {
     });
     scopeSelect.setWidth("150px");
 
-    compactSearchRow.add(searchBaseLayout, filterField, scopeSelect);
-    compactSearchRow.setFlexGrow(3, searchBaseLayout);
+    // Return Attributes field - multi-select combo box with schema attributes
+    returnAttributesField = new MultiSelectComboBox<>("Return Attributes");
+    returnAttributesField.setPlaceholder("All attributes");
+    returnAttributesField.setWidth("250px");
+    returnAttributesField.setAllowCustomValue(true);
+    
+    // Add common default attributes for immediate use
+    List<String> commonAttributes = new ArrayList<>();
+    commonAttributes.add("cn");
+    commonAttributes.add("sn");
+    commonAttributes.add("givenName");
+    commonAttributes.add("mail");
+    commonAttributes.add("uid");
+    commonAttributes.add("objectClass");
+    commonAttributes.add("ou");
+    commonAttributes.add("dc");
+    commonAttributes.add("description");
+    commonAttributes.add("telephoneNumber");
+    commonAttributes.add("title");
+    commonAttributes.add("memberOf");
+    commonAttributes.add("member");
+    returnAttributesField.setItems(commonAttributes);
+    
+    // Set default value to "cn"
+    returnAttributesField.setValue(java.util.Collections.singleton("cn"));
+    
+    returnAttributesField.addCustomValueSetListener(event -> {
+      String customValue = event.getDetail();
+      if (customValue != null && !customValue.trim().isEmpty()) {
+        Set<String> currentValues = returnAttributesField.getSelectedItems();
+        List<String> newValues = new ArrayList<>(currentValues);
+        newValues.add(customValue.trim());
+        returnAttributesField.setValue(newValues);
+      }
+    });
+    
+    // Add focus listener to load attributes from schema when field is focused
+    returnAttributesField.addFocusListener(event -> {
+      if (returnAttributesField.getListDataView().getItemCount() <= 15) {
+        // Only reload if we still have the default list
+        loadAttributesFromSchema();
+      }
+    });
+
+    compactSearchRow.add(searchBaseLayout, filterField, scopeSelect, returnAttributesField);
+    compactSearchRow.setFlexGrow(2, searchBaseLayout);
     compactSearchRow.setFlexGrow(2, filterField);
     compactSearchRow.setFlexGrow(0, scopeSelect);
+    compactSearchRow.setFlexGrow(1, returnAttributesField);
 
     // Second row: action buttons
     searchButton = new Button("Search", VaadinIcon.SEARCH.create());
@@ -244,30 +295,80 @@ public class SearchView extends VerticalLayout {
     Grid<LdapEntry> grid = new Grid<>();
     grid.setSizeFull();
 
-    grid.addColumn(LdapEntry::getServerName)
-        .setHeader("Server")
-        .setWidth("150px")
-        .setFlexGrow(0);
-
-    grid.addColumn(LdapEntry::getDn)
-        .setHeader("Distinguished Name")
-        .setFlexGrow(1);
-
-    grid.addColumn(entry -> {
-      String cn = entry.getFirstAttributeValue("cn");
-      return cn != null ? cn : "";
-    }).setHeader("Common Name").setWidth("200px");
-
-    grid.addColumn(entry -> {
-      List<String> objectClasses = entry.getAttributeValues("objectClass");
-      return objectClasses.isEmpty() ? "" : String.join(", ", objectClasses);
-    }).setHeader("Object Classes").setWidth("250px");
+    // Initial columns - will be updated dynamically based on return attributes
+    updateGridColumns(grid, new ArrayList<>());
 
     grid.addSelectionListener(selection -> {
       selection.getFirstSelectedItem().ifPresent(this::showEntryDetails);
     });
 
     return grid;
+  }
+
+  /**
+   * Updates the grid columns based on selected return attributes.
+   * Always starts with Server and Distinguished Name columns,
+   * followed by columns for each selected attribute.
+   */
+  private void updateGridColumns(Grid<LdapEntry> grid, List<String> selectedAttributes) {
+    grid.removeAllColumns();
+
+    // Always add Server column
+    grid.addColumn(LdapEntry::getServerName)
+        .setHeader("Server")
+        .setWidth("150px")
+        .setFlexGrow(0)
+        .setResizable(true);
+
+    // Always add Distinguished Name column
+    grid.addColumn(LdapEntry::getDn)
+        .setHeader("Distinguished Name")
+        .setFlexGrow(1)
+        .setResizable(true);
+
+    // Add columns for selected attributes
+    if (selectedAttributes != null && !selectedAttributes.isEmpty()) {
+      for (String attrName : selectedAttributes) {
+        grid.addColumn(entry -> {
+          List<String> values = entry.getAttributeValues(attrName);
+          return values.isEmpty() ? "" : String.join(", ", values);
+        }).setHeader(attrName).setWidth("200px").setResizable(true);
+      }
+    }
+  }
+
+  /**
+   * Loads attribute names from the schemas of selected servers.
+   */
+  private void loadAttributesFromSchema() {
+    Set<String> selectedServers = MainLayout.getSelectedServers();
+    if (selectedServers == null || selectedServers.isEmpty()) {
+      logger.debug("No servers selected, keeping default attributes");
+      return;
+    }
+
+    List<LdapServerConfig> configs = configService.loadConfigurations();
+    List<LdapServerConfig> selectedConfigs = configs.stream()
+        .filter(c -> selectedServers.contains(c.getName()))
+        .collect(java.util.stream.Collectors.toList());
+
+    if (selectedConfigs.isEmpty()) {
+      logger.debug("No matching server configs found, keeping default attributes");
+      return;
+    }
+
+    try {
+      List<String> attributeNames = ldapService.getAllAttributeNames(selectedConfigs);
+      if (attributeNames != null && !attributeNames.isEmpty()) {
+        returnAttributesField.setItems(attributeNames);
+        logger.info("Loaded {} attribute names from schema", attributeNames.size());
+      } else {
+        logger.debug("No attributes returned from schema, keeping default attributes");
+      }
+    } catch (Exception e) {
+      logger.warn("Failed to load attribute names from schema: {}", e.getMessage());
+      // Keep the existing items (don't clear them)
+    }
   }
 
   private void showEntryDetails(LdapEntry entry) {
@@ -348,17 +449,30 @@ public class SearchView extends VerticalLayout {
       return;
     }
 
+    // Get selected return attributes
+    Set<String> selectedAttributes = returnAttributesField.getSelectedItems();
+    String[] attributesToReturn = null;
+    if (selectedAttributes != null && !selectedAttributes.isEmpty()) {
+      attributesToReturn = selectedAttributes.toArray(new String[0]);
+    }
+
     currentResults.clear();
     List<LdapServerConfig> configs = configService.loadConfigurations();
 
     String finalFilter = filter;
+    String[] finalAttributes = attributesToReturn;
     for (String serverName : selectedServers) {
       configs.stream()
           .filter(c -> c.getName().equals(serverName))
           .findFirst()
           .ifPresent(config -> {
             try {
-              List<LdapEntry> results = ldapService.search(config, baseDn, finalFilter, scope);
+              List<LdapEntry> results;
+              if (finalAttributes != null) {
+                results = ldapService.search(config, baseDn, finalFilter, scope, finalAttributes);
+              } else {
+                results = ldapService.search(config, baseDn, finalFilter, scope);
+              }
               currentResults.addAll(results);
               logger.info("Search on {} returned {} results", serverName, results.size());
             } catch (LDAPException | GeneralSecurityException e) {
@@ -371,6 +485,11 @@ public class SearchView extends VerticalLayout {
             }
           });
     }
+
+    // Update grid columns based on selected attributes
+    List<String> selectedAttributesList = new ArrayList<>(
+        selectedAttributes != null ? selectedAttributes : new ArrayList<>());
+    updateGridColumns(resultsGrid, selectedAttributesList);
 
     resultsGrid.setItems(currentResults);
     Notification.show(
@@ -494,6 +613,34 @@ public class SearchView extends VerticalLayout {
     }
     
     return true;
+  }
+
+  /**
+   * Sets the search base DN.
+   * This is used when navigating from other views to pre-populate the search base.
+   *
+   * @param dn the DN to set as the search base
+   */
+  public void setSearchBase(String dn) {
+    if (dn != null && !dn.isEmpty()) {
+      searchBaseField.setValue(dn);
+      searchBaseField.focus();
+    }
+  }
+
+  @Override
+  public void beforeEnter(BeforeEnterEvent event) {
+    // Check for searchBase query parameter
+    QueryParameters queryParameters = event.getLocation().getQueryParameters();
+    Map<String, List<String>> params = queryParameters.getParameters();
+    
+    if (params.containsKey("searchBase")) {
+      List<String> searchBaseValues = params.get("searchBase");
+      if (searchBaseValues != null && !searchBaseValues.isEmpty()) {
+        String searchBase = searchBaseValues.get(0);
+        setSearchBase(searchBase);
+      }
+    }
   }
 
 }

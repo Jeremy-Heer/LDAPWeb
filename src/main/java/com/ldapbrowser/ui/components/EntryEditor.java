@@ -59,6 +59,7 @@ public class EntryEditor extends VerticalLayout {
   private Span dnLabel;
   private Button copyDnButton;
   private Button expandButton;
+  private Button searchFromHereButton;
   private Button addAttributeButton;
   private Button saveButton;
   private Button testLoginButton;
@@ -106,6 +107,12 @@ public class EntryEditor extends VerticalLayout {
         expandListener.run();
       }
     });
+
+    searchFromHereButton = new Button(new Icon(VaadinIcon.SEARCH));
+    searchFromHereButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    searchFromHereButton.getElement().setAttribute("title", "Search from here");
+    searchFromHereButton.setEnabled(false);
+    searchFromHereButton.addClickListener(e -> searchFromCurrentEntry());
 
     // Operational attributes checkbox
     showOperationalAttributesCheckbox = new Checkbox("Show operational attributes");
@@ -163,12 +170,12 @@ public class EntryEditor extends VerticalLayout {
     setPadding(false);
     setSpacing(true);
 
-    // Header with DN, copy button, and expand button
+    // Header with DN, copy button, expand button, and search button
     HorizontalLayout dnRow = new HorizontalLayout();
     dnRow.setDefaultVerticalComponentAlignment(Alignment.CENTER);
     dnRow.setPadding(false);
     dnRow.setSpacing(true);
-    dnRow.add(dnLabel, copyDnButton, expandButton);
+    dnRow.add(dnLabel, copyDnButton, expandButton, searchFromHereButton);
     dnRow.setFlexGrow(1, dnLabel);
 
     // Action buttons with operational attributes checkbox on the right
@@ -264,6 +271,7 @@ public class EntryEditor extends VerticalLayout {
       setButtonsEnabled(true);
       copyDnButton.setEnabled(true);
       expandButton.setEnabled(true);
+      searchFromHereButton.setEnabled(true);
       showOperationalAttributesCheckbox.setEnabled(true);
     } else {
       clear();
@@ -282,6 +290,7 @@ public class EntryEditor extends VerticalLayout {
     setButtonsEnabled(false);
     copyDnButton.setEnabled(false);
     expandButton.setEnabled(false);
+    searchFromHereButton.setEnabled(false);
     showOperationalAttributesCheckbox.setEnabled(false);
     showOperationalAttributesCheckbox.setValue(false);
   }
@@ -911,6 +920,22 @@ public class EntryEditor extends VerticalLayout {
     });
 
     showSuccess("DN copied to clipboard: " + dn);
+  }
+
+  private void searchFromCurrentEntry() {
+    if (currentEntry == null || currentEntry.getDn() == null) {
+      showInfo("No entry selected.");
+      return;
+    }
+
+    String dn = currentEntry.getDn();
+    getUI().ifPresent(ui -> {
+      ui.navigate("search", 
+          com.vaadin.flow.router.QueryParameters.simple(
+              java.util.Map.of("searchBase", dn)
+          )
+      );
+    });
   }
 
   private void setButtonsEnabled(boolean enabled) {

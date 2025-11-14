@@ -1,5 +1,9 @@
 # LDAP Web Browser
 
+## v0.18 - Search enhancments
+  - add Return attributes dropdown and adjust grid columns for these
+  - Add search from here link on entry details
+
 ## v0.17 - Schema tab optomization
   - reload schema cache
   - raw schema edit on add / edit object class / attribute types

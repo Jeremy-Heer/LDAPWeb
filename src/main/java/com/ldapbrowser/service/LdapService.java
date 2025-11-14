@@ -1007,6 +1007,36 @@ public class LdapService {
   }
 
   /**
+   * Gets a list of all attribute names from the schemas of the specified servers.
+   * Combines attribute names from all selected servers and returns a sorted unique list.
+   *
+   * @param configs list of server configurations
+   * @return sorted list of attribute names
+   */
+  public List<String> getAllAttributeNames(List<LdapServerConfig> configs) {
+    java.util.Set<String> attributeNames = new java.util.TreeSet<>();
+    
+    for (LdapServerConfig config : configs) {
+      try {
+        Schema schema = getSchema(config);
+        for (com.unboundid.ldap.sdk.schema.AttributeTypeDefinition attrType 
+            : schema.getAttributeTypes()) {
+          // Add the primary name
+          attributeNames.add(attrType.getNameOrOID());
+          // Add all alternative names
+          for (String name : attrType.getNames()) {
+            attributeNames.add(name);
+          }
+        }
+      } catch (LDAPException e) {
+        logger.warn("Failed to get schema for {}: {}", config.getName(), e.getMessage());
+      }
+    }
+    
+    return new ArrayList<>(attributeNames);
+  }
+
+  /**
    * Retrieves the schema from an LDAP server by server ID.
    *
    * @param serverId server ID (name)
