@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.18.2 - Enhance copy button on entry details
+
 ## v0.18.1 - Add filter results to search view
 
 ## v0.18 - Search enhancments

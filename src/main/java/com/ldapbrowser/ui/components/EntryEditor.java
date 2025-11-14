@@ -14,11 +14,14 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
+import com.vaadin.flow.component.contextmenu.MenuItem;
+import com.vaadin.flow.component.contextmenu.SubMenu;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.menubar.MenuBar;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -57,7 +60,7 @@ public class EntryEditor extends VerticalLayout {
 
   // UI Components
   private Span dnLabel;
-  private Button copyDnButton;
+  private MenuBar copyMenuBar;
   private Button expandButton;
   private Button searchFromHereButton;
   private Button addAttributeButton;
@@ -92,11 +95,19 @@ public class EntryEditor extends VerticalLayout {
         .set("font-weight", "bold")
         .set("font-family", "monospace");
 
-    copyDnButton = new Button(new Icon(VaadinIcon.COPY));
-    copyDnButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    copyDnButton.getElement().setAttribute("title", "Copy DN to clipboard");
-    copyDnButton.setEnabled(false);
-    copyDnButton.addClickListener(e -> copyDnToClipboard());
+    // Create copy menu bar with dropdown options
+    copyMenuBar = new MenuBar();
+    copyMenuBar.addThemeVariants(com.vaadin.flow.component.menubar.MenuBarVariant.LUMO_TERTIARY);
+    copyMenuBar.setEnabled(false);
+    
+    MenuItem copyMenuItem = copyMenuBar.addItem(new Icon(VaadinIcon.COPY));
+    copyMenuItem.getElement().setAttribute("title", "Copy options");
+    
+    SubMenu copySubMenu = copyMenuItem.getSubMenu();
+    copySubMenu.addItem("Copy DN", e -> copyDnToClipboard());
+    copySubMenu.addItem("Copy Entry", e -> copyEntryToClipboard(false));
+    copySubMenu.addItem("Copy Entry with Operational Attributes", 
+        e -> copyEntryToClipboard(true));
 
     expandButton = new Button(new Icon(VaadinIcon.EXPAND_SQUARE));
     expandButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
@@ -175,7 +186,7 @@ public class EntryEditor extends VerticalLayout {
     dnRow.setDefaultVerticalComponentAlignment(Alignment.CENTER);
     dnRow.setPadding(false);
     dnRow.setSpacing(true);
-    dnRow.add(dnLabel, copyDnButton, expandButton, searchFromHereButton);
+    dnRow.add(dnLabel, copyMenuBar, expandButton, searchFromHereButton);
     dnRow.setFlexGrow(1, dnLabel);
 
     // Action buttons with operational attributes checkbox on the right
@@ -269,7 +280,7 @@ public class EntryEditor extends VerticalLayout {
       
       refreshAttributeDisplay();
       setButtonsEnabled(true);
-      copyDnButton.setEnabled(true);
+      copyMenuBar.setEnabled(true);
       expandButton.setEnabled(true);
       searchFromHereButton.setEnabled(true);
       showOperationalAttributesCheckbox.setEnabled(true);
@@ -288,7 +299,7 @@ public class EntryEditor extends VerticalLayout {
     dnLabel.setText("No entry selected");
     attributeGrid.setItems(Collections.emptyList());
     setButtonsEnabled(false);
-    copyDnButton.setEnabled(false);
+    copyMenuBar.setEnabled(false);
     expandButton.setEnabled(false);
     searchFromHereButton.setEnabled(false);
     showOperationalAttributesCheckbox.setEnabled(false);
@@ -919,7 +930,65 @@ public class EntryEditor extends VerticalLayout {
       ui.getPage().executeJs("navigator.clipboard.writeText($0)", dn);
     });
 
-    showSuccess("DN copied to clipboard: " + dn);
+    showSuccess("DN copied to clipboard");
+  }
+
+  private void copyEntryToClipboard(boolean includeOperational) {
+    if (currentEntry == null || serverConfig == null) {
+      showInfo("No entry to copy.");
+      return;
+    }
+
+    try {
+      // Fetch the entry with or without operational attributes
+      LdapEntry entryToCopy = ldapService.readEntry(
+          serverConfig,
+          currentEntry.getDn(),
+          includeOperational
+      );
+
+      if (entryToCopy == null) {
+        showError("Failed to fetch entry for copying.");
+        return;
+      }
+
+      // Format the entry as LDIF-style text
+      StringBuilder ldifText = new StringBuilder();
+      ldifText.append("dn: ").append(entryToCopy.getDn()).append("\n");
+
+      // Sort attributes for consistent output
+      List<String> attributeNames = new ArrayList<>(entryToCopy.getAttributes().keySet());
+      attributeNames.sort(String.CASE_INSENSITIVE_ORDER);
+
+      for (String attrName : attributeNames) {
+        // Skip operational attributes if not requested
+        if (!includeOperational && isOperationalAttribute(attrName)) {
+          continue;
+        }
+
+        List<String> values = entryToCopy.getAttributeValues(attrName);
+        if (values != null) {
+          for (String value : values) {
+            ldifText.append(attrName).append(": ").append(value).append("\n");
+          }
+        }
+      }
+
+      // Copy to clipboard
+      String textToCopy = ldifText.toString();
+      getUI().ifPresent(ui -> {
+        ui.getPage().executeJs("navigator.clipboard.writeText($0)", textToCopy);
+      });
+
+      String message = includeOperational 
+          ? "Entry copied to clipboard (with operational attributes)" 
+          : "Entry copied to clipboard";
+      showSuccess(message);
+
+    } catch (Exception e) {
+      showError("Failed to copy entry: " + e.getMessage());
+      logger.error("Failed to copy entry", e);
+    }
   }
 
   private void searchFromCurrentEntry() {
