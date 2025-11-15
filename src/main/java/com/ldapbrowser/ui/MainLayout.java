@@ -5,6 +5,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.ui.views.AccessView;
 import com.ldapbrowser.ui.views.BrowseView;
 import com.ldapbrowser.ui.views.BulkView;
+import com.ldapbrowser.ui.views.Create;
 import com.ldapbrowser.ui.views.ExportView;
 import com.ldapbrowser.ui.views.SchemaView;
 import com.ldapbrowser.ui.views.SearchView;
@@ -22,7 +23,6 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.component.UI;
-import com.vaadin.flow.router.RouterLink;
 import com.vaadin.flow.server.VaadinSession;
 import java.util.HashSet;
 import java.util.List;
@@ -125,6 +125,8 @@ public class MainLayout extends AppLayout {
         VaadinIcon.TREE_TABLE.create());
     SideNavItem schemaItem = new SideNavItem("Schema", SchemaView.class, 
         VaadinIcon.DATABASE.create());
+    SideNavItem createItem = new SideNavItem("Create", Create.class, 
+        VaadinIcon.PLUS_CIRCLE.create());
     SideNavItem accessItem = new SideNavItem("Access", AccessView.class, 
         VaadinIcon.KEY.create());
     SideNavItem bulkItem = new SideNavItem("Bulk", BulkView.class, 
@@ -138,6 +140,7 @@ public class MainLayout extends AppLayout {
         searchItem,
         browseItem,
         schemaItem,
+        createItem,
         accessItem,
         bulkItem,
         exportItem

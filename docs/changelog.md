@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.19 - Implement Create view
+
 ## v0.18.3 - bug fix operational attribute logic
 
 ## v0.18.2 - Enhance copy button on entry details

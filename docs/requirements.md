@@ -176,6 +176,13 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
     - Select data using either a search or input CSV
     - When using an input CSV, the CSV columns can be used with the search filter
 
+1. **Create**
+    - Create LDAP Entries
+    - Distinguised Name field
+    - Grid of attribute names and values
+    - Add Row will select from valid attributes from the schema.
+    - Optional Templates to auto fill objectClass and attribute names
+
 1. **Shared Components**
 
     - "Entry Editor"
