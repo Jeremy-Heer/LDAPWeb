@@ -46,9 +46,14 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - Use SSL Checkbox
         - Use StartTLS checkbox
         - Base DN
+        - Validate certificate - checked by default
+            when selected, the ldap server certificate is validated
    - when existing server is selected, same dialog in edit mode
    - Server dropdown in Navbar is updated with Server updates
    - Saved into a local file connections.json
+   - Add / Edit server dialog includes a Test button
+    - will attempt a connection using form data
+    - any tls issues would display the tls dialog definded in the shared components
 
 1. **Search**
    - Search link in Drawer
@@ -183,6 +188,17 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
     - Add Row will select from valid attributes from the schema.
     - Optional Templates to auto fill objectClass and attribute names
 
+1. **Settings**
+    - Truststore sub tab
+        - if a truststore does not exist, create ~/.ldapbrowser/truststore.pfx and a ~/.ldapbrowser/truststore.pin with a random value for the pin.
+        - manage the content of the truststore
+        - used to secure tls connections to remote ldap servers
+        - CRUD operations for the truststore
+    - Keystore sub tab
+        - under construction
+    - Encryption sub tab
+        - under construciton
+
 1. **Shared Components**
 
     - "Entry Editor"
@@ -217,6 +233,14 @@ second.example.ldap/
       |----ou=developers
 ```
 
+    - TLS Dialog
+        - pop up displayed when a tls connection can not be made as a result of a certificate / trust issue
+        - Displays the server certificate details presented by the ldap server
+        - Import and Trust this certificate
+            - button that when selected would import the ldap server certificate into the truststore
+                - the alias should be the same as the "server name" for the server configuraiton item
+                    - if this is not unique, add an incrementing number to the end of the alias name
+    
 ## Core Services
 
 ### LdapService
@@ -227,3 +251,8 @@ Primary service for LDAP operations:
 - Entry CRUD operations (Create, Read, Update, Delete)
 - Schema management operations
 - SSL/TLS and StartTLS support
+- TLS validation
+    - validates ldap server tls connections using truststore.pfx
+    - if validate certificate checked for server properties, validate ldap server certificate,
+        otherwise do not perform server tls validate.
+    - When new connections are attempted to ldap server and tls validation fails, present TLS Dialog

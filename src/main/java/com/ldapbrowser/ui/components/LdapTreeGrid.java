@@ -548,6 +548,18 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
         showNotification("Loaded Root DSE for " + serverConfig.getName(),
             NotificationVariant.LUMO_SUCCESS);
       } catch (Exception ex) {
+        // Check if this is a certificate validation failure
+        Throwable cause = ex;
+        while (cause != null) {
+          if (cause instanceof com.ldapbrowser.exception.CertificateValidationException) {
+            showNotification("Certificate validation failed. Please use 'Test Connection' button"
+                + " in Server Management to review and import the certificate.",
+                NotificationVariant.LUMO_WARNING);
+            return;
+          }
+          cause = cause.getCause();
+        }
+        
         showNotification("Failed to load Root DSE: " + ex.getMessage(),
             NotificationVariant.LUMO_ERROR);
       }
@@ -605,6 +617,18 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
         showNotification("Loaded " + namingContexts.size() + " naming contexts",
             NotificationVariant.LUMO_SUCCESS);
       } catch (Exception ex) {
+        // Check if this is a certificate validation failure
+        Throwable cause = ex;
+        while (cause != null) {
+          if (cause instanceof com.ldapbrowser.exception.CertificateValidationException) {
+            showNotification("Certificate validation failed. Please use 'Test Connection' button"
+                + " in Server Management to review and import the certificate.",
+                NotificationVariant.LUMO_WARNING);
+            return;
+          }
+          cause = cause.getCause();
+        }
+        
         showNotification("Failed to load naming contexts: " + ex.getMessage(),
             NotificationVariant.LUMO_ERROR);
       }

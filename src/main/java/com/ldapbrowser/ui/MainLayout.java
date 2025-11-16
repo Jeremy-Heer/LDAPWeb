@@ -10,6 +10,7 @@ import com.ldapbrowser.ui.views.ExportView;
 import com.ldapbrowser.ui.views.SchemaView;
 import com.ldapbrowser.ui.views.SearchView;
 import com.ldapbrowser.ui.views.ServerView;
+import com.ldapbrowser.ui.views.SettingsView;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.button.Button;
@@ -133,6 +134,8 @@ public class MainLayout extends AppLayout {
         VaadinIcon.PACKAGE.create());
     SideNavItem exportItem = new SideNavItem("Export", ExportView.class, 
         VaadinIcon.DOWNLOAD.create());
+    SideNavItem settingsItem = new SideNavItem("Settings", SettingsView.class, 
+        VaadinIcon.COG.create());
 
     // Add all items to SideNav
     sideNav.addItem(
@@ -143,7 +146,8 @@ public class MainLayout extends AppLayout {
         createItem,
         accessItem,
         bulkItem,
-        exportItem
+        exportItem,
+        settingsItem
     );
 
     addToDrawer(sideNav);

@@ -1,5 +1,6 @@
 package com.ldapbrowser.service;
 
+import com.ldapbrowser.exception.CertificateValidationException;
 import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
@@ -25,7 +26,10 @@ import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
 import com.unboundid.ldap.sdk.schema.Schema;
 import com.unboundid.util.ssl.SSLUtil;
 import com.unboundid.util.ssl.TrustAllTrustManager;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -60,14 +64,31 @@ public class LdapService {
   // Paging state management for LDAP paged search control (thread-safe for multi-server usage)
   private final Map<String, byte[]> pagingCookies = new ConcurrentHashMap<>();
   private final Map<String, Integer> currentPages = new ConcurrentHashMap<>();
+  
+  private final TruststoreService truststoreService;
+  
+  // Track the last trust manager used for certificate validation
+  private final Map<String, TrustStoreTrustManager> trustManagers = new ConcurrentHashMap<>();
+
+  /**
+   * Constructor with dependency injection.
+   *
+   * @param truststoreService service for managing trusted certificates
+   */
+  public LdapService(TruststoreService truststoreService) {
+    this.truststoreService = truststoreService;
+  }
 
   /**
    * Tests connection to an LDAP server.
    *
    * @param config server configuration
    * @return true if connection successful
+   * @throws com.ldapbrowser.exception.CertificateValidationException 
+   *     if certificate validation fails
    */
-  public boolean testConnection(LdapServerConfig config) {
+  public boolean testConnection(LdapServerConfig config) 
+      throws com.ldapbrowser.exception.CertificateValidationException {
     LDAPConnection connection = null;
     try {
       connection = createConnection(config);
@@ -81,6 +102,24 @@ public class LdapService {
       logger.info("Connection test successful for {}", config.getName());
       return true;
     } catch (LDAPException e) {
+      // Check if this was caused by a certificate validation failure
+      Throwable cause = e.getCause();
+      if (cause instanceof javax.net.ssl.SSLHandshakeException 
+          || cause instanceof java.security.cert.CertificateException) {
+        
+        // Try to get the failed certificate from the trust manager
+        java.security.cert.X509Certificate failedCert = getLastFailedCertificate(config.getName());
+        
+        if (failedCert != null) {
+          logger.error("Certificate validation failed for {}", config.getName());
+          throw new com.ldapbrowser.exception.CertificateValidationException(
+              "Server certificate validation failed: " + cause.getMessage(),
+              cause,
+              new java.security.cert.X509Certificate[]{failedCert}
+          );
+        }
+      }
+      
       logger.error("Connection test failed for {}: {}", config.getName(), e.getMessage());
       return false;
     } catch (GeneralSecurityException e) {
@@ -100,35 +139,137 @@ public class LdapService {
    * @return LDAP connection
    * @throws LDAPException if connection fails
    * @throws GeneralSecurityException if SSL/TLS setup fails
+   * @throws CertificateValidationException if certificate validation fails
    */
   private LDAPConnection createConnection(LdapServerConfig config)
-      throws LDAPException, GeneralSecurityException {
+      throws LDAPException, GeneralSecurityException, CertificateValidationException {
     SocketFactory socketFactory = null;
 
     // Setup SSL if needed
     if (config.isUseSsl()) {
-      SSLUtil sslUtil = new SSLUtil(new TrustAllTrustManager());
+      SSLUtil sslUtil = createSslUtil(config);
       SSLContext sslContext = sslUtil.createSSLContext();
       socketFactory = sslContext.getSocketFactory();
     }
 
     LDAPConnection connection;
-    if (socketFactory != null) {
-      connection = new LDAPConnection(socketFactory, config.getHost(), config.getPort());
-    } else {
-      connection = new LDAPConnection(config.getHost(), config.getPort());
+    try {
+      if (socketFactory != null) {
+        connection = new LDAPConnection(socketFactory, config.getHost(), config.getPort());
+      } else {
+        connection = new LDAPConnection(config.getHost(), config.getPort());
+      }
+    } catch (LDAPException e) {
+      // Check if this is a certificate validation failure
+      checkForCertificateFailure(e, config);
+      throw e; // Re-throw if not a certificate failure
     }
 
     // Setup StartTLS if needed
     if (config.isUseStartTls() && !config.isUseSsl()) {
-      SSLUtil sslUtil = new SSLUtil(new TrustAllTrustManager());
+      SSLUtil sslUtil = createSslUtil(config);
       SSLContext sslContext = sslUtil.createSSLContext();
-      connection.processExtendedOperation(
-          new com.unboundid.ldap.sdk.extensions.StartTLSExtendedRequest(sslContext)
-      );
+      try {
+        connection.processExtendedOperation(
+            new com.unboundid.ldap.sdk.extensions.StartTLSExtendedRequest(sslContext)
+        );
+      } catch (LDAPException e) {
+        // Check if this is a certificate validation failure
+        checkForCertificateFailure(e, config);
+        throw e; // Re-throw if not a certificate failure
+      }
     }
 
     return connection;
+  }
+  
+  /**
+   * Checks if an LDAPException is caused by certificate validation failure.
+   * If so, retrieves the failed certificate and throws CertificateValidationException.
+   *
+   * @param e the LDAP exception to check
+   * @param config server configuration
+   * @throws CertificateValidationException if certificate validation failed
+   */
+  private void checkForCertificateFailure(LDAPException e, LdapServerConfig config)
+      throws CertificateValidationException {
+    Throwable cause = e.getCause();
+    while (cause != null) {
+      if (cause instanceof javax.net.ssl.SSLHandshakeException
+          || cause instanceof java.security.cert.CertificateException) {
+        // Certificate validation failed - try to get the certificate
+        X509Certificate cert = getLastFailedCertificate(config.getName());
+        if (cert != null) {
+          throw new CertificateValidationException(
+              "Certificate validation failed: " + cause.getMessage(),
+              e,
+              new X509Certificate[]{cert}
+          );
+        }
+        break;
+      }
+      cause = cause.getCause();
+    }
+  }
+
+  /**
+   * Creates an SSLUtil instance with appropriate trust manager based on configuration.
+   *
+   * @param config server configuration
+   * @return configured SSLUtil
+   * @throws GeneralSecurityException if SSL setup fails
+   */
+  private SSLUtil createSslUtil(LdapServerConfig config) throws GeneralSecurityException {
+    if (config.isValidateCertificate()) {
+      // Use truststore for certificate validation
+      try {
+        Path truststorePath = truststoreService.getTruststorePath();
+        char[] truststorePassword = truststoreService.getTruststorePassword();
+        TrustStoreTrustManager trustManager = 
+            new TrustStoreTrustManager(truststorePath, truststorePassword);
+        
+        // Store the trust manager for this server so we can retrieve failed certs
+        trustManagers.put(config.getName(), trustManager);
+        
+        logger.debug("Using truststore validation for {}", config.getName());
+        return new SSLUtil(trustManager);
+      } catch (IOException e) {
+        logger.error("Failed to load truststore, falling back to trust all: {}", e.getMessage());
+        // Fall back to trust all if truststore can't be loaded
+        return new SSLUtil(new TrustAllTrustManager());
+      }
+    } else {
+      // Trust all certificates when validation is disabled
+      logger.debug("Certificate validation disabled for {}", config.getName());
+      return new SSLUtil(new TrustAllTrustManager());
+    }
+  }
+
+  /**
+   * Gets the last failed certificate for a server.
+   *
+   * @param serverName the server name
+   * @return the server certificate that failed validation, or null
+   */
+  public java.security.cert.X509Certificate getLastFailedCertificate(String serverName) {
+    TrustStoreTrustManager trustManager = trustManagers.get(serverName);
+    if (trustManager != null && trustManager.getLastFailedChain() != null 
+        && trustManager.getLastFailedChain().length > 0) {
+      return trustManager.getLastFailedChain()[0];
+    }
+    return null;
+  }
+
+  /**
+   * Clears the stored certificate failure info for a server.
+   *
+   * @param serverName the server name
+   */
+  public void clearCertificateFailure(String serverName) {
+    TrustStoreTrustManager trustManager = trustManagers.get(serverName);
+    if (trustManager != null) {
+      trustManager.clearFailureInfo();
+    }
   }
 
   /**
@@ -146,14 +287,23 @@ public class LdapService {
     String key = config.getName();
     boolean isNewConnection = !connectionPools.containsKey(key);
 
-    LDAPConnectionPool pool = connectionPools.computeIfAbsent(key, k -> {
-      try {
-        return createConnectionPool(config);
-      } catch (LDAPException | GeneralSecurityException e) {
-        logger.error("Failed to create connection pool for {}", config.getName(), e);
-        throw new RuntimeException("Failed to create connection pool", e);
-      }
-    });
+    LDAPConnectionPool pool;
+    try {
+      pool = connectionPools.computeIfAbsent(key, k -> {
+        try {
+          return createConnectionPool(config);
+        } catch (CertificateValidationException e) {
+          // Wrap certificate validation exception so it can escape computeIfAbsent
+          throw new RuntimeException("CERT_VALIDATION_FAILED", e);
+        } catch (LDAPException | GeneralSecurityException e) {
+          logger.error("Failed to create connection pool for {}", config.getName(), e);
+          throw new RuntimeException("Failed to create connection pool", e);
+        }
+      });
+    } catch (RuntimeException e) {
+      // Certificate validation exceptions are wrapped - they'll be detected in UI
+      throw e;
+    }
     
     // Validate pool health and recreate if stale
     if (!isNewConnection && !isPoolHealthy(pool)) {
@@ -165,6 +315,9 @@ public class LdapService {
         pool = createConnectionPool(config);
         connectionPools.put(key, pool);
         isNewConnection = true;
+      } catch (CertificateValidationException e) {
+        logger.error("Certificate validation failed for {}", config.getName());
+        throw new RuntimeException("CERT_VALIDATION_FAILED", e);
       } catch (LDAPException | GeneralSecurityException e) {
         logger.error("Failed to recreate connection pool for {}", config.getName(), e);
         throw new RuntimeException("Failed to recreate connection pool", e);
@@ -193,9 +346,10 @@ public class LdapService {
    * @return configured connection pool
    * @throws LDAPException if pool creation fails
    * @throws GeneralSecurityException if SSL/TLS setup fails
+   * @throws CertificateValidationException if certificate validation fails
    */
   private LDAPConnectionPool createConnectionPool(LdapServerConfig config)
-      throws LDAPException, GeneralSecurityException {
+      throws LDAPException, GeneralSecurityException, CertificateValidationException {
     LDAPConnection connection = createConnection(config);
 
     // Bind if credentials provided
@@ -710,6 +864,9 @@ public class LdapService {
       connection.bind(dn, password);
       logger.info("Bind test successful for {}", dn);
       return true;
+    } catch (CertificateValidationException e) {
+      logger.error("Certificate validation failed for bind test: {}", e.getMessage());
+      return false;
     } catch (LDAPException | GeneralSecurityException e) {
       logger.error("Bind test failed for {}: {}", dn, e.getMessage());
       return false;

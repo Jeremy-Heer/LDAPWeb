@@ -24,9 +24,11 @@ import org.springframework.stereotype.Service;
 public class ConfigurationService {
 
   private static final Logger logger = LoggerFactory.getLogger(ConfigurationService.class);
+  private static final String SETTINGS_DIR = ".ldapbrowser";
   private static final String CONFIG_FILE = "connections.json";
   private final ObjectMapper objectMapper;
   private final Path configPath;
+  private final Path settingsDir;
 
   /**
    * Constructor initializes the configuration service.
@@ -34,7 +36,9 @@ public class ConfigurationService {
   public ConfigurationService() {
     this.objectMapper = new ObjectMapper();
     this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
-    this.configPath = Paths.get(System.getProperty("user.home"), ".ldapbrowser", CONFIG_FILE);
+    String userHome = System.getProperty("user.home");
+    this.settingsDir = Paths.get(userHome, SETTINGS_DIR);
+    this.configPath = settingsDir.resolve(CONFIG_FILE);
     ensureConfigDirectoryExists();
   }
 
@@ -159,5 +163,14 @@ public class ConfigurationService {
    */
   public Path getConfigPath() {
     return configPath;
+  }
+
+  /**
+   * Gets the settings directory path.
+   *
+   * @return settings directory path
+   */
+  public Path getSettingsDir() {
+    return settingsDir;
   }
 }

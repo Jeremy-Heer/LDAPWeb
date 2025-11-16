@@ -1,5 +1,461 @@
 # LDAP Web Browser
 
+## v0.21.2 - ✅ COMPLETED - Certificate Validation UI Controls
+
+### Bug Fix: Empty Truststore Handling ✅
+- ✅ **Empty Truststore Support** - Fixed `InvalidAlgorithmParameterException` when truststore is empty
+  - Issue: Java SSL required at least one trust anchor, causing exception before certificate dialog could appear
+  - Solution: Detect empty truststore in constructor, reject all certificates initially
+  - Behavior: Certificates properly captured for import even when truststore is empty
+  - User Experience: Friendly message shown when automatic connection fails due to untrusted certificate
+  - Connection Test: Use "Test Connection" button to see certificate import dialog
+  - Technical: Skip TrustManagerFactory initialization when truststore has no certificates
+  - UI Handling: LdapTreeGrid detects wrapped CertificateValidationException and shows helpful message
+
+### Phase 1: Completed ✅
+- ✅ **Server Configuration Dialog** - "Validate Certificate" checkbox added
+  - Label: "Validate Certificate (recommended for production)"
+  - Conditional enabling: Only enabled when SSL or StartTLS is selected
+  - Automatic disabling: Checkbox disabled and unchecked when no security enabled
+  - Vaadin Binder integration: Bound to `LdapServerConfig.validateCertificate` field
+  - State initialization: Updates correctly after loading existing server config
+  - User Experience: Prevents validation checkbox when connection has no encryption
+
+### Phase 2: Completed ✅
+- ✅ **TLS Certificate Dialog** - Modal dialog displays certificate details on validation failure
+  - User-friendly certificate information: Subject DN, Issuer DN, validity dates, serial number
+  - SHA-256 and SHA-1 fingerprints in colon-separated hex format
+  - Warning banner explains untrusted certificate situation
+  - Two action buttons: "Cancel" dismisses dialog, "Import and Trust" adds cert to truststore
+  
+- ✅ **Certificate Import Workflow** - Seamless import from connection test failure
+  - Automatic certificate retrieval from failed SSL handshake
+  - Custom `CertificateValidationException` carries certificate chain through exception stack
+  - Enhanced `TrustStoreTrustManager` captures failed certificate for later retrieval
+  - Server-specific tracking: `LdapService` maps trust managers by server name
+  - Unique alias generation: "serverName", "serverName_2", etc. to avoid conflicts
+  
+- ✅ **Connection Test Integration** - Certificate dialog appears on validation failure
+  - Catches `CertificateValidationException` separately from other connection errors
+  - Displays certificate details in dialog for user review
+  - Success notification after import with suggestion to retry connection
+  - Automatic cleanup of failure info after successful import
+
+### Technical Implementation (Phase 1)
+
+**ServerView.java Updates:**
+```java
+// Added checkbox with descriptive label
+Checkbox validateCertificateCheckbox = new Checkbox("Validate Certificate (recommended for production)");
+
+// Conditional enabling logic
+Runnable updateValidateCertState = () -> {
+    boolean hasSecurity = useSslCheckbox.getValue() || useStartTlsCheckbox.getValue();
+    validateCertificateCheckbox.setEnabled(hasSecurity);
+    if (!hasSecurity) {
+        validateCertificateCheckbox.setValue(false);
+    }
+};
+
+// Value change listeners on SSL and StartTLS checkboxes
+useSslCheckbox.addValueChangeListener(e -> updateValidateCertState.run());
+useStartTlsCheckbox.addValueChangeListener(e -> updateValidateCertState.run());
+
+// Binder binding
+binder.bind(validateCertificateCheckbox,
+    LdapServerConfig::isValidateCertificate, LdapServerConfig::setValidateCertificate);
+
+// State initialization after loading config
+binder.readBean(editConfig);
+updateValidateCertState.run();
+```
+
+**User Interface Behavior:**
+- **Default State:** When SSL or StartTLS is checked, validate checkbox is enabled and defaults to checked
+- **Security Disabled:** When neither SSL nor StartTLS is selected:
+  - Validate checkbox becomes disabled (grayed out)
+  - Validate checkbox is automatically unchecked
+  - User cannot enable validation without SSL/StartTLS
+- **Edit Mode:** When editing existing server:
+  - Checkbox state matches saved `validateCertificate` value
+  - Enabling logic still applies (disabled if no security)
+
+**Why Conditional Enabling:**
+Certificate validation only makes sense when the connection uses SSL/TLS encryption. Without SSL or StartTLS:
+- No certificate exchange occurs
+- No validation possible
+- Checkbox should be disabled to avoid user confusion
+
+**Files Modified:**
+- `ServerView.java` - Added validateCertificateCheckbox and conditional enabling logic
+
+### Technical Implementation (Phase 2)
+
+**New Components:**
+
+**TlsCertificateDialog.java** (268 lines):
+- Modal dialog for displaying untrusted certificate details
+- Certificate details display:
+  - Subject DN (multi-line formatted)
+  - Issuer DN (multi-line formatted)
+  - Validity period with timezone (Not Before / Not After)
+  - Serial number in hexadecimal format
+  - SHA-256 fingerprint (colon-separated hex)
+  - SHA-1 fingerprint (colon-separated hex)
+- Action buttons:
+  - "Cancel" - Closes dialog without importing
+  - "Import and Trust" (primary theme) - Imports certificate to truststore
+- Success callback mechanism to notify parent component after import
+- Static factory method `fromPemString()` for PEM-encoded certificates
+- Helper methods:
+  - `formatCertificateDetails()` - Formats all certificate info for display
+  - `getFingerprint()` - Calculates SHA-1 or SHA-256 fingerprint
+  - `generateCertificateAlias()` - Creates unique alias like "serverName" or "serverName_2"
+  - `importCertificate()` - Adds certificate to truststore and shows notification
+
+**CertificateValidationException.java** (44 lines):
+- Custom exception carrying failed certificate chain through exception stack
+- Extends `Exception` with certificate chain storage
+- Methods:
+  - `getCertificateChain()` - Returns full certificate chain
+  - `getServerCertificate()` - Returns server's certificate (first in chain)
+- Used to propagate certificate details from SSL layer to UI layer
+
+**Enhanced Components:**
+
+**TrustStoreTrustManager.java** updates:
+- Added fields for failure tracking:
+  - `lastFailedChain` - Stores certificate chain when validation fails
+  - `lastException` - Stores the validation exception
+- Enhanced `checkServerTrusted()` method:
+  - Captures failed certificate chain before throwing exception
+  - Stores exception details for later retrieval
+- New accessor methods:
+  - `getLastFailedChain()` - Returns failed certificate chain
+  - `getLastException()` - Returns validation exception
+  - `clearFailureInfo()` - Clears stored failure data
+
+**LdapService.java** updates:
+- New field: `Map<String, TrustStoreTrustManager> trustManagers`
+  - Tracks trust manager instances per server connection
+  - Enables server-specific certificate retrieval
+  - Thread-safe using `ConcurrentHashMap`
+- Enhanced `createSslUtil()` method:
+  - Stores trust manager with server name as key: `trustManagers.put(config.getName(), trustManager)`
+  - Maintains trust manager reference for later certificate retrieval
+- Modified `testConnection()` method:
+  - Now throws `CertificateValidationException` in addition to `Exception`
+  - Inspects `LDAPException` cause chain for SSL failures
+  - Detects `SSLHandshakeException` or `CertificateException`
+  - Retrieves failed certificate via `getLastFailedCertificate()`
+  - Wraps certificate in `CertificateValidationException` with original message
+- New helper methods:
+  - `getLastFailedCertificate(String serverName)` - Retrieves server certificate from trust manager
+  - `clearCertificateFailure(String serverName)` - Clears failure info after successful import
+
+**ServerView.java** updates:
+- Added dependency: `TruststoreService` (constructor-injected)
+- Enhanced `testSelectedServer()` method:
+  - Added separate catch block for `CertificateValidationException`
+  - Calls `handleCertificateValidationFailure()` on certificate failure
+  - Distinguishes certificate errors from other connection errors
+- New method `handleCertificateValidationFailure()`:
+  - Extracts server certificate from exception: `exception.getServerCertificate()`
+  - Creates `TlsCertificateDialog` with certificate, config, and truststore service
+  - Provides callback for post-import actions:
+    - Clears certificate failure info: `ldapService.clearCertificateFailure(config.getName())`
+    - Shows success notification suggesting connection retry
+  - Opens dialog for user interaction
+
+**Certificate Import Workflow:**
+1. User clicks "Test Connection" on server with validate certificate enabled
+2. SSL handshake fails due to untrusted certificate
+3. `TrustStoreTrustManager.checkServerTrusted()` captures certificate chain
+4. `LdapService.testConnection()` catches `LDAPException`, inspects cause for SSL failure
+5. `LdapService` retrieves failed certificate from trust manager by server name
+6. Throws `CertificateValidationException` with certificate included
+7. `ServerView.testSelectedServer()` catches `CertificateValidationException`
+8. `ServerView.handleCertificateValidationFailure()` creates `TlsCertificateDialog`
+9. Dialog displays certificate details to user
+10. User clicks "Import and Trust" button
+11. `TlsCertificateDialog.importCertificate()` calls `truststoreService.addCertificate()`
+12. Success notification shown, callback triggered
+13. Callback clears failure info in `LdapService`
+14. User can retry connection with newly trusted certificate
+
+**Unique Alias Generation:**
+- Base alias: Server configuration name (e.g., "Production LDAP")
+- Conflict resolution: Appends "_2", "_3", etc. if alias exists
+- Example sequence: "Production LDAP", "Production LDAP_2", "Production LDAP_3"
+- Prevents alias collision when importing multiple certificates for same server
+
+**Files Created:**
+- `TlsCertificateDialog.java` - Certificate display and import dialog
+- `CertificateValidationException.java` - Custom exception for certificate failures
+
+**Files Modified:**
+- `TrustStoreTrustManager.java` - Enhanced with failure tracking
+- `LdapService.java` - Enhanced with certificate retrieval and exception detection
+- `ServerView.java` - Integrated certificate dialog with connection testing
+
+## v0.21.1 - ✅ COMPLETED - Certificate Validation Using Truststore
+
+### Implemented Features
+
+#### 1. **Server Configuration - Certificate Validation Option**
+- ✅ Added `validateCertificate` boolean field to `LdapServerConfig` (default: `true`)
+- ✅ Getter and setter methods for certificate validation control
+- ✅ Updated constructor with default validation enabled
+- ✅ Updated `copy()` method to preserve validation setting
+- ✅ JSON serialization support for persisting validation preference
+
+#### 2. **TrustStoreTrustManager** - Custom SSL/TLS certificate validation
+- ✅ Created `TrustStoreTrustManager.java` implementing `X509TrustManager`
+- ✅ Validates server certificates against trusted certs in `truststore.pfx`
+- ✅ Loads truststore using password from `truststore.pin`
+- ✅ Uses Java standard `TrustManagerFactory` for validation
+- ✅ Comprehensive error logging for certificate validation failures
+- ✅ Automatic empty truststore initialization if file doesn't exist
+- ✅ Thread-safe certificate validation for concurrent LDAP connections
+
+#### 3. **LdapService** - Integration with truststore validation
+- ✅ Injected `TruststoreService` via constructor dependency injection
+- ✅ New `createSslUtil()` method for conditional trust manager selection:
+  - When `validateCertificate = true`: Uses `TrustStoreTrustManager` with truststore
+  - When `validateCertificate = false`: Uses `TrustAllTrustManager` (no validation)
+- ✅ Applied to both SSL (`isUseSsl()`) and StartTLS (`isUseStartTls()`) connections
+- ✅ Fallback to `TrustAllTrustManager` if truststore loading fails
+- ✅ Debug logging for validation mode and certificate status
+
+#### 4. **TruststoreService** - Enhanced with password accessor
+- ✅ Added `getTruststorePassword()` method for SSL/TLS connection use
+- ✅ Returns password as `char[]` (security best practice)
+- ✅ Throws `IOException` if PIN file cannot be read
+- ✅ Used by `LdapService` to initialize `TrustStoreTrustManager`
+
+### Technical Details
+
+**Certificate Validation Flow:**
+1. Server connection initiated with `LdapServerConfig`
+2. `LdapService.createConnection()` calls `createSslUtil(config)`
+3. If `config.isValidateCertificate()` is `true`:
+   - Load truststore path and password from `TruststoreService`
+   - Create `TrustStoreTrustManager` with truststore credentials
+   - Certificate validation performed against trusted certs
+4. If validation fails, `CertificateException` thrown with details
+5. If `validateCertificate` is `false`, `TrustAllTrustManager` used (no validation)
+
+**Security Benefits:**
+- Protects against man-in-the-middle attacks on LDAP connections
+- Validates server identity using trusted certificate store
+- Provides user control over validation (can disable for testing/dev)
+- Follows security best practices (password as char[], proper exception handling)
+- Supports enterprise certificate management workflows
+
+**Files Modified:**
+- `LdapServerConfig.java` - Added validateCertificate field and accessors
+- `TruststoreService.java` - Added getTruststorePassword() method
+- `LdapService.java` - Added TruststoreService injection and certificate validation
+- `TrustStoreTrustManager.java` - New class for certificate validation
+
+**Future Enhancements (v0.21.2):**
+- Add "Validate Certificate" checkbox to Server Add/Edit dialog UI
+- Create TLS Dialog for certificate import on validation failure
+- Display server certificate details when validation fails
+- Auto-import and trust button for failed certificates
+- Certificate alias naming based on server configuration name
+
+### Migration Notes
+- Existing LDAP server configurations automatically get `validateCertificate = true` on first load
+- No user action required for existing configurations
+- Certificate validation only occurs when SSL or StartTLS is enabled
+- Empty truststore allows all connections to fail validation (by design)
+- Populate truststore via Settings > Truststore tab before enabling validation
+
+---
+
+## v0.21 - ✅ COMPLETED - Settings Tab with Truststore Management
+
+### Implemented Features
+
+#### 1. **Centralized Settings Directory** - `~/.ldapbrowser/`
+- ✅ Unified application settings directory at `~/.ldapbrowser/`
+- ✅ All application data stored in single location:
+  - `~/.ldapbrowser/connections.json` - LDAP server configurations
+  - `~/.ldapbrowser/truststore.pfx` - Trusted certificates
+  - `~/.ldapbrowser/truststore.pin` - Truststore password
+- ✅ Added `ldapbrowser.settings.dir` property to `application.properties`
+- ✅ Automatic directory creation on first use
+- ✅ Both `ConfigurationService` and `TruststoreService` use same base directory
+- ✅ Clean, organized application data structure
+
+#### 2. **TruststoreService** - Core truststore management service
+- ✅ Created `TruststoreService.java` for secure certificate management
+- ✅ Automatic truststore initialization at `~/.ldapbrowser/truststore.pfx`
+- ✅ Secure PIN file management at `~/.ldapbrowser/truststore.pin`
+- ✅ PKCS12 keystore format for broad compatibility
+- ✅ Automatic PIN generation using SecureRandom (32-byte URL-safe Base64)
+- ✅ Restrictive file permissions on PIN file (Unix-like systems)
+- ✅ Settings directory auto-creation with `getSettingsDir()` accessor
+
+#### 2. **TruststoreService Operations**
+- ✅ `initializeTruststoreIfNeeded()` - Creates truststore and PIN file if missing
+- ✅ `listCertificates()` - Returns sorted list of certificate aliases
+- ✅ `getCertificate(alias)` - Retrieves certificate by alias
+- ✅ `addCertificate(alias, cert)` - Adds new trusted certificate
+- ✅ `removeCertificate(alias)` - Removes certificate from truststore
+- ✅ `getCertificateDetails(alias)` - Formatted X.509 certificate details
+- ✅ `getTruststoreStats()` - Statistics (count, size, location)
+- ✅ Comprehensive exception handling with descriptive error messages
+
+#### 3. **SettingsView** - Settings management interface
+- ✅ Created `SettingsView.java` with three-tab layout
+- ✅ Proper route configuration: `/settings` with MainLayout
+- ✅ TabSheet component for organized settings sections
+- ✅ Responsive layout with proper sizing and spacing
+- ✅ Consistent styling with rest of application
+
+#### 4. **Truststore Tab** - Full CRUD certificate management
+- ✅ **Display Features:**
+  - Grid showing certificate alias, subject, and issuer
+  - Informational text explaining truststore purpose
+  - Live statistics display (certificate count, file size, location)
+  - Auto-refresh statistics after operations
+  
+- ✅ **Add Certificate Dialog:**
+  - Alias text field for certificate identification
+  - File upload component (accepts .cer, .crt, .pem, .der)
+  - Drag-and-drop support for certificate files
+  - Alternative PEM paste text area (for copy/paste)
+  - X.509 certificate parsing from both file and text
+  - Validation and error handling
+  - Success/error notifications
+  
+- ✅ **View Certificate Details:**
+  - Modal dialog with full certificate information
+  - Displays Subject, Issuer, Serial Number
+  - Validity dates (Valid From/To)
+  - Signature algorithm information
+  - Read-only text area for detailed view
+  
+- ✅ **Delete Certificate:**
+  - Confirmation through button click
+  - Grid selection-based deletion
+  - Auto-refresh after deletion
+  - Success/error notifications
+  
+- ✅ **Grid Features:**
+  - Single selection mode
+  - Auto-width columns with flexible layout
+  - Subject and Issuer columns with flex grow
+  - Selection-dependent button states
+  - Refresh button to reload from disk
+
+#### 5. **Keystore Tab** - Placeholder for future implementation
+- ✅ "Under Construction" message
+- ✅ Consistent layout and styling
+- ✅ Ready for future keystore management features
+
+#### 6. **Encryption Tab** - Placeholder for future implementation
+- ✅ "Under Construction" message
+- ✅ Consistent layout and styling
+- ✅ Ready for future encryption settings
+
+#### 7. **Navigation Integration**
+- ✅ Added Settings link to drawer navigation in MainLayout
+- ✅ VaadinIcon.COG icon for Settings
+- ✅ Proper import and route configuration
+- ✅ Settings positioned after Export in navigation
+
+### Technical Details
+
+**Settings Directory Structure:**
+```
+~/.ldapbrowser/
+├── connections.json      (LDAP server configurations)
+├── truststore.pfx        (Trusted certificates keystore)
+└── truststore.pin        (Truststore password)
+```
+
+**TruststoreService.java:**
+- Spring `@Service` annotation for dependency injection
+- PKCS12 keystore type (modern standard, replacing JKS)
+- Centralized paths: `~/.ldapbrowser/truststore.pfx` and `~/.ldapbrowser/truststore.pin`
+- Thread-safe operations with proper exception handling
+- Certificate validation through Java security APIs
+- Support for X.509 certificates (standard for SSL/TLS)
+- Settings directory constant: `SETTINGS_DIR = ".ldapbrowser"`
+- Auto-creates `~/.ldapbrowser/` directory if not present
+
+**ConfigurationService.java:**
+- Updated to use centralized settings directory
+- Configuration path: `~/.ldapbrowser/connections.json`
+- Settings directory constant: `SETTINGS_DIR = ".ldapbrowser"`
+- `getSettingsDir()` method for accessing base directory
+- Consistent path handling with TruststoreService
+
+**SettingsView.java:**
+- Route: `/settings` with MainLayout integration
+- Uses Vaadin TabSheet for organized sections
+- Dependency injection of TruststoreService
+- Responsive design with proper expand/flex settings
+- Memory buffer for file uploads
+- Certificate factory for X.509 parsing
+
+**Certificate Import Support:**
+- Multiple formats: CER, CRT, PEM, DER
+- File upload via drag-and-drop or browse
+- Direct PEM text paste (-----BEGIN CERTIFICATE-----)
+- CertificateFactory with X.509 type
+- Handles both binary and text-encoded certificates
+
+**Security Considerations:**
+- Random PIN generation prevents guessing
+- PIN file with restrictive permissions (owner read/write only)
+- PKCS12 format with strong encryption
+- No plaintext password storage
+- Automatic initialization prevents unauthorized access
+
+### Files Created
+- `src/main/java/com/ldapbrowser/service/TruststoreService.java` - NEW (285 lines)
+- `src/main/java/com/ldapbrowser/ui/views/SettingsView.java` - NEW (417 lines)
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/MainLayout.java` - Added Settings navigation (~5 lines)
+- `src/main/java/com/ldapbrowser/service/ConfigurationService.java` - Centralized settings directory (~15 lines)
+- `src/main/resources/application.properties` - Added ldapbrowser.settings.dir property
+- `docs/changelog.md` - Updated with v0.21 completion details
+
+### Build Verification
+- ✅ Compiles successfully with Maven
+- ✅ All imports resolved correctly
+- ✅ Proper exception handling throughout
+- ✅ Follows Google Java style conventions
+
+### User Experience
+- Intuitive certificate management interface
+- Clear feedback through notifications
+- Helpful information text and tooltips
+- Drag-and-drop file upload convenience
+- Alternative PEM paste for quick imports
+- Statistics display for transparency
+- Consistent UI patterns with rest of application
+
+### Migration Notes
+- **Settings Directory:** All application data now stored in `~/.ldapbrowser/`
+- **Automatic Migration:** Directory created automatically on first use
+- **No Action Required:** Services handle directory creation transparently
+- **Existing Users:** If you had `connections.json` in project root or elsewhere, it will be recreated in `~/.ldapbrowser/` when you add servers
+
+### Future Enhancements
+- Integration with LdapService for SSL/TLS connections
+- Automatic trust of server certificates during connection
+- Certificate chain validation
+- Certificate expiration warnings
+- Export certificates feature
+- Keystore management implementation
+- Encryption settings implementation
+
 ## v0.20.1 - Updated README to current application
 
 ## v0.20 - Connection retry and stale connection recovery

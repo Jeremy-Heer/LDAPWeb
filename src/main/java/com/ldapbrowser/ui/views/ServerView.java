@@ -1,9 +1,12 @@
 package com.ldapbrowser.ui.views;
 
+import com.ldapbrowser.exception.CertificateValidationException;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -35,6 +38,7 @@ public class ServerView extends VerticalLayout {
 
   private final ConfigurationService configService;
   private final LdapService ldapService;
+  private final TruststoreService truststoreService;
 
   private Grid<LdapServerConfig> serverGrid;
   private Button addServerButton;
@@ -48,10 +52,13 @@ public class ServerView extends VerticalLayout {
    *
    * @param configService configuration service
    * @param ldapService LDAP service
+   * @param truststoreService truststore service
    */
-  public ServerView(ConfigurationService configService, LdapService ldapService) {
+  public ServerView(ConfigurationService configService, LdapService ldapService,
+      TruststoreService truststoreService) {
     this.configService = configService;
     this.ldapService = ldapService;
+    this.truststoreService = truststoreService;
 
     setSpacing(true);
     setPadding(true);
@@ -198,23 +205,38 @@ public class ServerView extends VerticalLayout {
 
     Checkbox useSslCheckbox = new Checkbox("Use SSL (LDAPS)");
     Checkbox useStartTlsCheckbox = new Checkbox("Use StartTLS");
+    Checkbox validateCertificateCheckbox = new Checkbox(
+        "Validate Certificate (recommended for production)"
+    );
+
+    // Update validate certificate checkbox state based on SSL/StartTLS
+    Runnable updateValidateCertState = () -> {
+      boolean hasSecurity = useSslCheckbox.getValue() || useStartTlsCheckbox.getValue();
+      validateCertificateCheckbox.setEnabled(hasSecurity);
+      if (!hasSecurity) {
+        validateCertificateCheckbox.setValue(false);
+      }
+    };
 
     useSslCheckbox.addValueChangeListener(event -> {
       if (event.getValue()) {
         useStartTlsCheckbox.setValue(false);
       }
+      updateValidateCertState.run();
     });
 
     useStartTlsCheckbox.addValueChangeListener(event -> {
       if (event.getValue()) {
         useSslCheckbox.setValue(false);
       }
+      updateValidateCertState.run();
     });
 
     formLayout.add(nameField, hostField);
     formLayout.add(portField, baseDnField);
     formLayout.add(bindDnField, bindPasswordField);
     formLayout.add(useSslCheckbox, useStartTlsCheckbox);
+    formLayout.add(validateCertificateCheckbox, 2);
 
     // Create binder
     Binder<LdapServerConfig> binder = new Binder<>(LdapServerConfig.class);
@@ -234,10 +256,15 @@ public class ServerView extends VerticalLayout {
     binder.bind(useSslCheckbox, LdapServerConfig::isUseSsl, LdapServerConfig::setUseSsl);
     binder.bind(useStartTlsCheckbox,
         LdapServerConfig::isUseStartTls, LdapServerConfig::setUseStartTls);
+    binder.bind(validateCertificateCheckbox,
+        LdapServerConfig::isValidateCertificate, LdapServerConfig::setValidateCertificate);
 
     // Load existing config or create new
     LdapServerConfig editConfig = config != null ? config : new LdapServerConfig();
     binder.readBean(editConfig);
+    
+    // Update validate certificate checkbox state after loading config
+    updateValidateCertState.run();
 
     // Create buttons
     Button saveButton = new Button("Save", event -> {
@@ -340,10 +367,46 @@ public class ServerView extends VerticalLayout {
         } else {
           showError("Connection failed to: " + selected.getName());
         }
+      } catch (CertificateValidationException e) {
+        // Certificate validation failed - show TLS dialog to allow user to import
+        handleCertificateValidationFailure(selected, e);
       } catch (Exception e) {
         showError("Connection test failed: " + e.getMessage());
       }
     }
+  }
+
+  /**
+   * Handles certificate validation failure by showing TLS certificate dialog.
+   *
+   * @param config the server configuration
+   * @param exception the certificate validation exception
+   */
+  private void handleCertificateValidationFailure(LdapServerConfig config,
+      CertificateValidationException exception) {
+    
+    java.security.cert.X509Certificate serverCert = exception.getServerCertificate();
+    
+    if (serverCert == null) {
+      showError("Certificate validation failed, but certificate details are not available");
+      return;
+    }
+
+    // Create and show TLS certificate dialog
+    TlsCertificateDialog dialog = new TlsCertificateDialog(
+        serverCert,
+        config,
+        truststoreService,
+        imported -> {
+          if (imported) {
+            // Certificate was imported, clear the failure and retry connection
+            ldapService.clearCertificateFailure(config.getName());
+            showSuccess("Certificate imported. Try connecting again.");
+          }
+        }
+    );
+
+    dialog.open();
   }
 
   /**

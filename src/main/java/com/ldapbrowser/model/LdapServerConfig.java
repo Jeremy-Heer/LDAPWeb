@@ -20,6 +20,7 @@ public class LdapServerConfig implements Serializable {
   private String bindPassword;
   private boolean useSsl;
   private boolean useStartTls;
+  private boolean validateCertificate = true;
 
   /**
    * Default constructor.
@@ -50,6 +51,7 @@ public class LdapServerConfig implements Serializable {
     this.bindPassword = bindPassword;
     this.useSsl = useSsl;
     this.useStartTls = useStartTls;
+    this.validateCertificate = true; // Default to validating certificates
   }
 
   public String getName() {
@@ -116,6 +118,14 @@ public class LdapServerConfig implements Serializable {
     this.useStartTls = useStartTls;
   }
 
+  public boolean isValidateCertificate() {
+    return validateCertificate;
+  }
+
+  public void setValidateCertificate(boolean validateCertificate) {
+    this.validateCertificate = validateCertificate;
+  }
+
   /**
    * Gets the connection URL for display purposes.
    *
@@ -133,7 +143,7 @@ public class LdapServerConfig implements Serializable {
    * @return new instance with same values
    */
   public LdapServerConfig copy() {
-    return new LdapServerConfig(
+    LdapServerConfig copied = new LdapServerConfig(
         this.name + " (Copy)",
         this.host,
         this.port,
@@ -143,6 +153,8 @@ public class LdapServerConfig implements Serializable {
         this.useSsl,
         this.useStartTls
     );
+    copied.setValidateCertificate(this.validateCertificate);
+    return copied;
   }
 
   @Override
