@@ -1,5 +1,9 @@
 # LDAP Web Browser
 
+## v0.21.3 - Selected server connection enhancement
+  - when a server is deselected from the "Select servers..." dropdown,
+    any open ldap connections to that server should disconnected and closed.
+
 ## v0.21.2 - ✅ COMPLETED - Certificate Validation UI Controls
 
 ### Bug Fix: Empty Truststore Handling ✅

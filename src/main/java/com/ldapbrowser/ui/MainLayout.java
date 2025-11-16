@@ -2,6 +2,7 @@ package com.ldapbrowser.ui;
 
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
+import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.views.AccessView;
 import com.ldapbrowser.ui.views.BrowseView;
 import com.ldapbrowser.ui.views.BulkView;
@@ -28,6 +29,8 @@ import com.vaadin.flow.server.VaadinSession;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Main layout for LDAP Browser application.
@@ -35,8 +38,10 @@ import java.util.Set;
  */
 public class MainLayout extends AppLayout {
 
+  private static final Logger logger = LoggerFactory.getLogger(MainLayout.class);
   private static final String SELECTED_SERVERS_KEY = "selectedServers";
   private final ConfigurationService configService;
+  private final LdapService ldapService;
   private MultiSelectComboBox<String> serverSelect;
   private HorizontalLayout selectedServersContainer;
 
@@ -44,9 +49,11 @@ public class MainLayout extends AppLayout {
    * Creates the main layout with navbar and drawer.
    *
    * @param configService configuration service
+   * @param ldapService LDAP service for connection management
    */
-  public MainLayout(ConfigurationService configService) {
+  public MainLayout(ConfigurationService configService, LdapService ldapService) {
     this.configService = configService;
+    this.ldapService = ldapService;
     createHeader();
     createDrawer();
     
@@ -92,8 +99,20 @@ public class MainLayout extends AppLayout {
 
     // Listen for selection changes
     serverSelect.addSelectionListener(event -> {
-      Set<String> selected = event.getValue();
-      VaadinSession.getCurrent().setAttribute(getSelectedServersKey(), new HashSet<>(selected));
+      Set<String> previousSelected = event.getOldValue();
+      Set<String> currentSelected = event.getValue();
+      
+      // Find servers that were deselected
+      Set<String> deselected = new HashSet<>(previousSelected);
+      deselected.removeAll(currentSelected);
+      
+      // Close connection pools for deselected servers
+      for (String serverName : deselected) {
+        ldapService.closeConnectionPool(serverName);
+        logger.info("Closed connection pool for deselected server: {}", serverName);
+      }
+      
+      VaadinSession.getCurrent().setAttribute(getSelectedServersKey(), new HashSet<>(currentSelected));
       updateSelectedServersDisplay();
     });
 
