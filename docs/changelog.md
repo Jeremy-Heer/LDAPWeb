@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.20.1 - Updated README to current application
+
 ## v0.20 - Connection retry and stale connection recovery
 
 ## v0.19 - Implement Create view
