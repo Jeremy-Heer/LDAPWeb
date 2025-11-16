@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.20 - Connection retry and stale connection recovery
+
 ## v0.19 - Implement Create view
 
 ## v0.18.3 - bug fix operational attribute logic
