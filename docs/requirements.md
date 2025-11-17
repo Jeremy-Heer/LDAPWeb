@@ -195,9 +195,29 @@ LDAP Browser is a comprehensive Java web application for browsing, searching, an
         - used to secure tls connections to remote ldap servers
         - CRUD operations for the truststore
     - Keystore sub tab
-        - under construction
+        - manages the keystore used for password encryption
+        - keystore file: ~/.ldapbrowser/keystore.pfx (PKCS12 format)
+        - PIN file: ~/.ldapbrowser/keystore.pin (securely generated random password)
+        - stores AES-256 encryption key for password encryption
+        - automatic initialization on first use
+        - displays keystore status (initialized, key present, file location)
+        - key rotation capability (generate new encryption key)
+        - re-encrypt all passwords button when key is rotated
+        - keystore statistics (creation date, key algorithm, key size)
     - Encryption sub tab
-        - under construciton
+        - controls password encryption behavior
+        - encryption mode selector:
+            - "Encrypted" (default, production mode) - passwords encrypted in connections.json
+            - "Cleartext" (development mode) - passwords stored as cleartext for debugging
+        - encryption status display showing current mode
+        - warning message when cleartext mode selected
+        - automatic migration when switching modes:
+            - Cleartext → Encrypted: encrypts all existing passwords
+            - Encrypted → Cleartext: decrypts all existing passwords
+        - encryption details display:
+            - algorithm: AES-256-GCM
+            - key storage: keystore.pfx
+            - encrypted field: bindPassword in connections.json
 
 1. **Shared Components**
 
@@ -256,3 +276,34 @@ Primary service for LDAP operations:
     - if validate certificate checked for server properties, validate ldap server certificate,
         otherwise do not perform server tls validate.
     - When new connections are attempted to ldap server and tls validation fails, present TLS Dialog
+
+### KeystoreService
+Manages the keystore for storing encryption keys:
+- Keystore file: ~/.ldapbrowser/keystore.pfx (PKCS12 format)
+- PIN file: ~/.ldapbrowser/keystore.pin (randomly generated secure password)
+- Automatic initialization on first use
+- Stores AES-256 encryption key as SecretKey entry
+- Key generation using Java Cryptography Extension (JCE)
+- Secure file permissions on PIN file (owner read/write only)
+- Key alias: "ldap-password-encryption-key"
+- Methods:
+    - initializeKeystoreIfNeeded() - creates keystore and generates encryption key
+    - getEncryptionKey() - retrieves the AES key for encryption/decryption
+    - rotateKey() - generates new encryption key and returns old key
+    - getKeystoreStats() - returns keystore metadata (creation, algorithm, key size)
+
+### EncryptionService
+Handles password encryption and decryption:
+- Algorithm: AES-256-GCM (Galois/Counter Mode for authenticated encryption)
+- Key source: KeystoreService
+- Encryption mode configuration stored in application.properties
+- Methods:
+    - encryptPassword(String cleartext) - returns Base64-encoded encrypted password
+    - decryptPassword(String encrypted) - returns cleartext password
+    - isEncryptionEnabled() - checks current encryption mode
+    - setEncryptionMode(boolean enabled) - enables/disables encryption
+    - migratePasswords(List<LdapServerConfig>, boolean toEncrypted) - bulk password migration
+- Encrypted format: Base64(IV + encrypted_bytes + auth_tag)
+- 96-bit random IV (initialization vector) per encryption
+- Authentication tag for integrity verification
+- Thread-safe encryption operations

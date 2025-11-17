@@ -1,5 +1,225 @@
 # LDAP Web Browser
 
+## v0.22 - ✅ COMPLETED - Password Encryption with Keystore
+
+### Implemented Features
+
+#### 1. **KeystoreService** - Encryption key management
+- ✅ Created `KeystoreService.java` for managing encryption keys
+- ✅ Keystore file: `~/.ldapbrowser/keystore.pfx` (PKCS12 format)
+- ✅ PIN file: `~/.ldapbrowser/keystore.pin` (secure random password)
+- ✅ Automatic initialization on first use
+- ✅ AES-256 encryption key generation using SecureRandom
+- ✅ Key alias: "ldap-password-encryption-key"
+- ✅ Restrictive file permissions on PIN file (owner read/write only)
+- ✅ Key rotation capability with `rotateKey()` method
+- ✅ Keystore statistics display (creation date, algorithm, key size)
+
+#### 2. **EncryptionService** - Password encryption/decryption
+- ✅ Created `EncryptionService.java` for AES-256-GCM encryption
+- ✅ Algorithm: AES-256-GCM (Galois/Counter Mode for authenticated encryption)
+- ✅ 96-bit random IV (initialization vector) per encryption
+- ✅ 128-bit authentication tag for integrity verification
+- ✅ Base64-encoded encrypted format: IV + ciphertext + auth_tag
+- ✅ Thread-safe encryption operations
+- ✅ Configurable encryption mode via `ldapbrowser.encryption.enabled` property
+- ✅ Heuristic detection of encrypted vs cleartext passwords
+- ✅ Re-encryption support for key rotation
+- ✅ Custom `EncryptionException` for error handling
+
+#### 3. **ConfigurationService** - Automatic encryption integration
+- ✅ Updated to inject `EncryptionService` dependency
+- ✅ Automatic password encryption on save operations
+- ✅ Automatic password decryption on load operations
+- ✅ Transparent encryption - no changes required to calling code
+- ✅ Migration support for existing cleartext passwords
+- ✅ Bulk password migration method: `migratePasswords(boolean toEncrypted)`
+- ✅ Automatic detection and migration of cleartext passwords
+
+#### 4. **Settings - Keystore Tab** - Full keystore management UI
+- ✅ Replaced placeholder with fully functional keystore management
+- ✅ **Display Features:**
+  - Keystore initialization status (Initialized/Not Initialized)
+  - Keystore information (location, type, algorithm, key size, creation date)
+  - Real-time status updates
+  
+- ✅ **Initialize Keystore:**
+  - Creates keystore.pfx and keystore.pin
+  - Generates AES-256 encryption key
+  - Automatic initialization on first encryption operation
+  - Button disabled when already initialized
+  
+- ✅ **Rotate Encryption Key:**
+  - Generates new encryption key
+  - Re-encrypts all passwords with new key
+  - Confirmation dialog with warning
+  - Enabled only when keystore is initialized
+  
+- ✅ **Refresh Statistics:**
+  - Updates keystore information display
+  - Shows current status
+
+#### 5. **Settings - Encryption Tab** - Encryption mode management
+- ✅ Replaced placeholder with fully functional encryption settings
+- ✅ **Display Features:**
+  - Current encryption mode (Encrypted/Cleartext)
+  - Encryption algorithm details (AES-256-GCM)
+  - Key storage location
+  - Encrypted field information
+  
+- ✅ **Mode Configuration:**
+  - Instructions for changing encryption mode via application.properties
+  - `ldapbrowser.encryption.enabled=true` for encrypted mode (default)
+  - `ldapbrowser.encryption.enabled=false` for cleartext mode (development)
+  - Warning about application restart requirement
+  
+- ✅ **Password Migration:**
+  - "Encrypt All Passwords" button - converts cleartext to encrypted
+  - "Decrypt All Passwords" button - converts encrypted to cleartext
+  - Confirmation dialogs with warnings
+  - Error handling and notifications
+
+#### 6. **Application Configuration**
+- ✅ Added `ldapbrowser.encryption.enabled` property to `application.properties`
+- ✅ Default value: `true` (encryption enabled)
+- ✅ Set to `false` for development/debugging environments
+- ✅ Requires application restart when changed
+
+### Technical Implementation
+
+**KeystoreService.java** (333 lines):
+- PKCS12 keystore type for broad compatibility
+- SecretKey storage with password protection
+- 32-byte URL-safe Base64-encoded PIN generation
+- AES KeyGenerator with 256-bit key size
+- POSIX file permissions on Unix-like systems
+- Methods:
+  - `initializeKeystoreIfNeeded()` - Creates keystore and generates key
+  - `getEncryptionKey()` - Retrieves AES key from keystore
+  - `rotateKey()` - Generates new key and returns old key
+  - `getKeystoreStats()` - Returns formatted keystore information
+  - `isInitialized()` - Checks if keystore exists and has key
+
+**EncryptionService.java** (218 lines):
+- AES/GCM/NoPadding cipher mode
+- 12-byte IV generated per encryption (SecureRandom)
+- 128-bit GCM authentication tag
+- ByteBuffer for IV + ciphertext combination
+- Spring `@Value` annotation for configuration injection
+- Methods:
+  - `encryptPassword(String)` - Encrypts cleartext password
+  - `decryptPassword(String)` - Decrypts encrypted password
+  - `isEncryptionEnabled()` - Returns encryption mode
+  - `isPasswordEncrypted(String)` - Detects encrypted passwords
+  - `reencryptPassword(String, SecretKey)` - Re-encrypts with new key
+
+**ConfigurationService.java** updates:
+- Added `EncryptionService` field and constructor injection
+- Modified `loadConfigurations()`:
+  - Loads JSON from file
+  - Decrypts passwords automatically for all configs
+  - Detects and logs cleartext passwords for migration
+- Modified `saveConfigurations()`:
+  - Creates copies of configs
+  - Encrypts passwords before saving
+  - Writes encrypted passwords to JSON
+- Added private helper methods:
+  - `encryptPassword(LdapServerConfig)` - Encrypts config password
+  - `decryptPassword(LdapServerConfig)` - Decrypts config password
+- Added public migration method:
+  - `migratePasswords(boolean toEncrypted)` - Bulk password conversion
+
+**SettingsView.java** updates:
+- Added `KeystoreService`, `EncryptionService`, `ConfigurationService` dependencies
+- Replaced `createKeystoreTab()` placeholder (~130 lines):
+  - Keystore status display (initialized/not initialized)
+  - Keystore statistics TextArea with detailed information
+  - Initialize button with success/error notifications
+  - Rotate key button with confirmation dialog
+  - Automatic re-encryption on key rotation
+  - Refresh button for status updates
+- Replaced `createEncryptionTab()` placeholder (~150 lines):
+  - Encryption mode status (Encrypted/Cleartext)
+  - Algorithm and storage details display
+  - Migration buttons (Encrypt All/Decrypt All)
+  - Confirmation dialogs with warnings
+  - Instructions for changing encryption mode
+  - Success/error notifications
+- Added helper methods:
+  - `updateKeystoreStatus(Span)` - Updates keystore status label
+  - `updateKeystoreStats(TextArea)` - Updates keystore statistics
+  - `updateEncryptionStatus(Span)` - Updates encryption mode label
+
+**application.properties** updates:
+- Added `ldapbrowser.encryption.enabled=true` property
+- Documented as encryption control setting
+- Default: `true` (encryption enabled for production)
+
+### Security Benefits
+- **Strong Encryption:** AES-256-GCM provides industry-standard encryption with authentication
+- **Key Isolation:** Encryption key stored separately from encrypted data
+- **Random IVs:** Each password encrypted with unique IV prevents pattern analysis
+- **Authentication Tags:** GCM mode prevents tampering with encrypted data
+- **Secure Key Storage:** PKCS12 keystore with password protection
+- **Restrictive Permissions:** PIN file readable only by owner
+- **Key Rotation:** Ability to rotate encryption keys for enhanced security
+- **Transparent Migration:** Automatic detection and migration of cleartext passwords
+
+### Migration Path
+1. **Existing Users with Cleartext Passwords:**
+   - On first load with encryption enabled, passwords are detected as cleartext
+   - Logged for awareness: "Found cleartext password for server: X, will encrypt on next save"
+   - Next save operation automatically encrypts passwords
+   - Alternative: Use "Encrypt All Passwords" button in Settings > Encryption tab
+
+2. **Development Environments:**
+   - Set `ldapbrowser.encryption.enabled=false` in application.properties
+   - Restart application
+   - Use "Decrypt All Passwords" button to convert to cleartext
+   - Passwords stored in cleartext for easy debugging
+
+3. **Production Environments:**
+   - Keep default `ldapbrowser.encryption.enabled=true`
+   - Keystore automatically initialized on first use
+   - All new passwords automatically encrypted
+   - Existing cleartext passwords migrated on save
+
+### Files Created
+- `src/main/java/com/ldapbrowser/service/KeystoreService.java` - NEW (333 lines)
+- `src/main/java/com/ldapbrowser/service/EncryptionService.java` - NEW (218 lines)
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/service/ConfigurationService.java` - Added encryption support (~120 lines changed)
+- `src/main/java/com/ldapbrowser/ui/views/SettingsView.java` - Implemented Keystore and Encryption tabs (~300 lines changed)
+- `src/main/resources/application.properties` - Added encryption.enabled property (~3 lines)
+- `docs/requirements.md` - Updated Settings and Core Services sections (~60 lines)
+- `docs/changelog.md` - Updated with v0.22 completion details
+
+### Build Verification
+- ✅ Compiles successfully with Maven
+- ✅ All imports resolved correctly
+- ✅ Proper exception handling throughout
+- ✅ Follows Google Java style conventions
+- ✅ Spring dependency injection properly configured
+
+### User Experience
+- Transparent encryption - no user action required
+- Automatic migration of existing passwords
+- Clear status indicators for encryption state
+- Informative error messages and notifications
+- Development mode option for debugging
+- Key rotation with confirmation dialogs
+- Comprehensive keystore statistics display
+
+### Future Enhancements
+- Certificate-based authentication support in keystore
+- Hardware security module (HSM) integration
+- Key escrow/backup capabilities
+- Encryption audit logging
+- Password expiration warnings
+
+---
+
 ## v0.21.3 - Selected server connection enhancement
   - when a server is deselected from the "Select servers..." dropdown,
     any open ldap connections to that server should disconnected and closed.

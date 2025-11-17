@@ -3,6 +3,7 @@ package com.ldapbrowser.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.service.EncryptionService.EncryptionException;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 /**
  * Service for managing LDAP server configurations.
  * Handles loading and saving configurations to connections.json file.
+ * Automatically encrypts/decrypts passwords based on encryption settings.
  */
 @Service
 public class ConfigurationService {
@@ -29,11 +31,15 @@ public class ConfigurationService {
   private final ObjectMapper objectMapper;
   private final Path configPath;
   private final Path settingsDir;
+  private final EncryptionService encryptionService;
 
   /**
    * Constructor initializes the configuration service.
+   *
+   * @param encryptionService encryption service for password handling
    */
-  public ConfigurationService() {
+  public ConfigurationService(EncryptionService encryptionService) {
+    this.encryptionService = encryptionService;
     this.objectMapper = new ObjectMapper();
     this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
     String userHome = System.getProperty("user.home");
@@ -59,6 +65,7 @@ public class ConfigurationService {
 
   /**
    * Loads all server configurations from file.
+   * Automatically decrypts passwords if encryption is enabled.
    *
    * @return list of server configurations
    */
@@ -72,7 +79,14 @@ public class ConfigurationService {
 
       LdapServerConfig[] configs = objectMapper.readValue(configFile, LdapServerConfig[].class);
       logger.info("Loaded {} server configurations", configs.length);
-      return new ArrayList<>(Arrays.asList(configs));
+
+      // Decrypt passwords
+      List<LdapServerConfig> configList = new ArrayList<>(Arrays.asList(configs));
+      for (LdapServerConfig config : configList) {
+        decryptPassword(config);
+      }
+
+      return configList;
     } catch (IOException e) {
       logger.error("Failed to load configurations", e);
       return new ArrayList<>();
@@ -81,14 +95,24 @@ public class ConfigurationService {
 
   /**
    * Saves server configurations to file.
+   * Automatically encrypts passwords if encryption is enabled.
    *
    * @param configurations list of configurations to save
    * @throws IOException if save fails
    */
   public void saveConfigurations(List<LdapServerConfig> configurations) throws IOException {
     try {
-      objectMapper.writeValue(configPath.toFile(), configurations);
-      logger.info("Saved {} server configurations to {}", configurations.size(), configPath);
+      // Create copies and encrypt passwords
+      List<LdapServerConfig> toSave = new ArrayList<>();
+      for (LdapServerConfig config : configurations) {
+        LdapServerConfig copy = config.copy();
+        copy.setName(config.getName()); // Restore original name (copy adds " (Copy)")
+        encryptPassword(copy);
+        toSave.add(copy);
+      }
+
+      objectMapper.writeValue(configPath.toFile(), toSave);
+      logger.info("Saved {} server configurations to {}", toSave.size(), configPath);
     } catch (IOException e) {
       logger.error("Failed to save configurations", e);
       throw e;
@@ -173,4 +197,105 @@ public class ConfigurationService {
   public Path getSettingsDir() {
     return settingsDir;
   }
+
+  /**
+   * Encrypts the password in a configuration object.
+   *
+   * @param config configuration to encrypt password for
+   */
+  private void encryptPassword(LdapServerConfig config) {
+    if (config.getBindPassword() == null || config.getBindPassword().isEmpty()) {
+      return;
+    }
+
+    if (!encryptionService.isEncryptionEnabled()) {
+      return;
+    }
+
+    // Check if already encrypted
+    if (encryptionService.isPasswordEncrypted(config.getBindPassword())) {
+      return;
+    }
+
+    try {
+      String encrypted = encryptionService.encryptPassword(config.getBindPassword());
+      config.setBindPassword(encrypted);
+      logger.debug("Encrypted password for server: {}", config.getName());
+    } catch (EncryptionException e) {
+      logger.error("Failed to encrypt password for server: {}", config.getName(), e);
+    }
+  }
+
+  /**
+   * Decrypts the password in a configuration object.
+   *
+   * @param config configuration to decrypt password for
+   */
+  private void decryptPassword(LdapServerConfig config) {
+    if (config.getBindPassword() == null || config.getBindPassword().isEmpty()) {
+      return;
+    }
+
+    if (!encryptionService.isEncryptionEnabled()) {
+      return;
+    }
+
+    // Check if encrypted
+    if (!encryptionService.isPasswordEncrypted(config.getBindPassword())) {
+      // Cleartext password, encrypt it for future saves (migration)
+      logger.info("Found cleartext password for server: {}, will encrypt on next save", 
+          config.getName());
+      return;
+    }
+
+    try {
+      String decrypted = encryptionService.decryptPassword(config.getBindPassword());
+      config.setBindPassword(decrypted);
+      logger.debug("Decrypted password for server: {}", config.getName());
+    } catch (EncryptionException e) {
+      logger.error("Failed to decrypt password for server: {}", config.getName(), e);
+    }
+  }
+
+  /**
+   * Migrates all passwords between encrypted and cleartext formats.
+   *
+   * @param toEncrypted true to encrypt, false to decrypt
+   * @throws IOException if migration fails
+   */
+  public void migratePasswords(boolean toEncrypted) throws IOException {
+    List<LdapServerConfig> configs = loadConfigurations();
+    
+    for (LdapServerConfig config : configs) {
+      if (config.getBindPassword() == null || config.getBindPassword().isEmpty()) {
+        continue;
+      }
+
+      try {
+        if (toEncrypted) {
+          // Encrypt cleartext passwords
+          if (!encryptionService.isPasswordEncrypted(config.getBindPassword())) {
+            String encrypted = encryptionService.encryptPassword(config.getBindPassword());
+            config.setBindPassword(encrypted);
+            logger.info("Encrypted password for server: {}", config.getName());
+          }
+        } else {
+          // Decrypt encrypted passwords
+          if (encryptionService.isPasswordEncrypted(config.getBindPassword())) {
+            String decrypted = encryptionService.decryptPassword(config.getBindPassword());
+            config.setBindPassword(decrypted);
+            logger.info("Decrypted password for server: {}", config.getName());
+          }
+        }
+      } catch (EncryptionException e) {
+        logger.error("Failed to migrate password for server: {}", config.getName(), e);
+        throw new IOException("Password migration failed for server: " + config.getName(), e);
+      }
+    }
+
+    // Save without additional encryption/decryption
+    objectMapper.writeValue(configPath.toFile(), configs);
+    logger.info("Password migration completed for {} servers", configs.size());
+  }
 }
+

@@ -1,5 +1,8 @@
 package com.ldapbrowser.ui.views;
 
+import com.ldapbrowser.service.ConfigurationService;
+import com.ldapbrowser.service.EncryptionService;
+import com.ldapbrowser.service.KeystoreService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.vaadin.flow.component.button.Button;
@@ -7,7 +10,6 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
@@ -36,15 +38,28 @@ import java.util.List;
 public class SettingsView extends VerticalLayout {
 
   private final TruststoreService truststoreService;
+  private final KeystoreService keystoreService;
+  private final EncryptionService encryptionService;
+  private final ConfigurationService configurationService;
   private Grid<String> certificateGrid;
 
   /**
    * Creates the Settings view.
    *
    * @param truststoreService truststore service
+   * @param keystoreService keystore service
+   * @param encryptionService encryption service
+   * @param configurationService configuration service
    */
-  public SettingsView(TruststoreService truststoreService) {
+  public SettingsView(
+      TruststoreService truststoreService,
+      KeystoreService keystoreService,
+      EncryptionService encryptionService,
+      ConfigurationService configurationService) {
     this.truststoreService = truststoreService;
+    this.keystoreService = keystoreService;
+    this.encryptionService = encryptionService;
+    this.configurationService = configurationService;
 
     setSpacing(true);
     setPadding(true);
@@ -345,7 +360,7 @@ public class SettingsView extends VerticalLayout {
   }
 
   /**
-   * Creates the Keystore management tab (under construction).
+   * Creates the Keystore management tab.
    *
    * @return keystore tab content
    */
@@ -353,21 +368,127 @@ public class SettingsView extends VerticalLayout {
     VerticalLayout layout = new VerticalLayout();
     layout.setSpacing(true);
     layout.setPadding(false);
-    layout.setAlignItems(FlexComponent.Alignment.CENTER);
-    layout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+    layout.setSizeFull();
 
-    H3 title = new H3("Keystore Management");
-    Span message = new Span("Under Construction");
-    message.getStyle()
-        .set("font-size", "var(--lumo-font-size-xl)")
-        .set("color", "var(--lumo-secondary-text-color)");
+    // Info section
+    Span infoText = new Span(
+        "The keystore stores the encryption key used to encrypt LDAP passwords. "
+        + "Keystore is stored in ~/.ldapbrowser/keystore.pfx");
+    infoText.getStyle().set("color", "var(--lumo-secondary-text-color)");
 
-    layout.add(title, message);
+    // Status display
+    Span statusLabel = new Span();
+    statusLabel.getStyle()
+        .set("font-weight", "bold")
+        .set("margin-top", "var(--lumo-space-m)");
+    updateKeystoreStatus(statusLabel);
+
+    // Stats display
+    TextArea statsArea = new TextArea("Keystore Information");
+    statsArea.setReadOnly(true);
+    statsArea.setWidthFull();
+    statsArea.setHeight("200px");
+    updateKeystoreStats(statsArea);
+
+    // Action buttons
+    Button initButton = new Button("Initialize Keystore", event -> {
+      try {
+        keystoreService.initializeKeystoreIfNeeded();
+        Notification.show("Keystore initialized successfully", 3000,
+            Notification.Position.MIDDLE)
+            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        updateKeystoreStatus(statusLabel);
+        updateKeystoreStats(statsArea);
+      } catch (Exception e) {
+        Notification.show("Failed to initialize keystore: " + e.getMessage(), 5000,
+            Notification.Position.MIDDLE)
+            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+      }
+    });
+    initButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    initButton.setEnabled(!keystoreService.isInitialized());
+
+    Button rotateButton = new Button("Rotate Encryption Key", event -> {
+      Dialog confirmDialog = new Dialog();
+      confirmDialog.setHeaderTitle("Rotate Encryption Key");
+
+      Span warningText = new Span(
+          "This will generate a new encryption key and re-encrypt all passwords. "
+          + "This operation cannot be undone. Continue?");
+      warningText.getStyle().set("color", "var(--lumo-error-text-color)");
+
+      Button confirmButton = new Button("Rotate Key", e -> {
+        try {
+          keystoreService.rotateKey();
+          // Re-encrypt all passwords with new key
+          configurationService.migratePasswords(true);
+          Notification.show("Encryption key rotated and passwords re-encrypted", 3000,
+              Notification.Position.MIDDLE)
+              .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+          updateKeystoreStats(statsArea);
+          confirmDialog.close();
+        } catch (Exception ex) {
+          Notification.show("Failed to rotate key: " + ex.getMessage(), 5000,
+              Notification.Position.MIDDLE)
+              .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        }
+      });
+      confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+
+      Button cancelButton = new Button("Cancel", e -> confirmDialog.close());
+
+      HorizontalLayout dialogButtons = new HorizontalLayout(confirmButton, cancelButton);
+      VerticalLayout dialogContent = new VerticalLayout(warningText, dialogButtons);
+      confirmDialog.add(dialogContent);
+      confirmDialog.open();
+    });
+    rotateButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+    rotateButton.setEnabled(keystoreService.isInitialized());
+
+    Button refreshButton = new Button("Refresh", event -> {
+      updateKeystoreStatus(statusLabel);
+      updateKeystoreStats(statsArea);
+    });
+
+    HorizontalLayout buttonLayout = new HorizontalLayout(
+        initButton, rotateButton, refreshButton);
+    buttonLayout.setSpacing(true);
+
+    layout.add(infoText, statusLabel, statsArea, buttonLayout);
     return layout;
   }
 
   /**
-   * Creates the Encryption settings tab (under construction).
+   * Updates the keystore status label.
+   *
+   * @param statusLabel label to update
+   */
+  private void updateKeystoreStatus(Span statusLabel) {
+    if (keystoreService.isInitialized()) {
+      statusLabel.setText("Status: Initialized");
+      statusLabel.getStyle().set("color", "var(--lumo-success-text-color)");
+    } else {
+      statusLabel.setText("Status: Not Initialized");
+      statusLabel.getStyle().set("color", "var(--lumo-error-text-color)");
+    }
+  }
+
+  /**
+   * Updates the keystore statistics display.
+   *
+   * @param statsArea text area to update
+   */
+  private void updateKeystoreStats(TextArea statsArea) {
+    try {
+      String stats = keystoreService.getKeystoreStats();
+      statsArea.setValue(stats);
+    } catch (Exception e) {
+      statsArea.setValue("Error retrieving keystore statistics: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Creates the Encryption settings tab.
    *
    * @return encryption tab content
    */
@@ -375,16 +496,143 @@ public class SettingsView extends VerticalLayout {
     VerticalLayout layout = new VerticalLayout();
     layout.setSpacing(true);
     layout.setPadding(false);
-    layout.setAlignItems(FlexComponent.Alignment.CENTER);
-    layout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+    layout.setSizeFull();
 
-    H3 title = new H3("Encryption Settings");
-    Span message = new Span("Under Construction");
-    message.getStyle()
-        .set("font-size", "var(--lumo-font-size-xl)")
-        .set("color", "var(--lumo-secondary-text-color)");
+    // Info section
+    Span infoText = new Span(
+        "Configure password encryption behavior. Production deployments should use "
+        + "encrypted mode. Development environments may use cleartext for debugging.");
+    infoText.getStyle().set("color", "var(--lumo-secondary-text-color)");
 
-    layout.add(title, message);
+    // Current status
+    Span statusLabel = new Span();
+    statusLabel.getStyle()
+        .set("font-weight", "bold")
+        .set("margin-top", "var(--lumo-space-m)");
+    updateEncryptionStatus(statusLabel);
+
+    // Encryption details
+    VerticalLayout detailsLayout = new VerticalLayout();
+    detailsLayout.setSpacing(false);
+    detailsLayout.setPadding(false);
+    detailsLayout.getStyle().set("margin-top", "var(--lumo-space-m)");
+
+    Span algorithmLabel = new Span("Algorithm: AES-256-GCM");
+    Span keyStorageLabel = new Span("Key Storage: ~/.ldapbrowser/keystore.pfx");
+    Span fieldLabel = new Span("Encrypted Field: bindPassword in connections.json");
+
+    algorithmLabel.getStyle().set("color", "var(--lumo-secondary-text-color)");
+    keyStorageLabel.getStyle().set("color", "var(--lumo-secondary-text-color)");
+    fieldLabel.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+    detailsLayout.add(algorithmLabel, keyStorageLabel, fieldLabel);
+
+    // Warning message
+    Span warningText = new Span(
+        "⚠ Warning: Changing encryption mode requires application restart. "
+        + "All passwords will be migrated to the new format.");
+    warningText.getStyle()
+        .set("color", "var(--lumo-error-text-color)")
+        .set("font-weight", "bold")
+        .set("margin-top", "var(--lumo-space-l)");
+
+    // Note about application.properties
+    Span noteText = new Span(
+        "Note: To change encryption mode, edit application.properties and set "
+        + "ldapbrowser.encryption.enabled to true (encrypted) or false (cleartext), "
+        + "then restart the application. Use the migration button below to convert "
+        + "existing passwords.");
+    noteText.getStyle()
+        .set("color", "var(--lumo-secondary-text-color)")
+        .set("font-style", "italic")
+        .set("margin-top", "var(--lumo-space-m)");
+
+    // Migration buttons
+    Button encryptButton = new Button("Encrypt All Passwords", event -> {
+      Dialog confirmDialog = new Dialog();
+      confirmDialog.setHeaderTitle("Encrypt All Passwords");
+
+      Span confirmText = new Span(
+          "This will encrypt all cleartext passwords in connections.json. Continue?");
+
+      Button confirmButton = new Button("Encrypt", e -> {
+        try {
+          configurationService.migratePasswords(true);
+          Notification.show("All passwords encrypted successfully", 3000,
+              Notification.Position.MIDDLE)
+              .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+          confirmDialog.close();
+        } catch (Exception ex) {
+          Notification.show("Failed to encrypt passwords: " + ex.getMessage(), 5000,
+              Notification.Position.MIDDLE)
+              .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        }
+      });
+      confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+      Button cancelButton = new Button("Cancel", e -> confirmDialog.close());
+
+      HorizontalLayout dialogButtons = new HorizontalLayout(confirmButton, cancelButton);
+      VerticalLayout dialogContent = new VerticalLayout(confirmText, dialogButtons);
+      confirmDialog.add(dialogContent);
+      confirmDialog.open();
+    });
+    encryptButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button decryptButton = new Button("Decrypt All Passwords", event -> {
+      Dialog confirmDialog = new Dialog();
+      confirmDialog.setHeaderTitle("Decrypt All Passwords");
+
+      Span confirmText = new Span(
+          "⚠ This will decrypt all passwords to cleartext in connections.json. "
+          + "This is NOT RECOMMENDED for production environments. Continue?");
+      confirmText.getStyle().set("color", "var(--lumo-error-text-color)");
+
+      Button confirmButton = new Button("Decrypt", e -> {
+        try {
+          configurationService.migratePasswords(false);
+          Notification.show("All passwords decrypted to cleartext", 3000,
+              Notification.Position.MIDDLE)
+              .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+          confirmDialog.close();
+        } catch (Exception ex) {
+          Notification.show("Failed to decrypt passwords: " + ex.getMessage(), 5000,
+              Notification.Position.MIDDLE)
+              .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        }
+      });
+      confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+
+      Button cancelButton = new Button("Cancel", e -> confirmDialog.close());
+
+      HorizontalLayout dialogButtons = new HorizontalLayout(confirmButton, cancelButton);
+      VerticalLayout dialogContent = new VerticalLayout(confirmText, dialogButtons);
+      confirmDialog.add(dialogContent);
+      confirmDialog.open();
+    });
+    decryptButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+    HorizontalLayout buttonLayout = new HorizontalLayout(encryptButton, decryptButton);
+    buttonLayout.setSpacing(true);
+    buttonLayout.getStyle().set("margin-top", "var(--lumo-space-l)");
+
+    layout.add(infoText, statusLabel, detailsLayout, warningText, noteText, buttonLayout);
     return layout;
   }
+
+  /**
+   * Updates the encryption status label.
+   *
+   * @param statusLabel label to update
+   */
+  private void updateEncryptionStatus(Span statusLabel) {
+    if (encryptionService.isEncryptionEnabled()) {
+      statusLabel.setText("Current Mode: Encrypted (Production)");
+      statusLabel.getStyle().set("color", "var(--lumo-success-text-color)");
+    } else {
+      statusLabel.setText("Current Mode: Cleartext (Development)");
+      statusLabel.getStyle().set("color", "var(--lumo-error-text-color)");
+    }
+  }
 }
+
