@@ -3,6 +3,7 @@ package com.ldapbrowser.ui;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.dialogs.HelpDialog;
 import com.ldapbrowser.ui.views.AccessView;
 import com.ldapbrowser.ui.views.BrowseView;
 import com.ldapbrowser.ui.views.BulkView;
@@ -116,6 +117,15 @@ public class MainLayout extends AppLayout {
       updateSelectedServersDisplay();
     });
 
+    // Help button for top right
+    Button helpButton = new Button(VaadinIcon.QUESTION_CIRCLE.create());
+    helpButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    helpButton.setTooltipText("Help");
+    helpButton.addClickListener(event -> {
+      HelpDialog helpDialog = new HelpDialog();
+      helpDialog.open();
+    });
+
     HorizontalLayout header = new HorizontalLayout(
         new DrawerToggle(),
         title,
@@ -125,6 +135,8 @@ public class MainLayout extends AppLayout {
 
     header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
     header.setWidth("100%");
+    header.expand(selectedServersContainer); // Make this expand to push help button to the right
+    header.add(helpButton); // Add help button at the end
     header.addClassNames("py-0", "px-m");
 
     addToNavbar(header);

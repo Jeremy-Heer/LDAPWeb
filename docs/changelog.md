@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.23 - Add Help dialog
+
 ## v0.22 - ✅ COMPLETED - Password Encryption with Keystore
 
 ### Implemented Features
