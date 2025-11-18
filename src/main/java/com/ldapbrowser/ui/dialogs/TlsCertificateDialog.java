@@ -148,6 +148,40 @@ public class TlsCertificateDialog extends Dialog {
     details.append("  ").append(certificate.getSerialNumber().toString(16).toUpperCase())
         .append("\n\n");
 
+    // Extended Key Usage
+    try {
+      java.util.List<String> extendedKeyUsage = certificate.getExtendedKeyUsage();
+      if (extendedKeyUsage != null && !extendedKeyUsage.isEmpty()) {
+        details.append("Extended Key Usage:\n");
+        for (String oid : extendedKeyUsage) {
+          details.append("  ").append(formatKeyUsageOid(oid)).append("\n");
+        }
+        details.append("\n");
+      }
+    } catch (java.security.cert.CertificateParsingException e) {
+      details.append("Extended Key Usage: Error parsing\n\n");
+    }
+
+    // Subject Alternative Names
+    try {
+      java.util.Collection<java.util.List<?>> subjectAltNames = 
+          certificate.getSubjectAlternativeNames();
+      if (subjectAltNames != null && !subjectAltNames.isEmpty()) {
+        details.append("Subject Alternative Names:\n");
+        for (java.util.List<?> san : subjectAltNames) {
+          if (san.size() >= 2) {
+            Integer type = (Integer) san.get(0);
+            Object value = san.get(1);
+            details.append("  ").append(formatSanType(type)).append(": ")
+                .append(value).append("\n");
+          }
+        }
+        details.append("\n");
+      }
+    } catch (java.security.cert.CertificateParsingException e) {
+      details.append("Subject Alternative Names: Error parsing\n\n");
+    }
+
     // Fingerprints
     try {
       details.append("SHA-256 Fingerprint:\n");
@@ -248,6 +282,45 @@ public class TlsCertificateDialog extends Dialog {
     }
 
     return alias;
+  }
+
+  /**
+   * Formats a Key Usage OID to a readable name.
+   *
+   * @param oid the OID string
+   * @return formatted key usage name
+   */
+  private String formatKeyUsageOid(String oid) {
+    return switch (oid) {
+      case "1.3.6.1.5.5.7.3.1" -> "TLS Web Server Authentication (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.2" -> "TLS Web Client Authentication (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.3" -> "Code Signing (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.4" -> "Email Protection (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.8" -> "Time Stamping (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.9" -> "OCSP Signing (" + oid + ")";
+      default -> oid;
+    };
+  }
+
+  /**
+   * Formats a Subject Alternative Name type to a readable name.
+   *
+   * @param type the SAN type integer
+   * @return formatted SAN type name
+   */
+  private String formatSanType(Integer type) {
+    return switch (type) {
+      case 0 -> "Other Name";
+      case 1 -> "RFC822 Name";
+      case 2 -> "DNS Name";
+      case 3 -> "X400 Address";
+      case 4 -> "Directory Name";
+      case 5 -> "EDI Party Name";
+      case 6 -> "URI";
+      case 7 -> "IP Address";
+      case 8 -> "Registered ID";
+      default -> "Unknown (" + type + ")";
+    };
   }
 
   /**

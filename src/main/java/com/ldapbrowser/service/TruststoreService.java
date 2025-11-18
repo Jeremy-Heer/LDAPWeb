@@ -228,6 +228,38 @@ public class TruststoreService {
       details.append("Valid From: ").append(x509.getNotBefore()).append("\n");
       details.append("Valid To: ").append(x509.getNotAfter()).append("\n");
       details.append("Signature Algorithm: ").append(x509.getSigAlgName()).append("\n");
+      
+      // Extended Key Usage
+      try {
+        java.util.List<String> extendedKeyUsage = x509.getExtendedKeyUsage();
+        if (extendedKeyUsage != null && !extendedKeyUsage.isEmpty()) {
+          details.append("\nExtended Key Usage:\n");
+          for (String oid : extendedKeyUsage) {
+            details.append("  ").append(formatKeyUsageOid(oid)).append("\n");
+          }
+        }
+      } catch (java.security.cert.CertificateParsingException e) {
+        details.append("\nExtended Key Usage: Error parsing\n");
+      }
+      
+      // Subject Alternative Names
+      try {
+        java.util.Collection<java.util.List<?>> subjectAltNames = x509.getSubjectAlternativeNames();
+        if (subjectAltNames != null && !subjectAltNames.isEmpty()) {
+          details.append("\nSubject Alternative Names:\n");
+          for (java.util.List<?> san : subjectAltNames) {
+            if (san.size() >= 2) {
+              Integer type = (Integer) san.get(0);
+              Object value = san.get(1);
+              details.append("  ").append(formatSanType(type)).append(": ")
+                  .append(value).append("\n");
+            }
+          }
+        }
+      } catch (java.security.cert.CertificateParsingException e) {
+        details.append("\nSubject Alternative Names: Error parsing\n");
+      }
+      
       return details.toString();
     }
 
@@ -288,5 +320,44 @@ public class TruststoreService {
    */
   public char[] getTruststorePassword() throws IOException {
     return loadPin();
+  }
+
+  /**
+   * Formats a Key Usage OID to a readable name.
+   *
+   * @param oid the OID string
+   * @return formatted key usage name
+   */
+  private String formatKeyUsageOid(String oid) {
+    return switch (oid) {
+      case "1.3.6.1.5.5.7.3.1" -> "TLS Web Server Authentication (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.2" -> "TLS Web Client Authentication (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.3" -> "Code Signing (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.4" -> "Email Protection (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.8" -> "Time Stamping (" + oid + ")";
+      case "1.3.6.1.5.5.7.3.9" -> "OCSP Signing (" + oid + ")";
+      default -> oid;
+    };
+  }
+
+  /**
+   * Formats a Subject Alternative Name type to a readable name.
+   *
+   * @param type the SAN type integer
+   * @return formatted SAN type name
+   */
+  private String formatSanType(Integer type) {
+    return switch (type) {
+      case 0 -> "Other Name";
+      case 1 -> "RFC822 Name";
+      case 2 -> "DNS Name";
+      case 3 -> "X400 Address";
+      case 4 -> "Directory Name";
+      case 5 -> "EDI Party Name";
+      case 6 -> "URI";
+      case 7 -> "IP Address";
+      case 8 -> "Registered ID";
+      default -> "Unknown (" + type + ")";
+    };
   }
 }

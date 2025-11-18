@@ -1,5 +1,9 @@
 # LDAP Web Browser
 
+## v0.23.1 - Enhance Certificate Details dialogs
+  - Add Extended Key Usage and Subjet Alternative Name to dialog.
+  - And to both "View Details" dialog and "Validation Failed.." dialog.
+
 ## v0.23 - Add Help dialog
 
 ## v0.22 - ✅ COMPLETED - Password Encryption with Keystore
