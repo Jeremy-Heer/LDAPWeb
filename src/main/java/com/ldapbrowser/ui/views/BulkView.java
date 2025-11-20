@@ -11,6 +11,8 @@ import com.ldapbrowser.ui.components.ImportTab;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.TabSheet;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import java.util.ArrayList;
@@ -23,7 +25,7 @@ import java.util.Set;
  */
 @Route(value = "bulk", layout = MainLayout.class)
 @PageTitle("Bulk | LDAP Browser")
-public class BulkView extends VerticalLayout {
+public class BulkView extends VerticalLayout implements BeforeEnterObserver {
 
   private final ConfigurationService configService;
   private final ImportTab importTab;
@@ -41,8 +43,8 @@ public class BulkView extends VerticalLayout {
   public BulkView(ConfigurationService configService, LdapService ldapService, 
       LoggingService loggingService) {
     this.configService = configService;
-    this.importTab = new ImportTab(ldapService, loggingService);
-    this.searchTab = new BulkSearchTab(ldapService, loggingService);
+    this.importTab = new ImportTab(ldapService, loggingService, configService);
+    this.searchTab = new BulkSearchTab(ldapService, loggingService, configService);
     this.generateTab = new BulkGenerateTab(ldapService, loggingService);
     this.groupMembershipsTab = 
         new com.ldapbrowser.ui.components.BulkGroupMembershipsTab(ldapService, loggingService);
@@ -72,6 +74,12 @@ public class BulkView extends VerticalLayout {
     add(tabSheet);
 
     // Initialize server configurations
+    updateTabServers();
+  }
+
+  @Override
+  public void beforeEnter(BeforeEnterEvent event) {
+    // Refresh server configurations when navigating to this view
     updateTabServers();
   }
 

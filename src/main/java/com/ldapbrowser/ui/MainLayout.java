@@ -115,6 +115,9 @@ public class MainLayout extends AppLayout {
       
       VaadinSession.getCurrent().setAttribute(getSelectedServersKey(), new HashSet<>(currentSelected));
       updateSelectedServersDisplay();
+      
+      // Notify current view if it needs to update
+      notifyCurrentViewOfServerChange();
     });
 
     // Help button for top right
@@ -267,6 +270,18 @@ public class MainLayout extends AppLayout {
         .set("font-size", "var(--lumo-font-size-s)");
 
     return badge;
+  }
+
+  /**
+   * Notifies the current view that server selection has changed.
+   * This allows views like BulkView to update their tabs immediately.
+   */
+  private void notifyCurrentViewOfServerChange() {
+    com.vaadin.flow.component.Component content = getContent();
+    if (content instanceof BulkView) {
+      ((BulkView) content).updateTabServers();
+      logger.debug("Notified BulkView of server selection change");
+    }
   }
 
   /**

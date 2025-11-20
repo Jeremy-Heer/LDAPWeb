@@ -23,6 +23,7 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
+import com.vaadin.flow.server.StreamResource;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.Modification;
@@ -63,6 +64,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
   private MemoryBuffer memoryBuffer;
   private Checkbox continueOnErrorCheckbox;
   private Checkbox permissiveModifyCheckbox;
+  private ComboBox<String> operationModeCombo;
   private Button runButton;
 
   // Progress
@@ -150,8 +152,14 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     permissiveModifyCheckbox = new Checkbox("Use Permissive Modify control");
     permissiveModifyCheckbox.setValue(true);
 
+    // Operation mode selector
+    operationModeCombo = new ComboBox<>("Operation Mode");
+    operationModeCombo.setItems("Execute Change", "Create LDIF");
+    operationModeCombo.setValue("Execute Change");
+    operationModeCombo.setWidthFull();
+
     // Run button
-    runButton = new Button("Execute Operation", new Icon(VaadinIcon.PLAY));
+    runButton = new Button("Run", new Icon(VaadinIcon.PLAY));
     runButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     runButton.addClickListener(e -> performBulkGroupOperation());
 
@@ -166,11 +174,11 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     progressContainer.add(new Span("Processing group membership operations..."), progressBar);
     progressContainer.setVisible(false);
 
-    // Download link (for error reports)
+    // Download link (for LDIF output)
     downloadLink = new Anchor();
     downloadLink.getElement().setAttribute("download", true);
     downloadLink.setVisible(false);
-    downloadLink.add(new Button("Download Error Report", new Icon(VaadinIcon.DOWNLOAD)));
+    downloadLink.add(new Button("Download LDIF", new Icon(VaadinIcon.DOWNLOAD)));
   }
 
   private void setupLayout() {
@@ -223,7 +231,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     HorizontalLayout actionLayout = new HorizontalLayout();
     actionLayout.setDefaultVerticalComponentAlignment(Alignment.END);
     actionLayout.setSpacing(true);
-    actionLayout.add(runButton);
+    actionLayout.add(operationModeCombo, runButton);
 
     contentLayout.add(
         new H4("Bulk Group Membership Operations"),
@@ -260,6 +268,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     }
 
     String operation = operationComboBox.getValue();
+    String operationMode = operationModeCombo.getValue();
     boolean isAddOperation = "Add Members".equals(operation);
 
     // Parse user list
@@ -274,8 +283,9 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     }
 
     loggingService.logInfo("BULK_GROUP_MEMBERSHIPS",
-        "Starting bulk group membership operation - Servers: " + serverConfigs.size() +
-            ", Group: " + groupName + ", Operation: " + operation + ", Users: " + userIds.size());
+        "Starting bulk group membership operation - Mode: " + operationMode + ", Servers: " 
+            + serverConfigs.size() + ", Group: " + groupName + ", Operation: " + operation 
+            + ", Users: " + userIds.size());
 
     showProgress();
 
@@ -283,15 +293,28 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     CompletableFuture.runAsync(() -> {
       int totalSuccesses = 0;
       int totalErrors = 0;
+      int totalLdifEntries = 0;
       StringBuilder allErrors = new StringBuilder();
+      StringBuilder combinedLdif = new StringBuilder();
 
       for (LdapServerConfig config : serverConfigs) {
         try {
-          int[] results = processBulkGroupMembership(config, groupName, userIds, isAddOperation);
-          totalSuccesses += results[0];
-          totalErrors += results[1];
-          if (results[2] > 0) { // errors collected
-            allErrors.append("\\nServer: ").append(config.getName()).append("\\n");
+          if ("Create LDIF".equals(operationMode)) {
+            String ldif = generateGroupMembershipLdif(config, groupName, userIds, isAddOperation);
+            if (ldif != null && !ldif.isEmpty()) {
+              if (combinedLdif.length() > 0) {
+                combinedLdif.append("\n\n");
+              }
+              combinedLdif.append(ldif);
+              totalLdifEntries++;
+            }
+          } else {
+            int[] results = processBulkGroupMembership(config, groupName, userIds, isAddOperation);
+            totalSuccesses += results[0];
+            totalErrors += results[1];
+            if (results[2] > 0) { // errors collected
+              allErrors.append("\\nServer: ").append(config.getName()).append("\\n");
+            }
           }
         } catch (Exception e) {
           totalErrors++;
@@ -304,19 +327,31 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
 
       final int finalSuccesses = totalSuccesses;
       final int finalErrors = totalErrors;
+      final int finalLdifEntries = totalLdifEntries;
       final String errorReport = allErrors.toString();
+      final String finalLdif = combinedLdif.toString();
 
       getUI().ifPresent(ui -> ui.access(() -> {
         hideProgress();
-        if (finalErrors > 0) {
-          showError("Completed with " + finalSuccesses + " successes and " + 
-              finalErrors + " errors across " + serverConfigs.size() + " server(s)");
-          if (!errorReport.isEmpty()) {
-            showInfo("Error details logged");
+        if ("Create LDIF".equals(operationMode)) {
+          if (finalLdifEntries > 0) {
+            createDownloadLink(finalLdif, "group-memberships.ldif");
+            showSuccess("LDIF generated successfully for " + finalLdifEntries + " server(s)");
+            loggingService.logInfo("BULK_GROUP_MEMBERSHIPS", "LDIF generated for " + finalLdifEntries + " server(s)");
+          } else {
+            showError("Failed to generate LDIF");
           }
         } else {
-          showSuccess("Successfully processed " + finalSuccesses + 
-              " operations across " + serverConfigs.size() + " server(s)");
+          if (finalErrors > 0) {
+            showError("Completed with " + finalSuccesses + " successes and " + 
+                finalErrors + " errors across " + serverConfigs.size() + " server(s)");
+            if (!errorReport.isEmpty()) {
+              showInfo("Error details logged");
+            }
+          } else {
+            showSuccess("Successfully processed " + finalSuccesses + 
+                " operations across " + serverConfigs.size() + " server(s)");
+          }
         }
       }));
     });
@@ -763,16 +798,115 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     dialog.open();
   }
 
+  private String generateGroupMembershipLdif(LdapServerConfig serverConfig, String groupName,
+      List<String> userIds, boolean isAddOperation) throws LDAPException {
+    String userBaseDn = userBaseDnField.getValue();
+    String groupBaseDn = groupBaseDnField.getValue();
+
+    // Use server base DN if not specified
+    if (userBaseDn == null || userBaseDn.trim().isEmpty()) {
+      userBaseDn = serverConfig.getBaseDn();
+    }
+    if (groupBaseDn == null || groupBaseDn.trim().isEmpty()) {
+      groupBaseDn = serverConfig.getBaseDn();
+    }
+
+    try {
+      // Find and validate the group
+      String groupFilter = "(&(|(objectClass=posixGroup)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames)(objectClass=groupOfUrls))(cn="
+          + escapeFilterValue(groupName) + "))";
+      List<LdapEntry> groups = ldapService.search(serverConfig, groupBaseDn, groupFilter,
+          com.unboundid.ldap.sdk.SearchScope.SUB, "objectClass");
+
+      if (groups.isEmpty()) {
+        throw new RuntimeException("Group not found: " + groupName);
+      } else if (groups.size() > 1) {
+        throw new RuntimeException("Multiple groups found with name: " + groupName);
+      }
+
+      LdapEntry group = groups.get(0);
+      List<String> objectClasses = group.getAttributeValues("objectClass");
+      GroupType groupType = determineGroupType(objectClasses);
+      String groupDn = group.getDn();
+
+      // Generate LDIF based on group type
+      StringBuilder ldif = new StringBuilder();
+      ldif.append("# Generated group membership LDIF for server: ").append(serverConfig.getName()).append("\n");
+      ldif.append("# Group: ").append(groupName).append(" (").append(groupDn).append(")\n");
+      ldif.append("# Operation: ").append(isAddOperation ? "Add Members" : "Remove Members").append("\n\n");
+
+      ldif.append("dn: ").append(groupDn).append("\n");
+      ldif.append("changetype: modify\n");
+
+      String changeType = isAddOperation ? "add" : "delete";
+      String attributeName;
+
+      switch (groupType) {
+        case POSIX_GROUP:
+          attributeName = "memberUid";
+          break;
+        case GROUP_OF_NAMES:
+          attributeName = "member";
+          break;
+        case GROUP_OF_UNIQUE_NAMES:
+          attributeName = "uniqueMember";
+          break;
+        default:
+          throw new RuntimeException("Unsupported group type for LDIF generation: " + groupType);
+      }
+
+      for (int i = 0; i < userIds.size(); i++) {
+        String userId = userIds.get(i);
+        if (i > 0) {
+          ldif.append("-\n");
+        }
+        ldif.append(changeType).append(": ").append(attributeName).append("\n");
+
+        if (groupType == GroupType.POSIX_GROUP) {
+          ldif.append(attributeName).append(": ").append(userId).append("\n");
+        } else {
+          // For GROUP_OF_NAMES and GROUP_OF_UNIQUE_NAMES, we need DNs
+          // Generate DN based on user base DN
+          String userDn = "uid=" + userId + "," + userBaseDn;
+          ldif.append(attributeName).append(": ").append(userDn).append("\n");
+        }
+      }
+
+      return ldif.toString();
+
+    } catch (Exception e) {
+      loggingService.logError("BULK_GROUP_MEMBERSHIPS",
+          "Failed to generate LDIF on server " + serverConfig.getName() + ": " + e.getMessage());
+      throw new LDAPException(com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+          "Failed to generate LDIF: " + e.getMessage());
+    }
+  }
+
+  private void createDownloadLink(String content, String fileName) {
+    StreamResource resource = new StreamResource(fileName,
+        (outputStream, vaadinSession) -> {
+          try {
+            outputStream.write(content.getBytes(StandardCharsets.UTF_8));
+          } catch (Exception e) {
+            loggingService.logError("BulkGroupMemberships", "Failed to write download content: " + e.getMessage());
+          }
+        });
+
+    downloadLink.setHref(resource);
+    downloadLink.setVisible(true);
+  }
+
   public void clear() {
     groupNameField.clear();
     userBaseDnField.clear();
     groupBaseDnField.clear();
     userListArea.clear();
     operationComboBox.setValue("Add Members");
+    operationModeCombo.setValue("Execute Change");
     continueOnErrorCheckbox.setValue(true);
     permissiveModifyCheckbox.setValue(true);
-    hideProgress();
     downloadLink.setVisible(false);
+    hideProgress();
   }
 
   private void showSuccess(String message) {

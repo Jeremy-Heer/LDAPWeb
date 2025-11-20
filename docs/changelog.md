@@ -1,5 +1,19 @@
 # LDAP Web Browser
 
+## V0.24 - Enhance Bulk Operations
+  - Bulk - Import - Input CSV selected
+    - Rename dropdown option "Input CSV" to "Upload CSV"
+    - Add dropdown option "Enter CSV"
+      - Same as "Upload CSV" but Upload a CSV... is replaced with a text
+        area to paste the CSV content
+  - Using the "Operation Mode" found in Bulk / Search tab as an example
+    - Add "Operation Mode" with the same "Execute Change" or "Create LDIF" to
+      - Bulk / Import Tab replacing the Import CSV/LDIF buttons
+      - Bulk / Generate Tab replacing the Load button
+      - Bulk / Group Memberships Tab replacing the "Execute Operation" button.
+    - Each of the Bulk operations will have a consistent "Operation Mode" dropdown and Run button.
+
+
 ## v0.23.1 - Enhance Certificate Details dialogs
   - Add Extended Key Usage and Subjet Alternative Name to dialog.
   - And to both "View Details" dialog and "Validation Failed.." dialog.

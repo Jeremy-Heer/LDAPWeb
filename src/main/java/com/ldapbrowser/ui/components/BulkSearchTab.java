@@ -2,8 +2,10 @@ package com.ldapbrowser.ui.components;
 
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.ui.MainLayout;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
@@ -31,7 +33,10 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Search sub-tab for bulk operations on search results.
@@ -44,6 +49,7 @@ public class BulkSearchTab extends VerticalLayout {
 
   private final LdapService ldapService;
   private final LoggingService loggingService;
+  private final ConfigurationService configService;
 
   // Server configurations (multi-server support)
   private List<LdapServerConfig> serverConfigs;
@@ -70,9 +76,11 @@ public class BulkSearchTab extends VerticalLayout {
    * @param ldapService    the LDAP service
    * @param loggingService the logging service
    */
-  public BulkSearchTab(LdapService ldapService, LoggingService loggingService) {
+  public BulkSearchTab(LdapService ldapService, LoggingService loggingService,
+      ConfigurationService configService) {
     this.ldapService = ldapService;
     this.loggingService = loggingService;
+    this.configService = configService;
 
     initializeComponents();
     setupLayout();
@@ -185,6 +193,9 @@ public class BulkSearchTab extends VerticalLayout {
   }
 
   private void performBulkOperation() {
+    // Refresh server configs to get the latest selection
+    refreshServerConfigs();
+    
     if (serverConfigs == null || serverConfigs.isEmpty()) {
       showError("Please select at least one LDAP server");
       return;
@@ -496,6 +507,25 @@ public class BulkSearchTab extends VerticalLayout {
         searchBaseField.setValue(firstServer.getBaseDn());
       }
     }
+  }
+
+  /**
+   * Refreshes the server configurations from the current session.
+   * This ensures we always have the latest server selection.
+   */
+  private void refreshServerConfigs() {
+    Set<String> selectedServerNames = MainLayout.getSelectedServers();
+    List<LdapServerConfig> selectedServers = new ArrayList<>();
+    
+    // Load all configurations and filter by selected names
+    List<LdapServerConfig> allConfigs = configService.loadConfigurations();
+    for (LdapServerConfig config : allConfigs) {
+      if (selectedServerNames.contains(config.getName())) {
+        selectedServers.add(config);
+      }
+    }
+    
+    setServerConfigs(selectedServers);
   }
 
   public void clear() {

@@ -2,8 +2,10 @@ package com.ldapbrowser.ui.components;
 
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.ui.MainLayout;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
@@ -28,7 +30,10 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
+import com.vaadin.flow.server.StreamResource;
+import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.theme.lumo.LumoUtility;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,6 +41,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Import tab for importing LDAP data from LDIF and CSV files.
@@ -48,6 +54,7 @@ public class ImportTab extends VerticalLayout {
 
   private final LdapService ldapService;
   private final LoggingService loggingService;
+  private final ConfigurationService configService;
 
   // Server configurations (multi-server support)
   private List<LdapServerConfig> serverConfigs;
@@ -65,12 +72,15 @@ public class ImportTab extends VerticalLayout {
   private Checkbox ldifContinueOnError;
   private Checkbox ldifPermissiveModify;
   private Checkbox ldifNoOperation;
-  private Button ldifImportButton;
+  private ComboBox<String> ldifOperationModeCombo;
+  private Button ldifRunButton;
 
   // CSV Mode Components
   private VerticalLayout csvModeLayout;
+  private VerticalLayout csvInputContainer;
   private Upload csvUpload;
   private MemoryBuffer csvBuffer;
+  private TextArea csvTextArea;
   private Checkbox csvExcludeHeader;
   private Checkbox csvQuotedValues;
   private Checkbox csvContinueOnError;
@@ -84,7 +94,8 @@ public class ImportTab extends VerticalLayout {
   private TextField searchFilterField;
   private TextArea ldifTemplateArea;
   private TextArea previewLdifArea;
-  private Button csvImportButton;
+  private ComboBox<String> csvOperationModeCombo;
+  private Button csvRunButton;
 
   // CSV data and settings
   private List<Map<String, String>> csvData;
@@ -95,10 +106,14 @@ public class ImportTab extends VerticalLayout {
   // Progress
   private ProgressBar progressBar;
   private VerticalLayout progressContainer;
+  private Anchor ldifDownloadLink;
+  private Anchor csvDownloadLink;
 
-  public ImportTab(LdapService ldapService, LoggingService loggingService) {
+  public ImportTab(LdapService ldapService, LoggingService loggingService, 
+      ConfigurationService configService) {
     this.ldapService = ldapService;
     this.loggingService = loggingService;
+    this.configService = configService;
     this.csvData = new ArrayList<>();
     this.csvColumnOrder = new ArrayList<>();
     initializeComponents();
@@ -108,9 +123,20 @@ public class ImportTab extends VerticalLayout {
   private void initializeComponents() {
     // Import Mode Selector
     importModeSelector = new ComboBox<>("Import Type");
-    importModeSelector.setItems("Upload LDIF", "Enter LDIF", "Input CSV");
+    importModeSelector.setItems("Upload LDIF", "Enter LDIF", "Upload CSV", "Enter CSV");
     importModeSelector.setValue("Upload LDIF");
     importModeSelector.addValueChangeListener(e -> switchMode(e.getValue()));
+
+    // Initialize download links first (before mode components that use them)
+    ldifDownloadLink = new Anchor();
+    ldifDownloadLink.getElement().setAttribute("download", true);
+    ldifDownloadLink.setVisible(false);
+    ldifDownloadLink.add(new Button("Download LDIF", new Icon(VaadinIcon.DOWNLOAD)));
+
+    csvDownloadLink = new Anchor();
+    csvDownloadLink.getElement().setAttribute("download", true);
+    csvDownloadLink.setVisible(false);
+    csvDownloadLink.add(new Button("Download LDIF", new Icon(VaadinIcon.DOWNLOAD)));
 
     // Initialize mode-specific components
     initializeLdifModeComponents();
@@ -175,16 +201,28 @@ public class ImportTab extends VerticalLayout {
     ldifNoOperation = new Checkbox("No operation request control");
     ldifNoOperation.setValue(false);
 
-    ldifImportButton = new Button("Import LDIF", new Icon(VaadinIcon.UPLOAD));
-    ldifImportButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-    ldifImportButton.addClickListener(e -> performLdifImport());
-    ldifImportButton.setEnabled(false);
+    // LDIF Operation mode selector
+    ldifOperationModeCombo = new ComboBox<>("Operation Mode");
+    ldifOperationModeCombo.setItems("Execute Change", "Create LDIF");
+    ldifOperationModeCombo.setValue("Execute Change");
+    ldifOperationModeCombo.setWidthFull();
+
+    ldifRunButton = new Button("Run", new Icon(VaadinIcon.PLAY));
+    ldifRunButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    ldifRunButton.addClickListener(e -> performLdifImport());
+    ldifRunButton.setEnabled(false);
 
     // Initially show upload mode components
     ldifInputContainer.add(
         new Span("Upload an LDIF file to import LDAP entries"),
         ldifUpload);
     ldifTextArea.setVisible(false);
+
+    // LDIF Action layout
+    HorizontalLayout ldifActionLayout = new HorizontalLayout();
+    ldifActionLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    ldifActionLayout.setSpacing(true);
+    ldifActionLayout.add(ldifOperationModeCombo, ldifRunButton);
 
     ldifModeLayout.add(
         new H4("LDIF Import"),
@@ -193,7 +231,8 @@ public class ImportTab extends VerticalLayout {
         ldifContinueOnError,
         ldifPermissiveModify,
         ldifNoOperation,
-        ldifImportButton);
+        ldifActionLayout,
+        ldifDownloadLink);
   }
 
   private void initializeCsvModeComponents() {
@@ -201,6 +240,11 @@ public class ImportTab extends VerticalLayout {
     csvModeLayout.setPadding(true);
     csvModeLayout.setSpacing(true);
     csvModeLayout.addClassName("import-field-group");
+
+    // Container for CSV input components
+    csvInputContainer = new VerticalLayout();
+    csvInputContainer.setPadding(false);
+    csvInputContainer.setSpacing(true);
 
     // CSV Upload
     csvBuffer = new MemoryBuffer();
@@ -215,6 +259,29 @@ public class ImportTab extends VerticalLayout {
         processCsvFile();
       } catch (Exception ex) {
         showError("Error processing CSV file: " + ex.getMessage());
+      }
+    });
+
+    // CSV Text Area
+    csvTextArea = new TextArea("CSV Content");
+    csvTextArea.setWidthFull();
+    csvTextArea.setHeight("300px");
+    csvTextArea.setPlaceholder("Enter CSV content here...\n\nExample:\nuid,password\njdoe,Secret123\nmsmith,Pass456");
+    csvTextArea.addValueChangeListener(event -> {
+      rawCsvContent = event.getValue();
+      if (rawCsvContent != null && !rawCsvContent.trim().isEmpty()) {
+        try {
+          processCsvFile();
+        } catch (Exception ex) {
+          showError("Error processing CSV content: " + ex.getMessage());
+        }
+      } else {
+        // Clear preview if content is empty
+        csvData.clear();
+        csvPreviewGrid.setItems(csvData);
+        csvPreviewContainer.setVisible(false);
+        previewLdifArea.setValue("");
+        updateCsvImportButtonState();
       }
     });
 
@@ -308,15 +375,33 @@ public class ImportTab extends VerticalLayout {
     previewLdifArea.setReadOnly(true);
     previewLdifArea.setHelperText("Preview of the LDIF to be generated");
 
-    csvImportButton = new Button("Import CSV", new Icon(VaadinIcon.UPLOAD));
-    csvImportButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-    csvImportButton.addClickListener(e -> performCsvImport());
-    csvImportButton.setEnabled(false);
+    // CSV Operation mode selector
+    csvOperationModeCombo = new ComboBox<>("Operation Mode");
+    csvOperationModeCombo.setItems("Execute Change", "Create LDIF");
+    csvOperationModeCombo.setValue("Execute Change");
+    csvOperationModeCombo.setWidthFull();
+
+    csvRunButton = new Button("Run", new Icon(VaadinIcon.PLAY));
+    csvRunButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    csvRunButton.addClickListener(e -> performCsvImport());
+    csvRunButton.setEnabled(false);
+
+    // Initially show upload mode components
+    csvInputContainer.add(
+        new Span("Upload a CSV file to import LDAP entries"),
+        csvUpload);
+    csvTextArea.setVisible(false);
+
+    // CSV Action layout
+    HorizontalLayout csvActionLayout = new HorizontalLayout();
+    csvActionLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    csvActionLayout.setSpacing(true);
+    csvActionLayout.add(csvOperationModeCombo, csvRunButton);
 
     csvModeLayout.add(
-        new H4("Input CSV Import"),
-        new Span("Upload a CSV file to import LDAP entries"),
-        csvUpload,
+        new H4("CSV Import"),
+        csvInputContainer,
+        csvTextArea,
         csvExcludeHeader,
         csvQuotedValues,
         csvContinueOnError,
@@ -327,7 +412,8 @@ public class ImportTab extends VerticalLayout {
         dnMethodContainer,
         ldifTemplateArea,
         previewLdifArea,
-        csvImportButton);
+        csvActionLayout,
+        csvDownloadLink);
   }
 
   private void setupLayout() {
@@ -384,7 +470,22 @@ public class ImportTab extends VerticalLayout {
       ldifTextArea.setVisible(true);
       rawLdifContent = ldifTextArea.getValue();
       modeContainer.add(ldifModeLayout);
-    } else if ("Input CSV".equals(mode)) {
+    } else if ("Upload CSV".equals(mode)) {
+      // Show upload components, hide text area
+      csvInputContainer.removeAll();
+      csvInputContainer.add(
+          new Span("Upload a CSV file to import LDAP entries"),
+          csvUpload);
+      csvTextArea.setVisible(false);
+      csvTextArea.setValue("");
+      rawCsvContent = null;
+      modeContainer.add(csvModeLayout);
+    } else if ("Enter CSV".equals(mode)) {
+      // Show text area, hide upload components
+      csvInputContainer.removeAll();
+      csvInputContainer.add(new Span("Enter CSV content directly below"));
+      csvTextArea.setVisible(true);
+      rawCsvContent = csvTextArea.getValue();
       modeContainer.add(csvModeLayout);
     }
     
@@ -405,7 +506,24 @@ public class ImportTab extends VerticalLayout {
       rawLdifContent = textContent;
     }
     
-    ldifImportButton.setEnabled(hasContent);
+    ldifRunButton.setEnabled(hasContent);
+  }
+
+  private void updateCsvImportButtonState() {
+    boolean hasContent = false;
+    
+    String currentMode = importModeSelector.getValue();
+    if ("Upload CSV".equals(currentMode)) {
+      // Check if file has been uploaded
+      hasContent = rawCsvContent != null && !rawCsvContent.trim().isEmpty();
+    } else if ("Enter CSV".equals(currentMode)) {
+      // Check if text area has content
+      String textContent = csvTextArea.getValue();
+      hasContent = textContent != null && !textContent.trim().isEmpty();
+      rawCsvContent = textContent;
+    }
+    
+    csvRunButton.setEnabled(hasContent && !csvData.isEmpty());
   }
 
   private void switchDnMethod(String method) {
@@ -437,8 +555,13 @@ public class ImportTab extends VerticalLayout {
   private void processCsvFile() throws Exception {
     String content;
 
-    // If this is the first time processing, read from the input stream
-    if (rawCsvContent == null) {
+    String currentMode = importModeSelector.getValue();
+    if ("Enter CSV".equals(currentMode)) {
+      // Use text area content
+      content = csvTextArea.getValue();
+      rawCsvContent = content;
+    } else if (rawCsvContent == null) {
+      // If this is the first time processing from upload, read from the input stream
       content = new String(csvBuffer.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
       rawCsvContent = content;
     } else {
@@ -504,7 +627,7 @@ public class ImportTab extends VerticalLayout {
 
     csvPreviewGrid.setItems(csvData);
     csvPreviewContainer.setVisible(true);
-    csvImportButton.setEnabled(true);
+    updateCsvImportButtonState();
 
     String excludeText = csvExcludeHeader.getValue() ? " (header row excluded)" : "";
     String quoteText = csvQuotedValues.getValue() ? " (quotes removed)" : "";
@@ -592,6 +715,9 @@ public class ImportTab extends VerticalLayout {
   }
 
   private void performLdifImport() {
+    // Refresh server configs to get the latest selection
+    refreshServerConfigs();
+    
     if (serverConfigs == null || serverConfigs.isEmpty()) {
       showError("Please select at least one LDAP server first");
       return;
@@ -599,6 +725,17 @@ public class ImportTab extends VerticalLayout {
 
     if (rawLdifContent == null || rawLdifContent.trim().isEmpty()) {
       showError("Please provide LDIF content to import");
+      return;
+    }
+
+    String operationMode = ldifOperationModeCombo.getValue();
+
+    // Check if we're in Create LDIF mode
+    if ("Create LDIF".equals(operationMode)) {
+      // Simply provide the LDIF content for download
+      createLdifDownloadLink(rawLdifContent, "ldif-import.ldif");
+      showSuccess("LDIF prepared for download");
+      loggingService.logInfo("IMPORT", "LDIF content prepared for download");
       return;
     }
 
@@ -755,6 +892,9 @@ public class ImportTab extends VerticalLayout {
   }
 
   private void performCsvImport() {
+    // Refresh server configs to get the latest selection
+    refreshServerConfigs();
+    
     if (serverConfigs == null || serverConfigs.isEmpty()) {
       showError("Please select at least one LDAP server first");
       return;
@@ -763,6 +903,64 @@ public class ImportTab extends VerticalLayout {
     if (csvData.isEmpty()) {
       showError("Please upload a CSV file first");
       return;
+    }
+
+    String operationMode = csvOperationModeCombo.getValue();
+
+    // Check if we're in Create LDIF mode
+    if ("Create LDIF".equals(operationMode)) {
+      try {
+        // Generate LDIF for all CSV rows
+        StringBuilder fullLdif = new StringBuilder();
+        String template = ldifTemplateArea.getValue();
+        String dnMethod = dnMethodSelector.getValue();
+        
+        fullLdif.append("# LDIF generated from CSV import\n");
+        fullLdif.append("# Server: ").append(serverConfigs.get(0).getName()).append("\n");
+        fullLdif.append("# Rows: ").append(csvData.size()).append("\n");
+        fullLdif.append("# Generated: ").append(java.time.LocalDateTime.now()).append("\n\n");
+
+        for (Map<String, String> row : csvData) {
+          String dn;
+          if ("CSV Column".equals(dnMethod)) {
+            // Use first column as DN
+            dn = row.getOrDefault("C1", "");
+            if (dn.isEmpty()) {
+              throw new Exception("DN column (C1) is empty");
+            }
+          } else {
+            // For search method in Create LDIF mode, we can't actually search
+            // So use a placeholder
+            dn = "cn=USER_FROM_SEARCH,ou=people,dc=example,dc=com";
+          }
+
+          // Generate LDIF for this row
+          Map<String, String> variables = new HashMap<>(row);
+          variables.put("DN", dn);
+          String ldifEntry = substituteVariables(template, variables);
+          
+          if (ldifEntry != null && !ldifEntry.trim().isEmpty()) {
+            fullLdif.append(ldifEntry);
+            // Ensure proper separation between LDIF records (double newline)
+            if (!ldifEntry.endsWith("\n\n")) {
+              if (ldifEntry.endsWith("\n")) {
+                fullLdif.append("\n");
+              } else {
+                fullLdif.append("\n\n");
+              }
+            }
+          }
+        }
+
+        createCsvDownloadLink(fullLdif.toString(), "csv-import.ldif");
+        showSuccess("LDIF generated from " + csvData.size() + " CSV rows and prepared for download");
+        loggingService.logInfo("IMPORT", "CSV converted to LDIF for download (" + csvData.size() + " rows)");
+        return;
+      } catch (Exception e) {
+        showError("Error generating LDIF from CSV: " + e.getMessage());
+        loggingService.logError("IMPORT", "Failed to generate LDIF from CSV: " + e.getMessage());
+        return;
+      }
     }
 
     showProgress();
@@ -944,16 +1142,34 @@ public class ImportTab extends VerticalLayout {
     }
   }
 
+  private void createLdifDownloadLink(String content, String fileName) {
+    StreamResource resource = new StreamResource(fileName,
+        () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+
+    ldifDownloadLink.setHref(resource);
+    ldifDownloadLink.setVisible(true);
+  }
+
+  private void createCsvDownloadLink(String content, String fileName) {
+    StreamResource resource = new StreamResource(fileName,
+        () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+
+    csvDownloadLink.setHref(resource);
+    csvDownloadLink.setVisible(true);
+  }
+
   private void showProgress() {
     progressContainer.setVisible(true);
-    ldifImportButton.setEnabled(false);
-    csvImportButton.setEnabled(false);
+    ldifRunButton.setEnabled(false);
+    csvRunButton.setEnabled(false);
+    ldifDownloadLink.setVisible(false);
+    csvDownloadLink.setVisible(false);
   }
 
   private void hideProgress() {
     progressContainer.setVisible(false);
-    ldifImportButton.setEnabled(rawLdifContent != null);
-    csvImportButton.setEnabled(!csvData.isEmpty());
+    updateLdifImportButtonState();
+    updateCsvImportButtonState();
   }
 
   /**
@@ -965,14 +1181,34 @@ public class ImportTab extends VerticalLayout {
     this.serverConfigs = serverConfigs;
   }
 
+  /**
+   * Refreshes the server configurations from the current session.
+   * This ensures we always have the latest server selection.
+   */
+  private void refreshServerConfigs() {
+    Set<String> selectedServerNames = MainLayout.getSelectedServers();
+    List<LdapServerConfig> selectedServers = new ArrayList<>();
+    
+    // Load all configurations and filter by selected names
+    List<LdapServerConfig> allConfigs = configService.loadConfigurations();
+    for (LdapServerConfig config : allConfigs) {
+      if (selectedServerNames.contains(config.getName())) {
+        selectedServers.add(config);
+      }
+    }
+    
+    this.serverConfigs = selectedServers;
+  }
+
   public void clear() {
     rawLdifContent = null;
     rawCsvContent = null;
     csvData.clear();
     csvColumnOrder.clear();
     ldifTextArea.setValue("");
-    ldifImportButton.setEnabled(false);
-    csvImportButton.setEnabled(false);
+    csvTextArea.setValue("");
+    ldifRunButton.setEnabled(false);
+    csvRunButton.setEnabled(false);
     csvPreviewContainer.setVisible(false);
     previewLdifArea.setValue("");
     ldifTemplateArea.setValue("dn: {DN}\nchangetype: modify\nreplace: userpassword\nuserpassword: {C2}");

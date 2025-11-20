@@ -8,6 +8,7 @@ import com.unboundid.ldif.LDIFChangeRecord;
 import com.unboundid.ldif.LDIFReader;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
@@ -19,6 +20,8 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
+import com.vaadin.flow.component.html.Anchor;
+import com.vaadin.flow.server.StreamResource;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -40,11 +43,13 @@ public class BulkGenerateTab extends VerticalLayout {
   private IntegerField countEndField;
   private TextArea ldifTemplateArea;
   private TextArea ldifPreviewArea;
-  private Button loadButton;
+  private ComboBox<String> operationModeCombo;
+  private Button runButton;
 
   // Progress
   private ProgressBar progressBar;
   private VerticalLayout progressContainer;
+  private Anchor downloadLink;
 
   public BulkGenerateTab(LdapService ldapService, LoggingService loggingService) {
     this.ldapService = ldapService;
@@ -98,10 +103,16 @@ public class BulkGenerateTab extends VerticalLayout {
     ldifPreviewArea.setReadOnly(true);
     ldifPreviewArea.setHelperText("Preview of the first few LDIF entries to be generated");
 
-    // Load button
-    loadButton = new Button("Load", new Icon(VaadinIcon.UPLOAD));
-    loadButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-    loadButton.addClickListener(e -> performBulkGenerate());
+    // Operation mode selector
+    operationModeCombo = new ComboBox<>("Operation Mode");
+    operationModeCombo.setItems("Execute Change", "Create LDIF");
+    operationModeCombo.setValue("Execute Change");
+    operationModeCombo.setWidthFull();
+
+    // Run button
+    runButton = new Button("Run", new Icon(VaadinIcon.PLAY));
+    runButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    runButton.addClickListener(e -> performBulkGenerate());
 
     // Progress components
     progressBar = new ProgressBar();
@@ -113,6 +124,12 @@ public class BulkGenerateTab extends VerticalLayout {
     progressContainer.setDefaultHorizontalComponentAlignment(Alignment.CENTER);
     progressContainer.add(new Span("Generating and importing entries..."), progressBar);
     progressContainer.setVisible(false);
+
+    // Download link (for LDIF output)
+    downloadLink = new Anchor();
+    downloadLink.getElement().setAttribute("download", true);
+    downloadLink.setVisible(false);
+    downloadLink.add(new Button("Download LDIF", new Icon(VaadinIcon.DOWNLOAD)));
 
     // Initial preview update
     updatePreview();
@@ -140,7 +157,7 @@ public class BulkGenerateTab extends VerticalLayout {
     HorizontalLayout actionLayout = new HorizontalLayout();
     actionLayout.setDefaultVerticalComponentAlignment(Alignment.END);
     actionLayout.setSpacing(true);
-    actionLayout.add(loadButton);
+    actionLayout.add(operationModeCombo, runButton);
 
     contentLayout.add(
         new H4("Bulk Generate Operations"),
@@ -149,7 +166,8 @@ public class BulkGenerateTab extends VerticalLayout {
         ldifTemplateArea,
         ldifPreviewArea,
         actionLayout,
-        progressContainer);
+        progressContainer,
+        downloadLink);
 
     add(contentLayout);
     setFlexGrow(1, contentLayout);
@@ -224,12 +242,41 @@ public class BulkGenerateTab extends VerticalLayout {
       return;
     }
 
+    String operationMode = operationModeCombo.getValue();
     int totalEntries = endCount - startCount + 1;
 
-    loggingService.logInfo("BULK_GENERATE", "Starting bulk generation to " + serverConfigs.size() 
-        + " server(s) - Start: " + startCount + ", End: " + endCount + ", Total: " + totalEntries);
+    loggingService.logInfo("BULK_GENERATE", "Starting bulk generation - Mode: " + operationMode 
+        + ", Servers: " + serverConfigs.size() + ", Start: " + startCount + ", End: " + endCount 
+        + ", Total: " + totalEntries);
 
     showProgress();
+
+    // Check if we're in Create LDIF mode
+    if ("Create LDIF".equals(operationMode)) {
+      try {
+        StringBuilder combinedLdif = new StringBuilder();
+
+        // Generate LDIF for all entries
+        for (int currentCount = startCount; currentCount <= endCount; currentCount++) {
+          String ldif = template.replace("{COUNT}", String.valueOf(currentCount));
+          if (combinedLdif.length() > 0) {
+            combinedLdif.append("\n\n");
+          }
+          combinedLdif.append(ldif);
+        }
+
+        hideProgress();
+        createDownloadLink(combinedLdif.toString(), "bulk-generate.ldif");
+        showSuccess("LDIF generated successfully for " + totalEntries + " entries");
+        loggingService.logInfo("BULK_GENERATE", "LDIF generated for " + totalEntries + " entries");
+        return;
+      } catch (Exception e) {
+        hideProgress();
+        showError("Failed to generate LDIF: " + e.getMessage());
+        loggingService.logError("BULK_GENERATE", "LDIF generation failed", e.getMessage());
+        return;
+      }
+    }
 
     int totalSuccessCount = 0;
     int totalErrorCount = 0;
@@ -341,14 +388,23 @@ public class BulkGenerateTab extends VerticalLayout {
     }
   }
 
+  private void createDownloadLink(String content, String fileName) {
+    StreamResource resource = new StreamResource(fileName,
+        () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+
+    downloadLink.setHref(resource);
+    downloadLink.setVisible(true);
+  }
+
   private void showProgress() {
     progressContainer.setVisible(true);
-    loadButton.setEnabled(false);
+    runButton.setEnabled(false);
+    downloadLink.setVisible(false);
   }
 
   private void hideProgress() {
     progressContainer.setVisible(false);
-    loadButton.setEnabled(true);
+    runButton.setEnabled(true);
   }
 
   /**
@@ -372,6 +428,8 @@ public class BulkGenerateTab extends VerticalLayout {
         "uid: user.{COUNT}\n" +
         "cn: user.{COUNT}\n" +
         "sn: user.{COUNT}");
+    operationModeCombo.setValue("Execute Change");
+    downloadLink.setVisible(false);
     hideProgress();
     updatePreview();
   }
