@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.util.AciParser;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -890,33 +891,10 @@ public class EntryAccessControlTab extends VerticalLayout {
      * Shows a dialog with LDAP tree browser for DN selection.
      */
     private void showDnBrowserDialog() {
-      Dialog browserDialog = new Dialog();
-      browserDialog.setHeaderTitle("Select Entry DN");
-      browserDialog.setWidth("800px");
-      browserDialog.setHeight("600px");
-
-      LdapTreeBrowser treeBrowser = new LdapTreeBrowser(ldapService);
-      treeBrowser.setServerConfigs(new ArrayList<>(selectedServers));
-      treeBrowser.loadServers();
-      treeBrowser.setSizeFull();
-
-      browserDialog.add(treeBrowser);
-
-      Button selectButton = new Button("Select", event -> {
-        String selectedDn = treeBrowser.getSelectedDn();
-        if (selectedDn != null && !selectedDn.isEmpty()) {
-          targetDnField.setValue(selectedDn);
-          browserDialog.close();
-        } else {
-          showError("Please select an entry from the tree");
-        }
-      });
-      selectButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-      Button cancelButton = new Button("Cancel", event -> browserDialog.close());
-
-      browserDialog.getFooter().add(cancelButton, selectButton);
-      browserDialog.open();
+      new DnBrowserDialog(ldapService)
+          .withServerConfigs(new ArrayList<>(selectedServers))
+          .onDnSelected(dn -> targetDnField.setValue(dn))
+          .open();
     }
 
     private void updateAddButtonState() {

@@ -1,5 +1,120 @@
 # LDAP Web Browser
 
+## v0.25 - DN Browser Dialog Refactoring & Standardization
+
+### Overview
+Major refactoring to eliminate code duplication and standardize the DN browser dialog experience across the application. This release addresses inconsistent titles, missing auto-refresh functionality, and creates a reusable dialog component following best practices.
+
+### ✅ Code Quality Improvements
+
+#### 1. **Created Reusable `DnBrowserDialog` Component**
+- ✅ Created new `ui/dialogs` package for dialog components
+- ✅ Implemented `DnBrowserDialog.java` - reusable DN selection dialog
+- ✅ **Features:**
+  - Fluent API for easy configuration (method chaining)
+  - Automatic tree refresh when dialog opens (fixes manual refresh requirement)
+  - Built-in validation support with custom predicates
+  - Support for both single and multiple server configurations
+  - Standardized 800x600px size with draggable/resizable options
+  - Consistent button layout (Cancel, Select)
+  - DN validation (filters out placeholders, pagination controls, server nodes)
+
+#### 2. **Eliminated Code Duplication**
+- ✅ **Removed ~200+ lines of duplicated code** across 8 files
+- ✅ Refactored implementations in:
+  - `BulkSearchTab.java` - Search base DN selection
+  - `BulkGroupMembershipsTab.java` - User/group base DN selection
+  - `ExportTab.java` - Export search base DN selection (both modes)
+  - `EffectiveRightsTab.java` - Search base and effective rights user DN selection
+  - `AciBuilderDialog.java` - Target DN selection with preview update
+  - `EntryAccessControlTab.java` - Entry DN selection for ACI management
+  - `SearchView.java` - Search base DN selection with validation
+  - `Create.java` view - Parent DN selection with validation
+
+#### 3. **Standardized Dialog Titles**
+- ✅ **Before:** Inconsistent titles across the application
+  - "Browse LDAP Directory" (BulkSearchTab, BulkGroupMembershipsTab)
+  - "Select DN from LDAP Tree" (ExportTab)
+  - "Select DN from Directory" (EffectiveRightsTab, AciBuilderDialog, SearchView)
+  - "Select Entry DN" (EntryAccessControlTab)
+  
+- ✅ **After:** Consistent title everywhere
+  - **Default:** "Select DN from Directory"
+  - **Customizable:** "Select Parent DN" (Create view)
+  - Single point of control for future title changes
+
+#### 4. **Fixed Auto-Refresh Issue**
+- ✅ **Problem:** Several implementations required manual refresh button click to display servers
+  - `BulkSearchTab` did not call `loadServers()`
+  - `BulkGroupMembershipsTab` did not call `loadServers()`
+  - Dialog would open empty, confusing users
+  
+- ✅ **Solution:** `DnBrowserDialog` automatically calls `loadServers()` in:
+  - `withServerConfig()` method
+  - `withServerConfigs()` method
+  - Tree refreshes immediately when dialog opens
+
+#### 5. **Added Validation Support**
+- ✅ Built-in validation framework with `withValidation()` method
+- ✅ Custom validation predicates for different contexts:
+  - `SearchView`: Prevents selection of server nodes or Root DSE
+  - `Create` view: Prevents selection of server nodes or Root DSE for parent DN
+  - Displays user-friendly error messages
+  - Prevents invalid selections from being accepted
+
+### Technical Benefits
+
+1. **Maintainability**
+   - Single source of truth for DN browser dialog behavior
+   - Future improvements benefit all usages simultaneously
+   - Easier to test and debug
+
+2. **Consistency**
+   - Uniform user experience across all features
+   - Standardized keyboard shortcuts and interactions
+   - Predictable behavior reduces user confusion
+
+3. **Developer Experience**
+   - Fluent API is intuitive and self-documenting
+   - Reduces boilerplate code in new features
+   - Example usage patterns clearly documented
+
+### Example Usage
+
+```java
+// Simple usage
+new DnBrowserDialog(ldapService)
+    .withServerConfigs(serverConfigs)
+    .onDnSelected(dn -> targetField.setValue(dn))
+    .open();
+
+// With validation
+new DnBrowserDialog(ldapService)
+    .withServerConfigs(selectedConfigs)
+    .withValidation(
+        entry -> isValidDnForSearch(entry),
+        "Please select a valid DN (not a server or Root DSE)"
+    )
+    .onDnSelected(dn -> searchBaseField.setValue(dn))
+    .open();
+
+// Custom title with callback and action
+new DnBrowserDialog(ldapService, "Select Parent DN")
+    .withServerConfig(serverConfig)
+    .onDnSelected(dn -> {
+        parentDnField.setValue(dn);
+        updatePreview();
+    })
+    .open();
+```
+
+### Impact Summary
+- **Code Reduction:** Eliminated ~200+ lines of duplicated code
+- **Files Improved:** 8 components/views refactored
+- **Bug Fixes:** Auto-refresh now works universally
+- **Consistency:** 4 different title variants → 1 standardized title
+- **Future Proof:** Centralized component for easy enhancements
+
 ## V0.24 - Enhance Bulk Operations
   - Bulk - Import - Input CSV selected
     - Rename dropdown option "Input CSV" to "Upload CSV"

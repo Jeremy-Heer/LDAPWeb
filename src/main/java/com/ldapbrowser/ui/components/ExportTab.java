@@ -5,6 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
@@ -324,29 +325,7 @@ public class ExportTab extends VerticalLayout {
   }
 
   private void initializeDnSelectionDialog() {
-    dnSelectionDialog = new Dialog();
-    dnSelectionDialog.setHeaderTitle("Select DN from LDAP Tree");
-    dnSelectionDialog.setWidth("800px");
-    dnSelectionDialog.setHeight("600px");
-
-    // Create LDAP tree browser
-    ldapTreeBrowser = new LdapTreeBrowser(ldapService);
-    ldapTreeBrowser.setSizeFull();
-
-    // Listen for selection events
-    ldapTreeBrowser.addSelectionListener(event -> {
-      String selectedDn = event.getSelectedDn();
-      if (selectedDn != null) {
-        searchBaseField.setValue(selectedDn);
-        dnSelectionDialog.close();
-      }
-    });
-
-    Button closeButton = new Button("Close", e -> dnSelectionDialog.close());
-    closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-
-    dnSelectionDialog.add(ldapTreeBrowser);
-    dnSelectionDialog.getFooter().add(closeButton);
+    // DN selection dialog is now created on-demand using DnBrowserDialog
   }
 
   private void showDnSelectionDialog(boolean forCsvMode) {

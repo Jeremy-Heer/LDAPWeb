@@ -5,6 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -440,73 +441,14 @@ public class Create extends VerticalLayout {
       return;
     }
 
-    // Create dialog with tree browser
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Select DN from Directory");
-    dialog.setWidth("800px");
-    dialog.setHeight("600px");
-    dialog.setModal(true);
-    dialog.setCloseOnOutsideClick(false);
-
-    // Create the tree browser component
-    com.ldapbrowser.ui.components.LdapTreeBrowser treeBrowser = 
-        new com.ldapbrowser.ui.components.LdapTreeBrowser(ldapService);
-
-    // Load the tree with all selected server configurations
-    try {
-      treeBrowser.setServerConfigs(selectedConfigs);
-      treeBrowser.loadServers();
-    } catch (Exception ex) {
-      Notification notification = Notification.show(
-          "Failed to load LDAP tree: " + ex.getMessage(),
-          5000,
-          Notification.Position.MIDDLE);
-      notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-      dialog.close();
-      return;
-    }
-
-    // Handle entry selection
-    treeBrowser.addSelectionListener(event -> {
-      LdapEntry selectedEntry = event.getSelectedEntry();
-      if (selectedEntry != null && isValidDnForParent(selectedEntry)) {
-        parentDnField.setValue(selectedEntry.getDn());
-        dialog.close();
-      }
-    });
-
-    // Add buttons
-    Button selectButton = new Button("Select", e -> {
-      LdapEntry selectedEntry = treeBrowser.getSelectedEntry();
-      if (selectedEntry != null && isValidDnForParent(selectedEntry)) {
-        parentDnField.setValue(selectedEntry.getDn());
-        dialog.close();
-      } else if (selectedEntry != null) {
-        Notification.show("Please select a valid DN (not a server or Root DSE)",
-            3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
-      } else {
-        Notification.show("Please select an entry",
-            3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
-      }
-    });
-    selectButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-
-    HorizontalLayout buttonLayout = new HorizontalLayout(cancelButton, selectButton);
-    buttonLayout.setJustifyContentMode(JustifyContentMode.END);
-    buttonLayout.setWidthFull();
-
-    VerticalLayout dialogLayout = new VerticalLayout(treeBrowser, buttonLayout);
-    dialogLayout.setSizeFull();
-    dialogLayout.setPadding(false);
-    dialogLayout.setSpacing(false);
-    dialogLayout.setFlexGrow(1, treeBrowser);
-
-    dialog.add(dialogLayout);
-    dialog.open();
+    new DnBrowserDialog(ldapService, "Select Parent DN")
+        .withServerConfigs(selectedConfigs)
+        .withValidation(
+            entry -> isValidDnForParent(entry),
+            "Please select a valid DN (not a server or Root DSE)"
+        )
+        .onDnSelected(dn -> parentDnField.setValue(dn))
+        .open();
   }
 
   /**

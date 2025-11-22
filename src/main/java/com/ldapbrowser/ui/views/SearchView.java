@@ -5,6 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
 import com.ldapbrowser.ui.components.EntryEditor;
 import com.unboundid.ldap.sdk.LDAPException;
@@ -581,71 +582,14 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
       return;
     }
 
-    // Create dialog with tree browser
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Select DN from Directory");
-    dialog.setWidth("800px");
-    dialog.setHeight("600px");
-    dialog.setModal(true);
-    dialog.setCloseOnOutsideClick(false);
-
-    // Create the tree browser component
-    com.ldapbrowser.ui.components.LdapTreeBrowser treeBrowser = 
-        new com.ldapbrowser.ui.components.LdapTreeBrowser(ldapService);
-
-    // Load the tree with all selected server configurations
-    try {
-      treeBrowser.setServerConfigs(selectedConfigs);
-      treeBrowser.loadServers();
-    } catch (Exception ex) {
-      logger.error("Failed to load tree for DN selector", ex);
-      Notification notification = Notification.show(
-          "Failed to load LDAP tree: " + ex.getMessage(),
-          5000,
-          Notification.Position.MIDDLE);
-      notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-      dialog.close();
-      return;
-    }
-
-    // Handle entry selection - only allow actual LDAP entries (not server nodes or Root DSE)
-    treeBrowser.addSelectionListener(event -> {
-      LdapEntry selectedEntry = event.getSelectedEntry();
-      if (selectedEntry != null && isValidDnForSearch(selectedEntry)) {
-        searchBaseField.setValue(selectedEntry.getDn());
-        dialog.close();
-      }
-    });
-
-    // Add buttons
-    Button selectButton = new Button("Select", e -> {
-      // Get the selected entry from the tree
-      LdapEntry selectedEntry = treeBrowser.getSelectedEntry();
-      if (selectedEntry != null && isValidDnForSearch(selectedEntry)) {
-        searchBaseField.setValue(selectedEntry.getDn());
-        dialog.close();
-      } else if (selectedEntry != null) {
-        Notification.show("Please select a valid DN (not a server or Root DSE)",
-            3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
-      }
-    });
-    selectButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-
-    HorizontalLayout buttons = new HorizontalLayout(selectButton, cancelButton);
-    buttons.setJustifyContentMode(JustifyContentMode.END);
-    buttons.setPadding(true);
-
-    VerticalLayout dialogLayout = new VerticalLayout(treeBrowser, buttons);
-    dialogLayout.setSizeFull();
-    dialogLayout.setPadding(false);
-    dialogLayout.setSpacing(false);
-    dialogLayout.expand(treeBrowser);
-
-    dialog.add(dialogLayout);
-    dialog.open();
+    new DnBrowserDialog(ldapService)
+        .withServerConfigs(selectedConfigs)
+        .withValidation(
+            entry -> isValidDnForSearch(entry),
+            "Please select a valid DN (not a server or Root DSE)"
+        )
+        .onDnSelected(dn -> searchBaseField.setValue(dn))
+        .open();
   }
 
   /**

@@ -2,6 +2,7 @@ package com.ldapbrowser.ui.components;
 
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -272,40 +273,10 @@ public class EffectiveRightsTab extends VerticalLayout {
       return;
     }
 
-    Dialog browserDialog = new Dialog();
-    browserDialog.setHeaderTitle("Select DN from Directory");
-    browserDialog.setModal(true);
-    browserDialog.setDraggable(true);
-    browserDialog.setResizable(true);
-    browserDialog.setWidth("800px");
-    browserDialog.setHeight("600px");
-
-    // Create tree browser
-    LdapTreeBrowser treeBrowser = new LdapTreeBrowser(ldapService);
-    treeBrowser.setServerConfigs(new ArrayList<>(selectedServers));
-    treeBrowser.loadServers();
-    treeBrowser.setSizeFull();
-
-    // Add selection listener
-    treeBrowser.addSelectionListener(event -> {
-      String selectedDn = event.getSelectedDn();
-      if (selectedDn != null) {
-        targetField.setValue(selectedDn);
-        browserDialog.close();
-      }
-    });
-
-    VerticalLayout content = new VerticalLayout(treeBrowser);
-    content.setSizeFull();
-    content.setPadding(false);
-    content.setSpacing(false);
-
-    browserDialog.add(content);
-
-    Button cancelButton = new Button("Cancel", e -> browserDialog.close());
-    browserDialog.getFooter().add(cancelButton);
-
-    browserDialog.open();
+    new DnBrowserDialog(ldapService)
+        .withServerConfigs(new ArrayList<>(selectedServers))
+        .onDnSelected(dn -> targetField.setValue(dn))
+        .open();
   }
 
   /**

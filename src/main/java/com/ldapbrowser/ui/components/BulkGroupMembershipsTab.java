@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -772,30 +773,10 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
       return;
     }
 
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Browse LDAP Directory");
-    dialog.setWidth("800px");
-    dialog.setHeight("600px");
-
-    LdapTreeBrowser browser = new LdapTreeBrowser(ldapService);
-    browser.setSizeFull();
-    
-    // Set first server config
-    browser.setServerConfig(serverConfigs.get(0));
-    
-    browser.addSelectionListener(event -> {
-      if (event.getSelectedDn() != null) {
-        targetField.setValue(event.getSelectedDn());
-        dialog.close();
-      }
-    });
-
-    dialog.add(browser);
-    
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-    dialog.getFooter().add(cancelButton);
-    
-    dialog.open();
+    new DnBrowserDialog(ldapService)
+        .withServerConfigs(serverConfigs)
+        .onDnSelected(dn -> targetField.setValue(dn))
+        .open();
   }
 
   private String generateGroupMembershipLdif(LdapServerConfig serverConfig, String groupName,

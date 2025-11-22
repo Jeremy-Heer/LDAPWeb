@@ -6,6 +6,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
@@ -551,30 +552,10 @@ public class BulkSearchTab extends VerticalLayout {
       return;
     }
 
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Browse LDAP Directory");
-    dialog.setWidth("800px");
-    dialog.setHeight("600px");
-
-    LdapTreeBrowser browser = new LdapTreeBrowser(ldapService);
-    browser.setSizeFull();
-    
-    // Set first server config
-    browser.setServerConfig(serverConfigs.get(0));
-    
-    browser.addSelectionListener(event -> {
-      if (event.getSelectedDn() != null) {
-        targetField.setValue(event.getSelectedDn());
-        dialog.close();
-      }
-    });
-
-    dialog.add(browser);
-    
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-    dialog.getFooter().add(cancelButton);
-    
-    dialog.open();
+    new DnBrowserDialog(ldapService)
+        .withServerConfigs(serverConfigs)
+        .onDnSelected(dn -> targetField.setValue(dn))
+        .open();
   }
 
   private void showSuccess(String message) {
