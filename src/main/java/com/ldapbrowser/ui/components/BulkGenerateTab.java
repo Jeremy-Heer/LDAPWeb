@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldif.LDIFChangeRecord;
 import com.unboundid.ldif.LDIFReader;
 import com.vaadin.flow.component.button.Button;
@@ -13,8 +14,6 @@ import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
@@ -214,7 +213,7 @@ public class BulkGenerateTab extends VerticalLayout {
 
   private void performBulkGenerate() {
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("Please select at least one LDAP server");
+      NotificationHelper.showError("Please select at least one LDAP server");
       return;
     }
 
@@ -223,22 +222,22 @@ public class BulkGenerateTab extends VerticalLayout {
     String template = ldifTemplateArea.getValue();
 
     if (startCount == null) {
-      showError("Count Start is required");
+      NotificationHelper.showError("Count Start is required");
       return;
     }
 
     if (endCount == null) {
-      showError("Count End is required");
+      NotificationHelper.showError("Count End is required");
       return;
     }
 
     if (startCount > endCount) {
-      showError("Count Start must be less than or equal to Count End");
+      NotificationHelper.showError("Count Start must be less than or equal to Count End");
       return;
     }
 
     if (template == null || template.trim().isEmpty()) {
-      showError("LDIF Template is required");
+      NotificationHelper.showError("LDIF Template is required");
       return;
     }
 
@@ -267,12 +266,12 @@ public class BulkGenerateTab extends VerticalLayout {
 
         hideProgress();
         createDownloadLink(combinedLdif.toString(), "bulk-generate.ldif");
-        showSuccess("LDIF generated successfully for " + totalEntries + " entries");
+        NotificationHelper.showSuccess("LDIF generated successfully for " + totalEntries + " entries");
         loggingService.logInfo("BULK_GENERATE", "LDIF generated for " + totalEntries + " entries");
         return;
       } catch (Exception e) {
         hideProgress();
-        showError("Failed to generate LDIF: " + e.getMessage());
+        NotificationHelper.showError("Failed to generate LDIF: " + e.getMessage());
         loggingService.logError("BULK_GENERATE", "LDIF generation failed", e.getMessage());
         return;
       }
@@ -377,13 +376,13 @@ public class BulkGenerateTab extends VerticalLayout {
       loggingService.logWarning("BULK_GENERATE", "Bulk generation completed with errors - " +
           totalSuccessCount + " successes and " + totalErrorCount + " errors across " + 
           serverConfigs.size() + " server(s)");
-      showInfo("Bulk generation completed with " + totalSuccessCount + " successes and " + 
+      NotificationHelper.showInfo("Bulk generation completed with " + totalSuccessCount + " successes and " + 
           totalErrorCount + " errors across " + serverConfigs.size() + " server(s)" + 
           (errorDetails.length() > 0 ? errorDetails.toString() : ""));
     } else {
       loggingService.logInfo("BULK_GENERATE", "Bulk generation completed successfully - " +
           totalSuccessCount + " entries created across " + serverConfigs.size() + " server(s)");
-      showSuccess("Bulk generation completed successfully. " + totalSuccessCount + 
+      NotificationHelper.showSuccess("Bulk generation completed successfully. " + totalSuccessCount + 
           " entries created across " + serverConfigs.size() + " server(s)");
     }
   }
@@ -432,20 +431,5 @@ public class BulkGenerateTab extends VerticalLayout {
     downloadLink.setVisible(false);
     hideProgress();
     updatePreview();
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showInfo(String message) {
-    Notification notification = Notification.show(message, 4000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
   }
 }

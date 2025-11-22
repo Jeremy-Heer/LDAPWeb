@@ -5,6 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -136,14 +137,14 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
       try {
         String content = new String(memoryBuffer.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         userListArea.setValue(content.trim());
-        showInfo("File uploaded successfully: " + event.getFileName());
+        NotificationHelper.showInfo("File uploaded successfully: " + event.getFileName());
       } catch (Exception e) {
-        showError("Failed to read file: " + e.getMessage());
+        NotificationHelper.showError("Failed to read file: " + e.getMessage());
       }
     });
 
     fileUpload.addFailedListener(event -> {
-      showError("File upload failed: " + event.getReason().getMessage());
+      NotificationHelper.showError("File upload failed: " + event.getReason().getMessage());
     });
 
     // Option checkboxes
@@ -252,19 +253,19 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
 
   private void performBulkGroupOperation() {
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("Please select at least one LDAP server");
+      NotificationHelper.showError("Please select at least one LDAP server");
       return;
     }
 
     String groupName = groupNameField.getValue();
     if (groupName == null || groupName.trim().isEmpty()) {
-      showError("Group name is required");
+      NotificationHelper.showError("Group name is required");
       return;
     }
 
     String userList = userListArea.getValue();
     if (userList == null || userList.trim().isEmpty()) {
-      showError("User list is required");
+      NotificationHelper.showError("User list is required");
       return;
     }
 
@@ -279,7 +280,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
         .toList();
 
     if (userIds.isEmpty()) {
-      showError("No valid user IDs found in the list");
+      NotificationHelper.showError("No valid user IDs found in the list");
       return;
     }
 
@@ -337,20 +338,20 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
         if ("Create LDIF".equals(operationMode)) {
           if (finalLdifEntries > 0) {
             createDownloadLink(finalLdif, "group-memberships.ldif");
-            showSuccess("LDIF generated successfully for " + finalLdifEntries + " server(s)");
+            NotificationHelper.showSuccess("LDIF generated successfully for " + finalLdifEntries + " server(s)");
             loggingService.logInfo("BULK_GROUP_MEMBERSHIPS", "LDIF generated for " + finalLdifEntries + " server(s)");
           } else {
-            showError("Failed to generate LDIF");
+            NotificationHelper.showError("Failed to generate LDIF");
           }
         } else {
           if (finalErrors > 0) {
-            showError("Completed with " + finalSuccesses + " successes and " + 
+            NotificationHelper.showError("Completed with " + finalSuccesses + " successes and " + 
                 finalErrors + " errors across " + serverConfigs.size() + " server(s)");
             if (!errorReport.isEmpty()) {
-              showInfo("Error details logged");
+              NotificationHelper.showInfo("Error details logged");
             }
           } else {
-            showSuccess("Successfully processed " + finalSuccesses + 
+            NotificationHelper.showSuccess("Successfully processed " + finalSuccesses + 
                 " operations across " + serverConfigs.size() + " server(s)");
           }
         }
@@ -769,7 +770,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
    */
   private void showDnBrowserDialog(TextField targetField) {
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("Please select at least one LDAP server");
+      NotificationHelper.showError("Please select at least one LDAP server");
       return;
     }
 
@@ -888,21 +889,6 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     permissiveModifyCheckbox.setValue(true);
     downloadLink.setVisible(false);
     hideProgress();
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showInfo(String message) {
-    Notification notification = Notification.show(message, 4000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
   }
 
   // Helper classes

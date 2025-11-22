@@ -7,6 +7,7 @@ import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -14,8 +15,6 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -273,17 +272,17 @@ public class ServerView extends VerticalLayout {
           LdapServerConfig saveConfig = new LdapServerConfig();
           binder.writeBean(saveConfig);
           configService.saveConfiguration(saveConfig);
-          showSuccess("Configuration saved: " + saveConfig.getName());
+          NotificationHelper.showSuccess("Configuration saved: " + saveConfig.getName());
           refreshServerGrid();
           refreshNavbarServerList();
           dialog.close();
         } catch (com.vaadin.flow.data.binder.ValidationException e) {
-          showError("Validation error: " + e.getMessage());
+          NotificationHelper.showError("Validation error: " + e.getMessage());
         } catch (IOException e) {
-          showError("Failed to save configuration: " + e.getMessage());
+          NotificationHelper.showError("Failed to save configuration: " + e.getMessage());
         }
       } else {
-        showError("Please fill in all required fields");
+        NotificationHelper.showError("Please fill in all required fields");
       }
     });
     saveButton.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
@@ -319,7 +318,7 @@ public class ServerView extends VerticalLayout {
     if (selected != null) {
       LdapServerConfig copy = selected.copy();
       openServerDialog(copy);
-      showSuccess("Configuration copied. Update the name and save.");
+      NotificationHelper.showSuccess("Configuration copied. Update the name and save.");
     }
   }
 
@@ -336,12 +335,12 @@ public class ServerView extends VerticalLayout {
       Button confirmButton = new Button("Delete", event -> {
         try {
           configService.deleteConfiguration(selected.getName());
-          showSuccess("Configuration deleted: " + selected.getName());
+          NotificationHelper.showSuccess("Configuration deleted: " + selected.getName());
           refreshServerGrid();
           refreshNavbarServerList();
           confirmDialog.close();
         } catch (IOException e) {
-          showError("Failed to delete configuration: " + e.getMessage());
+          NotificationHelper.showError("Failed to delete configuration: " + e.getMessage());
         }
       });
       confirmButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
@@ -363,15 +362,15 @@ public class ServerView extends VerticalLayout {
       try {
         boolean success = ldapService.testConnection(selected);
         if (success) {
-          showSuccess("Connection successful to: " + selected.getName());
+          NotificationHelper.showSuccess("Connection successful to: " + selected.getName());
         } else {
-          showError("Connection failed to: " + selected.getName());
+          NotificationHelper.showError("Connection failed to: " + selected.getName());
         }
       } catch (CertificateValidationException e) {
         // Certificate validation failed - show TLS dialog to allow user to import
         handleCertificateValidationFailure(selected, e);
       } catch (Exception e) {
-        showError("Connection test failed: " + e.getMessage());
+        NotificationHelper.showError("Connection test failed: " + e.getMessage());
       }
     }
   }
@@ -388,7 +387,7 @@ public class ServerView extends VerticalLayout {
     java.security.cert.X509Certificate serverCert = exception.getServerCertificate();
     
     if (serverCert == null) {
-      showError("Certificate validation failed, but certificate details are not available");
+      NotificationHelper.showError("Certificate validation failed, but certificate details are not available");
       return;
     }
 
@@ -401,7 +400,7 @@ public class ServerView extends VerticalLayout {
           if (imported) {
             // Certificate was imported, clear the failure and retry connection
             ldapService.clearCertificateFailure(config.getName());
-            showSuccess("Certificate imported. Try connecting again.");
+            NotificationHelper.showSuccess("Certificate imported. Try connecting again.");
           }
         }
     );
@@ -424,23 +423,4 @@ public class ServerView extends VerticalLayout {
     });
   }
 
-  /**
-   * Shows a success notification.
-   *
-   * @param message message to display
-   */
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  /**
-   * Shows an error notification.
-   *
-   * @param message message to display
-   */
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_CENTER);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
 }

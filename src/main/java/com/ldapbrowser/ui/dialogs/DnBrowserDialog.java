@@ -4,11 +4,10 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.components.LdapTreeBrowser;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import java.util.List;
 import java.util.function.Consumer;
@@ -90,7 +89,7 @@ public class DnBrowserDialog extends Dialog {
    */
   public DnBrowserDialog withServerConfigs(List<LdapServerConfig> serverConfigs) {
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("No server configurations provided");
+      NotificationHelper.showError("No server configurations provided");
       return this;
     }
 
@@ -98,7 +97,7 @@ public class DnBrowserDialog extends Dialog {
       treeBrowser.setServerConfigs(serverConfigs);
       treeBrowser.loadServers(); // Auto-refresh on open
     } catch (Exception ex) {
-      showError("Failed to load LDAP tree: " + ex.getMessage());
+      NotificationHelper.showError("Failed to load LDAP tree: " + ex.getMessage());
     }
 
     return this;
@@ -113,7 +112,7 @@ public class DnBrowserDialog extends Dialog {
    */
   public DnBrowserDialog withServerConfig(LdapServerConfig serverConfig) {
     if (serverConfig == null) {
-      showError("No server configuration provided");
+      NotificationHelper.showError("No server configuration provided");
       return this;
     }
 
@@ -121,7 +120,7 @@ public class DnBrowserDialog extends Dialog {
       treeBrowser.setServerConfig(serverConfig);
       treeBrowser.loadServers(); // Auto-refresh on open
     } catch (Exception ex) {
-      showError("Failed to load LDAP tree: " + ex.getMessage());
+      NotificationHelper.showError("Failed to load LDAP tree: " + ex.getMessage());
     }
 
     return this;
@@ -178,12 +177,12 @@ public class DnBrowserDialog extends Dialog {
     LdapEntry selectedEntry = treeBrowser.getSelectedEntry();
 
     if (selectedEntry == null) {
-      showError("Please select an entry from the tree");
+      NotificationHelper.showError("Please select an entry from the tree");
       return;
     }
 
     if (!isValidEntry(selectedEntry)) {
-      showError(validationErrorMessage);
+      NotificationHelper.showError(validationErrorMessage);
       return;
     }
 
@@ -194,7 +193,7 @@ public class DnBrowserDialog extends Dialog {
       }
       close();
     } else {
-      showError("Invalid DN selected");
+      NotificationHelper.showError("Invalid DN selected");
     }
   }
 
@@ -211,11 +210,5 @@ public class DnBrowserDialog extends Dialog {
         && !dn.startsWith("_placeholder_")
         && !dn.startsWith("_pagination_")
         && !dn.startsWith("SERVER:");
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 3000,
-        Notification.Position.MIDDLE);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
   }
 }

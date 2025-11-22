@@ -1,5 +1,142 @@
 # LDAP Web Browser
 
+## v0.26 - NotificationHelper Utility Class & Code Standardization
+
+### Overview
+Major refactoring to eliminate notification code duplication and standardize notification behavior across the application. This release addresses inconsistent notification positions, durations, and themes by creating a centralized `NotificationHelper` utility class following DRY principles and best practices.
+
+### ✅ Code Quality Improvements
+
+#### 1. **Created Centralized `NotificationHelper` Utility Class**
+- ✅ Created new `ui/utils` package for utility classes
+- ✅ Implemented `NotificationHelper.java` - centralized notification management
+- ✅ **Features:**
+  - Static utility methods for easy access throughout the application
+  - Standardized notification positions (all use `TOP_END`)
+  - Consistent duration defaults:
+    - Success: 3000ms (3 seconds)
+    - Error: 5000ms (5 seconds)
+    - Info: 4000ms (4 seconds)
+    - Warning: 4000ms (4 seconds)
+  - Overloaded methods with custom duration support
+  - Consistent theme variants (LUMO_SUCCESS, LUMO_ERROR, LUMO_PRIMARY, LUMO_CONTRAST)
+  - Comprehensive Javadoc documentation
+  - Private constructor prevents instantiation (utility class pattern)
+
+#### 2. **Eliminated Massive Code Duplication**
+- ✅ **Removed ~450-750 lines of duplicated code** across 14 files
+- ✅ Refactored notification implementations in:
+  - `BulkGenerateTab.java` - Success, error, and info notifications
+  - `BulkSearchTab.java` - Success, error, and info notifications
+  - `BulkGroupMembershipsTab.java` - Success, error, and info notifications
+  - `ExportTab.java` - Success and error notifications
+  - `ImportTab.java` - Success, error, and info notifications
+  - `EffectiveRightsTab.java` - Success, error, info, and warning notifications
+  - `AciBuilderDialog.java` - Success and error notifications
+  - `EntryAccessControlTab.java` - Success, error, and info notifications
+  - `GlobalAccessControlTab.java` - Success, error, and info notifications
+  - `EntryEditor.java` - Success, error, and info notifications
+  - `SchemaManageTab.java` - Success and error notifications
+  - `DnBrowserDialog.java` - Error notifications
+  - `Create.java` - Success and error notifications
+  - `ServerView.java` - Success and error notifications
+
+#### 3. **Standardized Inconsistent Notification Behavior**
+- ✅ **Before:** Highly inconsistent implementations across the codebase
+  - **Positions:** TOP_END, MIDDLE, BOTTOM_END, BOTTOM_START, TOP_CENTER
+  - **Durations:** 2000ms, 3000ms, 4000ms, 5000ms (no standard)
+  - **Themes:** LUMO_PRIMARY, LUMO_CONTRAST, LUMO_WARNING (for info messages)
+  - **Variable Names:** `notification`, `n` (inconsistent)
+  
+- ✅ **After:** Fully standardized across entire application
+  - **Position:** TOP_END everywhere (consistent with modern UX practices)
+  - **Durations:** Standardized based on message severity
+  - **Themes:** Semantic themes (SUCCESS=green, ERROR=red, INFO=blue, WARNING=contrast)
+  - **Single point of control** for future notification behavior changes
+
+#### 4. **Fixed Notification Position Inconsistencies**
+- ✅ **Problem:** Different components used different positions causing jarring UX
+  - `EffectiveRightsTab`: Used MIDDLE and BOTTOM_START
+  - `EntryEditor`: Used BOTTOM_END
+  - `ServerView`: Used TOP_CENTER
+  - `DnBrowserDialog`: Used MIDDLE
+  - Most others: Used TOP_END
+  
+- ✅ **Solution:** All notifications now use TOP_END consistently
+  - Aligns with Vaadin best practices
+  - Non-intrusive position that doesn't block content
+  - Consistent user experience across all features
+
+#### 5. **Added Flexibility with Overloaded Methods**
+- ✅ Default methods for common use cases: `showSuccess(String message)`
+- ✅ Custom duration methods when needed: `showSuccess(String message, int duration)`
+- ✅ Maintains backward compatibility while enabling future enhancements
+- ✅ Easy to extend with additional notification types or behaviors
+
+### Technical Benefits
+
+1. **Maintainability**
+   - Single source of truth for notification behavior
+   - Future improvements (animations, icons, sounds) benefit all usages simultaneously
+   - Easier to test notification logic in isolation
+   - Eliminates risk of introducing inconsistencies
+
+2. **Consistency**
+   - Uniform notification appearance and behavior across all features
+   - Predictable duration and position reduces user confusion
+   - Semantic color coding (green=success, red=error, blue=info, grey=warning)
+   - Professional user experience with no jarring position changes
+
+3. **Developer Experience**
+   - Simple static method calls: `NotificationHelper.showSuccess("Done!")`
+   - No need to remember Notification API details
+   - Self-documenting method names
+   - Reduces boilerplate code in new features
+   - Fewer imports needed (just NotificationHelper, not Notification + NotificationVariant)
+
+4. **Code Reduction**
+   - Eliminated 450-750 lines of duplicated notification methods
+   - Removed 14 sets of private helper methods
+   - Cleaner component files focused on business logic
+   - Reduced maintenance burden
+
+### Example Usage
+
+```java
+// Before (duplicated in 14 files):
+private void showSuccess(String message) {
+    Notification notification = Notification.show(message, 3000, Notification.Position.TOP_END);
+    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+}
+
+private void showError(String message) {
+    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_END);
+    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+}
+
+// After (single utility class, used everywhere):
+import com.ldapbrowser.ui.utils.NotificationHelper;
+
+// Simple usage
+NotificationHelper.showSuccess("Operation completed successfully");
+NotificationHelper.showError("Failed to connect to server");
+NotificationHelper.showInfo("Processing your request...");
+NotificationHelper.showWarning("Configuration may be incomplete");
+
+// Custom duration when needed
+NotificationHelper.showError("Critical error - please contact support", 10000);
+```
+
+### Impact Summary
+- **Files Modified:** 14 component/view files + 1 new utility class
+- **Code Eliminated:** ~450-750 lines of duplicated notification methods
+- **Notification Positions Standardized:** 5 different positions → 1 consistent position (TOP_END)
+- **Duration Standards:** 4+ inconsistent values → 4 semantic standards (3s/5s/4s/4s)
+- **Developer Productivity:** Reduced boilerplate, simpler API, fewer imports
+- **User Experience:** Consistent notification behavior, predictable positioning
+- **Build Status:** ✅ Compiles successfully, all notification calls validated
+
+
 ## v0.25 - DN Browser Dialog Refactoring & Standardization
 
 ### Overview

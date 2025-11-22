@@ -6,18 +6,16 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
@@ -260,12 +258,12 @@ public class Create extends VerticalLayout {
     // Get selected servers from MainLayout
     Set<String> selectedServers = MainLayout.getSelectedServers();
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("Please select a server from the top menu");
+      NotificationHelper.showError("Please select a server from the top menu");
       return;
     }
 
     if (selectedServers.size() > 1) {
-      showError("Please select only one server to create entries");
+      NotificationHelper.showError("Please select only one server to create entries");
       return;
     }
 
@@ -276,13 +274,13 @@ public class Create extends VerticalLayout {
         .orElse(null);
 
     if (serverConfig == null) {
-      showError("Selected server configuration not found");
+      NotificationHelper.showError("Selected server configuration not found");
       return;
     }
 
     String dn = dnField.getValue();
     if (dn == null || dn.trim().isEmpty()) {
-      showError("Distinguished Name (DN) is required");
+      NotificationHelper.showError("Distinguished Name (DN) is required");
       return;
     }
 
@@ -305,13 +303,13 @@ public class Create extends VerticalLayout {
     }
 
     if (!hasValidAttributes) {
-      showError("At least one attribute with a valid name and value is required");
+      NotificationHelper.showError("At least one attribute with a valid name and value is required");
       return;
     }
 
     // Check if objectClass is specified
     if (!attributes.containsKey("objectClass")) {
-      showError("The 'objectClass' attribute is required for LDAP entries");
+      NotificationHelper.showError("The 'objectClass' attribute is required for LDAP entries");
       return;
     }
 
@@ -324,15 +322,15 @@ public class Create extends VerticalLayout {
       // Add the entry using LdapService
       ldapService.addEntry(serverConfig, newEntry);
 
-      showSuccess("Entry created successfully: " + dn);
+      NotificationHelper.showSuccess("Entry created successfully: " + dn);
 
       // Clear form after successful creation
       clearAll();
 
     } catch (LDAPException e) {
-      showError("Failed to create entry: " + e.getMessage());
+      NotificationHelper.showError("Failed to create entry: " + e.getMessage());
     } catch (Exception e) {
-      showError("Unexpected error: " + e.getMessage());
+      NotificationHelper.showError("Unexpected error: " + e.getMessage());
     }
   }
 
@@ -419,11 +417,7 @@ public class Create extends VerticalLayout {
     // Get selected servers from MainLayout
     Set<String> selectedServerNames = MainLayout.getSelectedServers();
     if (selectedServerNames == null || selectedServerNames.isEmpty()) {
-      Notification notification = Notification.show(
-          "Please select at least one server from the top menu",
-          3000,
-          Notification.Position.MIDDLE);
-      notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+      NotificationHelper.showError("Please select at least one server from the top menu");
       return;
     }
 
@@ -433,11 +427,7 @@ public class Create extends VerticalLayout {
         .toList();
 
     if (selectedConfigs.isEmpty()) {
-      Notification notification = Notification.show(
-          "Selected servers not found in configuration",
-          3000,
-          Notification.Position.MIDDLE);
-      notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+      NotificationHelper.showError("Selected servers not found in configuration");
       return;
     }
 
@@ -469,16 +459,6 @@ public class Create extends VerticalLayout {
     templateComboBox.setValue("None");
     attributeRows.clear();
     addEmptyRow(); // Add one empty row
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 4000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
   }
 
   /**

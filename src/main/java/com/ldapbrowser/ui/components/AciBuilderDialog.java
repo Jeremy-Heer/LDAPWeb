@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.util.OidLookupTable;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.RootDSE;
@@ -24,8 +25,6 @@ import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -365,7 +364,7 @@ public class AciBuilderDialog extends Dialog {
    */
   private void showDnBrowserDialog(TextField targetField) {
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No server configuration available");
+      NotificationHelper.showError("No server configuration available");
       return;
     }
 
@@ -1063,7 +1062,7 @@ public class AciBuilderDialog extends Dialog {
 
   private void buildAci() {
     if (!isValidAci()) {
-      showError("Please fill in all required fields and specify at least one target.");
+      NotificationHelper.showError("Please fill in all required fields and specify at least one target.");
       return;
     }
     
@@ -1073,20 +1072,10 @@ public class AciBuilderDialog extends Dialog {
         onAciBuilt.accept(aci);
       }
       close();
-      showSuccess("ACI built successfully");
+      NotificationHelper.showSuccess("ACI built successfully");
     } catch (Exception e) {
-      showError("Failed to build ACI: " + e.getMessage());
+      NotificationHelper.showError("Failed to build ACI: " + e.getMessage());
     }
-  }
-
-  private void showError(String message) {
-    Notification n = Notification.show(message, 5000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showSuccess(String message) {
-    Notification n = Notification.show(message, 3000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
   }
   
   /**

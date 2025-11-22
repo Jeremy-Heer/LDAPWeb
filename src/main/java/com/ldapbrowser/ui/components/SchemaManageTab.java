@@ -5,6 +5,7 @@ import com.ldapbrowser.model.SchemaElement;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.schema.AttributeSyntaxDefinition;
 import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
 import com.unboundid.ldap.sdk.schema.MatchingRuleDefinition;
@@ -23,8 +24,6 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.Tab;
@@ -508,7 +507,7 @@ public class SchemaManageTab extends VerticalLayout {
   private void refreshSchemaCache() {
     Set<String> selectedServers = MainLayout.getSelectedServers();
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No servers selected");
+      NotificationHelper.showError("No servers selected");
       return;
     }
 
@@ -521,7 +520,7 @@ public class SchemaManageTab extends VerticalLayout {
             logger.info("Refreshed schema cache for server: {}", serverName);
           } catch (Exception ex) {
             logger.warn("Failed to refresh schema cache for {}: {}", serverName, ex.getMessage());
-            showError("Failed to refresh schema for " + serverName + ": " + ex.getMessage());
+            NotificationHelper.showError("Failed to refresh schema for " + serverName + ": " + ex.getMessage());
           }
         });
       }
@@ -529,7 +528,7 @@ public class SchemaManageTab extends VerticalLayout {
       // Now reload the UI with the refreshed cache
       loadSchemas();
     } catch (Exception e) {
-      showError("Failed to refresh schema cache: " + e.getMessage());
+      NotificationHelper.showError("Failed to refresh schema cache: " + e.getMessage());
     }
   }
 
@@ -539,16 +538,16 @@ public class SchemaManageTab extends VerticalLayout {
   public void loadSchemas() {
     Set<String> selectedServers = MainLayout.getSelectedServers();
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No servers selected");
+      NotificationHelper.showError("No servers selected");
       return;
     }
 
     try {
       filterCurrentView();
       updateAddButtons();
-      showSuccess("Schema loaded successfully");
+      NotificationHelper.showSuccess("Schema loaded successfully");
     } catch (Exception e) {
-      showError("Failed to load schema: " + e.getMessage());
+      NotificationHelper.showError("Failed to load schema: " + e.getMessage());
     }
   }
 
@@ -574,7 +573,7 @@ public class SchemaManageTab extends VerticalLayout {
           }
         }
       } catch (Exception e) {
-        showError("Failed to load schema from " + serverName + ": " + e.getMessage());
+        NotificationHelper.showError("Failed to load schema from " + serverName + ": " + e.getMessage());
       }
     }
 
@@ -604,7 +603,7 @@ public class SchemaManageTab extends VerticalLayout {
           }
         }
       } catch (Exception e) {
-        showError("Failed to load schema from " + serverName + ": " + e.getMessage());
+        NotificationHelper.showError("Failed to load schema from " + serverName + ": " + e.getMessage());
       }
     }
 
@@ -634,7 +633,7 @@ public class SchemaManageTab extends VerticalLayout {
           }
         }
       } catch (Exception e) {
-        showError("Failed to load schema from " + serverName + ": " + e.getMessage());
+        NotificationHelper.showError("Failed to load schema from " + serverName + ": " + e.getMessage());
       }
     }
 
@@ -664,7 +663,7 @@ public class SchemaManageTab extends VerticalLayout {
           }
         }
       } catch (Exception e) {
-        showError("Failed to load schema from " + serverName + ": " + e.getMessage());
+        NotificationHelper.showError("Failed to load schema from " + serverName + ": " + e.getMessage());
       }
     }
 
@@ -694,7 +693,7 @@ public class SchemaManageTab extends VerticalLayout {
           }
         }
       } catch (Exception e) {
-        showError("Failed to load schema from " + serverName + ": " + e.getMessage());
+        NotificationHelper.showError("Failed to load schema from " + serverName + ": " + e.getMessage());
       }
     }
 
@@ -1100,18 +1099,6 @@ public class SchemaManageTab extends VerticalLayout {
     }
   }
 
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000,
-        Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000,
-        Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
   /**
    * Opens edit dialog for Object Class.
    *
@@ -1388,20 +1375,17 @@ public class SchemaManageTab extends VerticalLayout {
                   config.getName(), rex.getMessage());
             }
             
-            Notification.show("Object class updated successfully", 3000,
-                Notification.Position.BOTTOM_START);
+            NotificationHelper.showSuccess("Object class updated successfully");
             dialog.close();
             // Reload schema
             refreshSchema();
           } else {
-            Notification.show("No changes detected", 3000,
-                Notification.Position.BOTTOM_START);
+            NotificationHelper.showInfo("No changes detected");
             dialog.close();
           }
         } catch (Exception ex) {
           logger.error("Error saving object class", ex);
-          Notification.show("Error: " + ex.getMessage(), 5000,
-              Notification.Position.BOTTOM_START);
+          NotificationHelper.showError("Error: " + ex.getMessage());
         }
       });
       saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -1656,20 +1640,17 @@ public class SchemaManageTab extends VerticalLayout {
                   config.getName(), rex.getMessage());
             }
             
-            Notification.show("Attribute type updated successfully", 3000,
-                Notification.Position.BOTTOM_START);
+            NotificationHelper.showSuccess("Attribute type updated successfully");
             dialog.close();
             // Reload schema
             refreshSchema();
           } else {
-            Notification.show("No changes detected", 3000,
-                Notification.Position.BOTTOM_START);
+            NotificationHelper.showInfo("No changes detected");
             dialog.close();
           }
         } catch (Exception ex) {
           logger.error("Error saving attribute type", ex);
-          Notification.show("Error: " + ex.getMessage(), 5000,
-              Notification.Position.BOTTOM_START);
+          NotificationHelper.showError("Error: " + ex.getMessage());
         }
       });
       saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -2296,7 +2277,7 @@ public class SchemaManageTab extends VerticalLayout {
   private void openAddObjectClassDialog() {
     Set<String> selectedServers = MainLayout.getSelectedServers();
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No server selected");
+      NotificationHelper.showError("No server selected");
       return;
     }
 
@@ -2499,7 +2480,7 @@ public class SchemaManageTab extends VerticalLayout {
   private void openAddAttributeTypeDialog() {
     Set<String> selectedServers = MainLayout.getSelectedServers();
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No server selected");
+      NotificationHelper.showError("No server selected");
       return;
     }
 
@@ -2711,12 +2692,12 @@ public class SchemaManageTab extends VerticalLayout {
     try {
       // Validate required fields
       if (nameField.getValue() == null || nameField.getValue().trim().isEmpty()) {
-        showError("Name is required");
+        NotificationHelper.showError("Name is required");
         nameField.focus();
         return false;
       }
       if (oidField.getValue() == null || oidField.getValue().trim().isEmpty()) {
-        showError("OID is required");
+        NotificationHelper.showError("OID is required");
         oidField.focus();
         return false;
       }
@@ -2731,12 +2712,12 @@ public class SchemaManageTab extends VerticalLayout {
         Schema schema = ldapService.getSchema(config);
         if (schema != null) {
           if (schema.getObjectClass(oidField.getValue()) != null) {
-            showError("An object class with this OID already exists on " + serverName);
+            NotificationHelper.showError("An object class with this OID already exists on " + serverName);
             oidField.focus();
             return false;
           }
           if (schema.getObjectClass(nameField.getValue()) != null) {
-            showError("An object class with this name already exists on " + serverName);
+            NotificationHelper.showError("An object class with this name already exists on " + serverName);
             nameField.focus();
             return false;
           }
@@ -2872,19 +2853,19 @@ public class SchemaManageTab extends VerticalLayout {
       
       // Show appropriate message
       if (successCount > 0 && failCount == 0) {
-        showSuccess("Object class '" + nameField.getValue() + "' added successfully to " 
+        NotificationHelper.showSuccess("Object class '" + nameField.getValue() + "' added successfully to " 
             + successCount + " server(s)");
       } else if (successCount > 0 && failCount > 0) {
-        showError("Object class added to " + successCount + " server(s), but failed on: " 
+        NotificationHelper.showError("Object class added to " + successCount + " server(s), but failed on: " 
             + failedServers.toString());
       } else {
-        showError("Failed to add object class to all servers: " + failedServers.toString());
+        NotificationHelper.showError("Failed to add object class to all servers: " + failedServers.toString());
         return false;
       }
       
       return true;
     } catch (Exception e) {
-      showError("Failed to add object class: " + e.getMessage());
+      NotificationHelper.showError("Failed to add object class: " + e.getMessage());
       logger.error("Failed to add object class", e);
       return false;
     }
@@ -2902,12 +2883,12 @@ public class SchemaManageTab extends VerticalLayout {
     try {
       // Validate required fields
       if (nameField.getValue() == null || nameField.getValue().trim().isEmpty()) {
-        showError("Name is required");
+        NotificationHelper.showError("Name is required");
         nameField.focus();
         return false;
       }
       if (oidField.getValue() == null || oidField.getValue().trim().isEmpty()) {
-        showError("OID is required");
+        NotificationHelper.showError("OID is required");
         oidField.focus();
         return false;
       }
@@ -2915,7 +2896,7 @@ public class SchemaManageTab extends VerticalLayout {
       // Get syntax OID from selector (extract OID from description if present)
       String syntaxOid = extractOidOrName(syntaxOidSelector.getValue());
       if (syntaxOid == null || syntaxOid.trim().isEmpty()) {
-        showError("Syntax OID is required");
+        NotificationHelper.showError("Syntax OID is required");
         syntaxOidSelector.focus();
         return false;
       }
@@ -2930,12 +2911,12 @@ public class SchemaManageTab extends VerticalLayout {
         Schema schema = ldapService.getSchema(config);
         if (schema != null) {
           if (schema.getAttributeType(oidField.getValue()) != null) {
-            showError("An attribute type with this OID already exists on " + serverName);
+            NotificationHelper.showError("An attribute type with this OID already exists on " + serverName);
             oidField.focus();
             return false;
           }
           if (schema.getAttributeType(nameField.getValue()) != null) {
-            showError("An attribute type with this name already exists on " + serverName);
+            NotificationHelper.showError("An attribute type with this name already exists on " + serverName);
             nameField.focus();
             return false;
           }
@@ -3037,19 +3018,19 @@ public class SchemaManageTab extends VerticalLayout {
 
       // Show appropriate message based on results
       if (successCount > 0 && failCount == 0) {
-        showSuccess("Attribute type '" + nameField.getValue()
+        NotificationHelper.showSuccess("Attribute type '" + nameField.getValue()
             + "' added successfully to " + successCount + " server(s)");
         return true;
       } else if (successCount > 0 && failCount > 0) {
-        showError("Attribute type '" + nameField.getValue() + "' added to " + successCount
+        NotificationHelper.showError("Attribute type '" + nameField.getValue() + "' added to " + successCount
             + " server(s), but failed on: " + failedServers);
         return true; // Partial success
       } else {
-        showError("Failed to add attribute type to any server: " + failedServers);
+        NotificationHelper.showError("Failed to add attribute type to any server: " + failedServers);
         return false;
       }
     } catch (Exception e) {
-      showError("Failed to add attribute type: " + e.getMessage());
+      NotificationHelper.showError("Failed to add attribute type: " + e.getMessage());
       logger.error("Failed to add attribute type", e);
       return false;
     }

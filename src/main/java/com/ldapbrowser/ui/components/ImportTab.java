@@ -6,6 +6,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
@@ -21,8 +22,6 @@ import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
@@ -177,7 +176,7 @@ public class ImportTab extends VerticalLayout {
       try {
         processLdifFile();
       } catch (Exception ex) {
-        showError("Error processing LDIF file: " + ex.getMessage());
+        NotificationHelper.showError("Error processing LDIF file: " + ex.getMessage());
       }
     });
 
@@ -258,7 +257,7 @@ public class ImportTab extends VerticalLayout {
       try {
         processCsvFile();
       } catch (Exception ex) {
-        showError("Error processing CSV file: " + ex.getMessage());
+        NotificationHelper.showError("Error processing CSV file: " + ex.getMessage());
       }
     });
 
@@ -273,7 +272,7 @@ public class ImportTab extends VerticalLayout {
         try {
           processCsvFile();
         } catch (Exception ex) {
-          showError("Error processing CSV content: " + ex.getMessage());
+          NotificationHelper.showError("Error processing CSV content: " + ex.getMessage());
         }
       } else {
         // Clear preview if content is empty
@@ -293,7 +292,7 @@ public class ImportTab extends VerticalLayout {
         try {
           processCsvFile();
         } catch (Exception ex) {
-          showError("Error reprocessing CSV file: " + ex.getMessage());
+          NotificationHelper.showError("Error reprocessing CSV file: " + ex.getMessage());
         }
       }
     });
@@ -305,7 +304,7 @@ public class ImportTab extends VerticalLayout {
         try {
           processCsvFile();
         } catch (Exception ex) {
-          showError("Error reprocessing CSV file: " + ex.getMessage());
+          NotificationHelper.showError("Error reprocessing CSV file: " + ex.getMessage());
         }
       }
     });
@@ -539,7 +538,7 @@ public class ImportTab extends VerticalLayout {
 
     // Basic LDIF validation
     if (content.trim().isEmpty()) {
-      showError("LDIF file is empty");
+      NotificationHelper.showError("LDIF file is empty");
       return;
     }
 
@@ -549,7 +548,7 @@ public class ImportTab extends VerticalLayout {
         .count();
 
     updateLdifImportButtonState();
-    showSuccess("LDIF file loaded successfully. Found " + entryCount + " entries.");
+    NotificationHelper.showSuccess("LDIF file loaded successfully. Found " + entryCount + " entries.");
   }
 
   private void processCsvFile() throws Exception {
@@ -576,7 +575,7 @@ public class ImportTab extends VerticalLayout {
     csvPreviewGrid.removeAllColumns();
 
     if (lines.length == 0) {
-      showError("CSV file is empty");
+      NotificationHelper.showError("CSV file is empty");
       return;
     }
 
@@ -612,7 +611,7 @@ public class ImportTab extends VerticalLayout {
     }
 
     if (csvData.isEmpty()) {
-      showError("No valid data found in CSV file");
+      NotificationHelper.showError("No valid data found in CSV file");
       return;
     }
 
@@ -632,7 +631,7 @@ public class ImportTab extends VerticalLayout {
     String excludeText = csvExcludeHeader.getValue() ? " (header row excluded)" : "";
     String quoteText = csvQuotedValues.getValue() ? " (quotes removed)" : "";
 
-    showSuccess("CSV file processed successfully. " + csvData.size() + " rows loaded" + excludeText + quoteText + ".");
+    NotificationHelper.showSuccess("CSV file processed successfully. " + csvData.size() + " rows loaded" + excludeText + quoteText + ".");
 
     updatePreviewLdif();
   }
@@ -719,12 +718,12 @@ public class ImportTab extends VerticalLayout {
     refreshServerConfigs();
     
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("Please select at least one LDAP server first");
+      NotificationHelper.showError("Please select at least one LDAP server first");
       return;
     }
 
     if (rawLdifContent == null || rawLdifContent.trim().isEmpty()) {
-      showError("Please provide LDIF content to import");
+      NotificationHelper.showError("Please provide LDIF content to import");
       return;
     }
 
@@ -734,7 +733,7 @@ public class ImportTab extends VerticalLayout {
     if ("Create LDIF".equals(operationMode)) {
       // Simply provide the LDIF content for download
       createLdifDownloadLink(rawLdifContent, "ldif-import.ldif");
-      showSuccess("LDIF prepared for download");
+      NotificationHelper.showSuccess("LDIF prepared for download");
       loggingService.logInfo("IMPORT", "LDIF content prepared for download");
       return;
     }
@@ -883,10 +882,10 @@ public class ImportTab extends VerticalLayout {
     hideProgress();
     
     if (totalErrorCount > 0) {
-      showInfo("LDIF import completed with " + totalSuccessCount + " successes and " + totalErrorCount 
+      NotificationHelper.showInfo("LDIF import completed with " + totalSuccessCount + " successes and " + totalErrorCount 
           + " errors across " + serverConfigs.size() + " server(s). " + errorDetails.toString());
     } else {
-      showSuccess("LDIF import completed successfully. " + totalSuccessCount 
+      NotificationHelper.showSuccess("LDIF import completed successfully. " + totalSuccessCount 
           + " entries processed across " + serverConfigs.size() + " server(s)");
     }
   }
@@ -896,12 +895,12 @@ public class ImportTab extends VerticalLayout {
     refreshServerConfigs();
     
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("Please select at least one LDAP server first");
+      NotificationHelper.showError("Please select at least one LDAP server first");
       return;
     }
 
     if (csvData.isEmpty()) {
-      showError("Please upload a CSV file first");
+      NotificationHelper.showError("Please upload a CSV file first");
       return;
     }
 
@@ -953,11 +952,11 @@ public class ImportTab extends VerticalLayout {
         }
 
         createCsvDownloadLink(fullLdif.toString(), "csv-import.ldif");
-        showSuccess("LDIF generated from " + csvData.size() + " CSV rows and prepared for download");
+        NotificationHelper.showSuccess("LDIF generated from " + csvData.size() + " CSV rows and prepared for download");
         loggingService.logInfo("IMPORT", "CSV converted to LDIF for download (" + csvData.size() + " rows)");
         return;
       } catch (Exception e) {
-        showError("Error generating LDIF from CSV: " + e.getMessage());
+        NotificationHelper.showError("Error generating LDIF from CSV: " + e.getMessage());
         loggingService.logError("IMPORT", "Failed to generate LDIF from CSV: " + e.getMessage());
         return;
       }
@@ -1134,10 +1133,10 @@ public class ImportTab extends VerticalLayout {
     hideProgress();
 
     if (totalErrorCount > 0) {
-      showInfo("CSV import completed with " + totalSuccessCount + " successes and " + totalErrorCount 
+      NotificationHelper.showInfo("CSV import completed with " + totalSuccessCount + " successes and " + totalErrorCount 
           + " errors across " + serverConfigs.size() + " server(s). " + errorDetails.toString());
     } else {
-      showSuccess("CSV import completed successfully. " + totalSuccessCount 
+      NotificationHelper.showSuccess("CSV import completed successfully. " + totalSuccessCount 
           + " entries processed across " + serverConfigs.size() + " server(s)");
     }
   }
@@ -1214,20 +1213,5 @@ public class ImportTab extends VerticalLayout {
     ldifTemplateArea.setValue("dn: {DN}\nchangetype: modify\nreplace: userpassword\nuserpassword: {C2}");
     searchFilterField.setValue("(&(objectClass=person)(uid={C1}))");
     hideProgress();
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showInfo(String message) {
-    Notification notification = Notification.show(message, 4000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
   }
 }

@@ -7,6 +7,7 @@ import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
@@ -198,7 +199,7 @@ public class BulkSearchTab extends VerticalLayout {
     refreshServerConfigs();
     
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("Please select at least one LDAP server");
+      NotificationHelper.showError("Please select at least one LDAP server");
       return;
     }
 
@@ -208,17 +209,17 @@ public class BulkSearchTab extends VerticalLayout {
     String operationMode = operationModeCombo.getValue();
 
     if (searchBase == null || searchBase.trim().isEmpty()) {
-      showError("Search Base is required");
+      NotificationHelper.showError("Search Base is required");
       return;
     }
 
     if (searchFilter == null || searchFilter.trim().isEmpty()) {
-      showError("Search Filter is required");
+      NotificationHelper.showError("Search Filter is required");
       return;
     }
 
     if (ldifTemplate == null || ldifTemplate.trim().isEmpty()) {
-      showError("LDIF Template is required");
+      NotificationHelper.showError("LDIF Template is required");
       return;
     }
 
@@ -285,26 +286,26 @@ public class BulkSearchTab extends VerticalLayout {
       // Show final results
       if ("Execute Change".equals(operationMode)) {
         if (totalErrors > 0) {
-          showInfo("Bulk operation completed with " + totalSuccesses + " successes and " 
+          NotificationHelper.showInfo("Bulk operation completed with " + totalSuccesses + " successes and " 
               + totalErrors + " errors across " + serverConfigs.size() + " server(s). " + errorDetails.toString());
         } else {
-          showSuccess("Bulk operation completed successfully. " + totalSuccesses 
+          NotificationHelper.showSuccess("Bulk operation completed successfully. " + totalSuccesses 
               + " entries processed across " + serverConfigs.size() + " server(s)");
         }
       } else {
         // Create LDIF mode - create combined download
         if (totalEntries > 0) {
           createDownloadLink(combinedLdif.toString(), "bulk-operation.ldif");
-          showSuccess("LDIF generated successfully for " + totalEntries 
+          NotificationHelper.showSuccess("LDIF generated successfully for " + totalEntries 
               + " entries across " + serverConfigs.size() + " server(s)");
         } else {
-          showInfo("No entries found matching the search criteria");
+          NotificationHelper.showInfo("No entries found matching the search criteria");
         }
       }
 
     } catch (Exception e) {
       hideProgress();
-      showError("Bulk operation failed: " + e.getMessage());
+      NotificationHelper.showError("Bulk operation failed: " + e.getMessage());
     }
   }
 
@@ -548,7 +549,7 @@ public class BulkSearchTab extends VerticalLayout {
    */
   private void showDnBrowserDialog(TextField targetField) {
     if (serverConfigs == null || serverConfigs.isEmpty()) {
-      showError("Please select at least one LDAP server");
+      NotificationHelper.showError("Please select at least one LDAP server");
       return;
     }
 
@@ -556,20 +557,5 @@ public class BulkSearchTab extends VerticalLayout {
         .withServerConfigs(serverConfigs)
         .onDnSelected(dn -> targetField.setValue(dn))
         .open();
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showInfo(String message) {
-    Notification notification = Notification.show(message, 4000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
   }
 }

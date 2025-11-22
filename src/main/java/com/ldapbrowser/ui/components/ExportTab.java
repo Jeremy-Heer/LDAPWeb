@@ -6,6 +6,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
@@ -225,7 +226,7 @@ public class ExportTab extends VerticalLayout {
       try {
         processCsvFile();
       } catch (Exception ex) {
-        showError("Error processing CSV file: " + ex.getMessage());
+        NotificationHelper.showError("Error processing CSV file: " + ex.getMessage());
       }
     });
 
@@ -261,7 +262,7 @@ public class ExportTab extends VerticalLayout {
         try {
           processCsvFile();
         } catch (Exception ex) {
-          showError("Error reprocessing CSV file: " + ex.getMessage());
+          NotificationHelper.showError("Error reprocessing CSV file: " + ex.getMessage());
         }
       }
     });
@@ -274,7 +275,7 @@ public class ExportTab extends VerticalLayout {
         try {
           processCsvFile();
         } catch (Exception ex) {
-          showError("Error reprocessing CSV file: " + ex.getMessage());
+          NotificationHelper.showError("Error reprocessing CSV file: " + ex.getMessage());
         }
       }
     });
@@ -330,7 +331,7 @@ public class ExportTab extends VerticalLayout {
 
   private void showDnSelectionDialog(boolean forCsvMode) {
     if (serverConfig == null && (groupServers == null || groupServers.isEmpty())) {
-      showError("Please select a server first");
+      NotificationHelper.showError("Please select a server first");
       return;
     }
 
@@ -422,7 +423,7 @@ public class ExportTab extends VerticalLayout {
     csvPreviewGrid.removeAllColumns();
 
     if (lines.length == 0) {
-      showError("CSV file is empty");
+      NotificationHelper.showError("CSV file is empty");
       return;
     }
 
@@ -459,7 +460,7 @@ public class ExportTab extends VerticalLayout {
     }
 
     if (csvData.isEmpty()) {
-      showError("No valid data found in CSV file");
+      NotificationHelper.showError("No valid data found in CSV file");
       return;
     }
 
@@ -491,7 +492,7 @@ public class ExportTab extends VerticalLayout {
     String quoteText = quotedValuesCheckbox.getValue() ? " (quotes removed)" : "";
     String successMsg = "CSV file processed successfully. " + csvData.size() + " rows loaded"
         + excludeText + quoteText + ".";
-    showSuccess(successMsg);
+    NotificationHelper.showSuccess(successMsg);
   }
 
   private List<String> parseCsvLine(String line, boolean removeQuotes) {
@@ -548,12 +549,12 @@ public class ExportTab extends VerticalLayout {
   private void performCsvExport() {
     Set<LdapServerConfig> effectiveServers = getEffectiveServers();
     if (effectiveServers.isEmpty()) {
-      showError("Please select an LDAP server first");
+      NotificationHelper.showError("Please select an LDAP server first");
       return;
     }
 
     if (csvData.isEmpty()) {
-      showError("Please upload a CSV file first");
+      NotificationHelper.showError("Please upload a CSV file first");
       return;
     }
 
@@ -563,12 +564,12 @@ public class ExportTab extends VerticalLayout {
     String format = csvOutputFormatCombo.getValue();
 
     if (searchBase == null || searchBase.trim().isEmpty()) {
-      showError("Search Base is required");
+      NotificationHelper.showError("Search Base is required");
       return;
     }
 
     if (searchFilterTemplate == null || searchFilterTemplate.trim().isEmpty()) {
-      showError("Search Filter is required");
+      NotificationHelper.showError("Search Filter is required");
       return;
     }
 
@@ -612,7 +613,7 @@ public class ExportTab extends VerticalLayout {
           } catch (LDAPException | GeneralSecurityException e) {
             String errMsg = "CSV export failed for server: " + server.getName();
             loggingService.logError("EXPORT", errMsg, e.getMessage());
-            showError("Search failed for server " + server.getName() + ": " + e.getMessage());
+            NotificationHelper.showError("Search failed for server " + server.getName() + ": " + e.getMessage());
             // Continue with other servers
           }
         }
@@ -629,21 +630,21 @@ public class ExportTab extends VerticalLayout {
           "Export completed - %d entries exported from %d searches across %d server(s) to %s",
           allEntries.size(), csvData.size(), effectiveServers.size(), fileName));
 
-      showSuccess(String.format(
+      NotificationHelper.showSuccess(String.format(
           "Export completed successfully. %d entries exported from %d searches across %d server(s).",
           allEntries.size(), csvData.size(), effectiveServers.size()));
 
     } catch (Exception e) {
       hideProgress();
       loggingService.logError("EXPORT", "CSV export failed", e.getMessage());
-      showError("Export failed: " + e.getMessage());
+      NotificationHelper.showError("Export failed: " + e.getMessage());
     }
   }
 
   private void performSearchExport() {
     Set<LdapServerConfig> effectiveServers = getEffectiveServers();
     if (effectiveServers.isEmpty()) {
-      showError("Please select an LDAP server first");
+      NotificationHelper.showError("Please select an LDAP server first");
       return;
     }
 
@@ -653,12 +654,12 @@ public class ExportTab extends VerticalLayout {
     String format = outputFormatCombo.getValue();
 
     if (searchBase == null || searchBase.trim().isEmpty()) {
-      showError("Search Base is required");
+      NotificationHelper.showError("Search Base is required");
       return;
     }
 
     if (searchFilter == null || searchFilter.trim().isEmpty()) {
-      showError("Search Filter is required");
+      NotificationHelper.showError("Search Filter is required");
       return;
     }
 
@@ -701,7 +702,7 @@ public class ExportTab extends VerticalLayout {
         } catch (LDAPException | GeneralSecurityException e) {
           String errMsg = "Search export failed for server: " + server.getName();
           loggingService.logError("EXPORT", errMsg, e.getMessage());
-          showError("Search failed for server " + server.getName() + ": " + e.getMessage());
+          NotificationHelper.showError("Search failed for server " + server.getName() + ": " + e.getMessage());
           // Continue with other servers
         }
       }
@@ -717,14 +718,14 @@ public class ExportTab extends VerticalLayout {
           "Export completed - %d entries exported from %d server(s) to %s",
           totalEntries, effectiveServers.size(), fileName));
 
-      showSuccess(String.format(
+      NotificationHelper.showSuccess(String.format(
           "Export completed successfully. %d entries exported from %d server(s).",
           totalEntries, effectiveServers.size()));
 
     } catch (Exception e) {
       hideProgress();
       loggingService.logError("EXPORT", "Search export failed", e.getMessage());
-      showError("Export failed: " + e.getMessage());
+      NotificationHelper.showError("Export failed: " + e.getMessage());
     }
   }
 
@@ -998,15 +999,5 @@ public class ExportTab extends VerticalLayout {
     csvExportButton.setEnabled(false);
     downloadLink.setVisible(false);
     hideProgress();
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.TOP_END);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
   }
 }

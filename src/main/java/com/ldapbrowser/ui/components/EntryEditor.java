@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.Modification;
 import com.unboundid.ldap.sdk.ModificationType;
 import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
@@ -22,8 +23,6 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.menubar.MenuBar;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
@@ -579,12 +578,12 @@ public class EntryEditor extends VerticalLayout {
       String valuesText = valueArea.getValue();
 
       if (name == null || name.trim().isEmpty()) {
-        showError("Attribute name is required.");
+        NotificationHelper.showError("Attribute name is required.");
         return;
       }
 
       if (valuesText == null || valuesText.trim().isEmpty()) {
-        showError("At least one value is required.");
+        NotificationHelper.showError("At least one value is required.");
         return;
       }
 
@@ -597,7 +596,7 @@ public class EntryEditor extends VerticalLayout {
       modifiedAttributes.add(name.trim());
       markPendingChanges();
       refreshAttributeDisplay();
-      showSuccess("Added attribute '" + name.trim() + "' with " + values.size() + " value(s).");
+      NotificationHelper.showSuccess("Added attribute '" + name.trim() + "' with " + values.size() + " value(s).");
       dialog.close();
     });
     saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -682,7 +681,7 @@ public class EntryEditor extends VerticalLayout {
       String valuesText = valueArea.getValue();
       
       if (valuesText == null || valuesText.trim().isEmpty()) {
-        showError("At least one value is required.");
+        NotificationHelper.showError("At least one value is required.");
         return;
       }
 
@@ -694,7 +693,7 @@ public class EntryEditor extends VerticalLayout {
       modifiedAttributes.add(row.getName());
       markPendingChanges();
       refreshAttributeDisplay();
-      showSuccess("Updated attribute '" + row.getName() + "'.");
+      NotificationHelper.showSuccess("Updated attribute '" + row.getName() + "'.");
       dialog.close();
     });
     saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -719,7 +718,7 @@ public class EntryEditor extends VerticalLayout {
       modifiedAttributes.add(row.getName());
       markPendingChanges();
       refreshAttributeDisplay();
-      showSuccess("Deleted attribute '" + row.getName() + "'.");
+      NotificationHelper.showSuccess("Deleted attribute '" + row.getName() + "'.");
     });
     dialog.open();
   }
@@ -733,13 +732,13 @@ public class EntryEditor extends VerticalLayout {
       // Reload original entry to compare (without operational attributes)
       LdapEntry originalEntry = ldapService.readEntry(serverConfig, currentEntry.getDn(), false);
       if (originalEntry == null) {
-        showError("Could not load original entry for comparison.");
+        NotificationHelper.showError("Could not load original entry for comparison.");
         return;
       }
 
       List<Modification> modifications = createModifications(originalEntry, currentEntry);
       if (modifications.isEmpty()) {
-        showInfo("No changes to save.");
+        NotificationHelper.showInfo("No changes to save.");
         return;
       }
 
@@ -765,10 +764,10 @@ public class EntryEditor extends VerticalLayout {
       }
 
       clearPendingChanges();
-      showSuccess("Entry saved successfully.");
+      NotificationHelper.showSuccess("Entry saved successfully.");
       refreshEntry();
     } catch (Exception e) {
-      showError("Failed to save entry: " + e.getMessage());
+      NotificationHelper.showError("Failed to save entry: " + e.getMessage());
       logger.error("Failed to save entry", e);
     }
   }
@@ -824,13 +823,13 @@ public class EntryEditor extends VerticalLayout {
         refreshedEntry.setServerName(currentEntry.getServerName());
         editEntry(refreshedEntry);
         clearPendingChanges();
-        showInfo("Entry refreshed.");
+        NotificationHelper.showInfo("Entry refreshed.");
       } else {
-        showError("Entry not found.");
+        NotificationHelper.showError("Entry not found.");
         clear();
       }
     } catch (Exception e) {
-      showError("Failed to refresh entry: " + e.getMessage());
+      NotificationHelper.showError("Failed to refresh entry: " + e.getMessage());
       logger.error("Failed to refresh entry", e);
     }
   }
@@ -856,17 +855,17 @@ public class EntryEditor extends VerticalLayout {
 
     try {
       ldapService.deleteEntry(serverConfig, currentEntry.getDn());
-      showSuccess("Entry deleted successfully.");
+      NotificationHelper.showSuccess("Entry deleted successfully.");
       clear();
     } catch (Exception e) {
-      showError("Failed to delete entry: " + e.getMessage());
+      NotificationHelper.showError("Failed to delete entry: " + e.getMessage());
       logger.error("Failed to delete entry", e);
     }
   }
 
   private void openTestLoginDialog() {
     if (currentEntry == null || serverConfig == null) {
-      showError("No entry selected or server not configured.");
+      NotificationHelper.showError("No entry selected or server not configured.");
       return;
     }
 
@@ -897,7 +896,7 @@ public class EntryEditor extends VerticalLayout {
       String password = passwordField.getValue();
       
       if (password == null || password.trim().isEmpty()) {
-        showError("Password is required for authentication test.");
+        NotificationHelper.showError("Password is required for authentication test.");
         return;
       }
 
@@ -938,7 +937,7 @@ public class EntryEditor extends VerticalLayout {
 
         passwordField.clear();
       } catch (Exception ex) {
-        showError("Unexpected error: " + ex.getMessage());
+        NotificationHelper.showError("Unexpected error: " + ex.getMessage());
         logger.error("Test bind error", ex);
       }
     });
@@ -956,7 +955,7 @@ public class EntryEditor extends VerticalLayout {
 
   private void copyDnToClipboard() {
     if (currentEntry == null || currentEntry.getDn() == null) {
-      showInfo("No DN to copy.");
+      NotificationHelper.showInfo("No DN to copy.");
       return;
     }
 
@@ -965,12 +964,12 @@ public class EntryEditor extends VerticalLayout {
       ui.getPage().executeJs("navigator.clipboard.writeText($0)", dn);
     });
 
-    showSuccess("DN copied to clipboard");
+    NotificationHelper.showSuccess("DN copied to clipboard");
   }
 
   private void copyEntryToClipboard(boolean includeOperational) {
     if (currentEntry == null || serverConfig == null) {
-      showInfo("No entry to copy.");
+      NotificationHelper.showInfo("No entry to copy.");
       return;
     }
 
@@ -983,7 +982,7 @@ public class EntryEditor extends VerticalLayout {
       );
 
       if (entryToCopy == null) {
-        showError("Failed to fetch entry for copying.");
+        NotificationHelper.showError("Failed to fetch entry for copying.");
         return;
       }
 
@@ -1034,17 +1033,17 @@ public class EntryEditor extends VerticalLayout {
       String message = includeOperational 
           ? "Entry copied to clipboard (with operational attributes)" 
           : "Entry copied to clipboard";
-      showSuccess(message);
+      NotificationHelper.showSuccess(message);
 
     } catch (Exception e) {
-      showError("Failed to copy entry: " + e.getMessage());
+      NotificationHelper.showError("Failed to copy entry: " + e.getMessage());
       logger.error("Failed to copy entry", e);
     }
   }
 
   private void searchFromCurrentEntry() {
     if (currentEntry == null || currentEntry.getDn() == null) {
-      showInfo("No entry selected.");
+      NotificationHelper.showInfo("No entry selected.");
       return;
     }
 
@@ -1077,33 +1076,6 @@ public class EntryEditor extends VerticalLayout {
     modifiedAttributes.clear();
     saveButton.setText("Save Changes");
     saveButton.getStyle().remove("font-weight");
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(
-        message,
-        3000,
-        Notification.Position.BOTTOM_END
-    );
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(
-        message,
-        5000,
-        Notification.Position.BOTTOM_END
-    );
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showInfo(String message) {
-    Notification notification = Notification.show(
-        message,
-        3000,
-        Notification.Position.BOTTOM_END
-    );
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
   }
 
   /**

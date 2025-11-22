@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.util.AciParser;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -15,8 +16,6 @@ import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
@@ -369,7 +368,7 @@ public class EntryAccessControlTab extends VerticalLayout {
    */
   public void loadData() {
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showInfo("No servers selected. Please select at least one server from the navigation bar.");
+      NotificationHelper.showInfo("No servers selected. Please select at least one server from the navigation bar.");
       allAciInfo.clear();
       aciGrid.setItems(allAciInfo);
       aciDetailsPanel.removeAll();
@@ -446,9 +445,9 @@ public class EntryAccessControlTab extends VerticalLayout {
     dataLoaded = true;
 
     if (allAciInfo.isEmpty()) {
-      showInfo("No entry access control instructions found");
+      NotificationHelper.showInfo("No entry access control instructions found");
     } else {
-      showSuccess("Found " + allAciInfo.size() + " entry ACI(s) across " 
+      NotificationHelper.showSuccess("Found " + allAciInfo.size() + " entry ACI(s) across " 
           + selectedServers.size() + " server(s)");
     }
   }
@@ -483,27 +482,12 @@ public class EntryAccessControlTab extends VerticalLayout {
     return "dc=local"; // Last resort fallback
   }
 
-  private void showError(String message) {
-    Notification n = Notification.show(message, 5000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showInfo(String message) {
-    Notification n = Notification.show(message, 3000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_CONTRAST);
-  }
-
-  private void showSuccess(String message) {
-    Notification n = Notification.show(message, 3000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
   /**
    * Opens the Add ACI dialog.
    */
   private void openAddAciDialog() {
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No servers selected");
+      NotificationHelper.showError("No servers selected");
       return;
     }
 
@@ -512,7 +496,7 @@ public class EntryAccessControlTab extends VerticalLayout {
         .anyMatch(config -> ldapService.isConnected(config.getName()));
     
     if (!anyConnected) {
-      showError("Not connected to any selected server");
+      NotificationHelper.showError("Not connected to any selected server");
       return;
     }
 
@@ -525,19 +509,19 @@ public class EntryAccessControlTab extends VerticalLayout {
    */
   private void openEditAciDialog(EntryAciInfo aciInfo) {
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No servers selected");
+      NotificationHelper.showError("No servers selected");
       return;
     }
 
     LdapServerConfig serverConfig = getServerConfigById(aciInfo.getServerId());
     
     if (serverConfig == null) {
-      showError("Server configuration not found");
+      NotificationHelper.showError("Server configuration not found");
       return;
     }
 
     if (!ldapService.isConnected(serverConfig.getName())) {
-      showError("Not connected to server: " + serverConfig.getName());
+      NotificationHelper.showError("Not connected to server: " + serverConfig.getName());
       return;
     }
 
@@ -572,9 +556,9 @@ public class EntryAccessControlTab extends VerticalLayout {
       // Refresh the data to show the new ACI
       refreshData();
       
-      showSuccess("ACI added successfully to " + targetDn);
+      NotificationHelper.showSuccess("ACI added successfully to " + targetDn);
     } catch (LDAPException | GeneralSecurityException e) {
-      showError("Failed to add ACI: " + e.getMessage());
+      NotificationHelper.showError("Failed to add ACI: " + e.getMessage());
     }
   }
 
@@ -585,7 +569,7 @@ public class EntryAccessControlTab extends VerticalLayout {
     LdapServerConfig serverConfig = getServerConfigById(originalAci.getServerId());
     
     if (serverConfig == null) {
-      showError("Server configuration not found");
+      NotificationHelper.showError("Server configuration not found");
       return;
     }
 
@@ -598,18 +582,18 @@ public class EntryAccessControlTab extends VerticalLayout {
         // Add to new DN
         ldapService.addAttribute(serverConfig, targetDn, "aci", List.of(newAci));
         
-        showSuccess("ACI moved from " + originalAci.getDn() + " to " + targetDn);
+        NotificationHelper.showSuccess("ACI moved from " + originalAci.getDn() + " to " + targetDn);
       } else {
         // Same DN, replace the ACI value
         ldapService.modifyAttribute(serverConfig, targetDn, "aci", List.of(newAci));
-        showSuccess("ACI updated successfully on " + targetDn);
+        NotificationHelper.showSuccess("ACI updated successfully on " + targetDn);
       }
       
       // Refresh the data to show the updated ACI
       refreshData();
     
     } catch (LDAPException | GeneralSecurityException e) {
-      showError("Failed to update ACI: " + e.getMessage());
+      NotificationHelper.showError("Failed to update ACI: " + e.getMessage());
     }
   }
 
@@ -630,7 +614,7 @@ public class EntryAccessControlTab extends VerticalLayout {
     LdapServerConfig serverConfig = getServerConfigById(aciInfo.getServerId());
     
     if (serverConfig == null) {
-      showError("Server configuration not available");
+      NotificationHelper.showError("Server configuration not available");
       return;
     }
 
@@ -651,7 +635,7 @@ public class EntryAccessControlTab extends VerticalLayout {
         // Read current entry to get all ACI values (include operational attributes)
         LdapEntry entry = ldapService.readEntry(serverConfig, aciInfo.getDn(), true);
         if (entry == null) {
-          showError("Entry not found");
+          NotificationHelper.showError("Entry not found");
           confirmDialog.close();
           return;
         }
@@ -659,7 +643,7 @@ public class EntryAccessControlTab extends VerticalLayout {
         // Get all current ACI attribute values
         List<String> currentAciValues = entry.getAttributes().get("aci");
         if (currentAciValues == null || currentAciValues.isEmpty()) {
-          showError("No ACI attributes found on entry");
+          NotificationHelper.showError("No ACI attributes found on entry");
           confirmDialog.close();
           return;
         }
@@ -669,7 +653,7 @@ public class EntryAccessControlTab extends VerticalLayout {
         boolean removed = updatedAciValues.remove(aciInfo.getAciValue());
         
         if (!removed) {
-          showError("ACI value not found on entry");
+          NotificationHelper.showError("ACI value not found on entry");
           confirmDialog.close();
           return;
         }
@@ -683,11 +667,11 @@ public class EntryAccessControlTab extends VerticalLayout {
           ldapService.modifyAttribute(serverConfig, aciInfo.getDn(), "aci", updatedAciValues);
         }
         
-        showSuccess("ACI deleted successfully");
+        NotificationHelper.showSuccess("ACI deleted successfully");
         refreshData();
         confirmDialog.close();
       } catch (LDAPException | GeneralSecurityException e) {
-        showError("Failed to delete ACI: " + e.getMessage());
+        NotificationHelper.showError("Failed to delete ACI: " + e.getMessage());
       }
     });
     deleteButton.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
@@ -909,7 +893,7 @@ public class EntryAccessControlTab extends VerticalLayout {
       String aci = aciField.getValue().trim();
       
       if (targetDn.isEmpty() || aci.isEmpty()) {
-        showError("Please specify both target DN and ACI");
+        NotificationHelper.showError("Please specify both target DN and ACI");
         return;
       }
       
@@ -927,7 +911,7 @@ public class EntryAccessControlTab extends VerticalLayout {
       String aci = aciField.getValue().trim();
       
       if (targetDn.isEmpty() || aci.isEmpty()) {
-        showError("Please specify both target DN and ACI before copying as LDIF");
+        NotificationHelper.showError("Please specify both target DN and ACI before copying as LDIF");
         return;
       }
       
@@ -953,9 +937,9 @@ public class EntryAccessControlTab extends VerticalLayout {
             "});", ldif);
         
         String message = isEditMode ? "Update LDIF copied to clipboard" : "Add LDIF copied to clipboard";
-        showSuccess(message);
+        NotificationHelper.showSuccess(message);
       } catch (Exception e) {
-        showError("Failed to copy LDIF: " + e.getMessage());
+        NotificationHelper.showError("Failed to copy LDIF: " + e.getMessage());
       }
     }
 
@@ -988,16 +972,6 @@ public class EntryAccessControlTab extends VerticalLayout {
       ldif.append("aci: ").append(newAci).append("\n");
       ldif.append("-\n");
       return ldif.toString();
-    }
-    
-    private static void showSuccess(String message) {
-      Notification n = Notification.show(message, 3000, Notification.Position.TOP_END);
-      n.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-    }
-
-    private static void showError(String message) {
-      Notification n = Notification.show(message, 5000, Notification.Position.TOP_END);
-      n.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
   }
 

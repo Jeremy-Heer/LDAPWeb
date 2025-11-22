@@ -3,18 +3,16 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
@@ -269,7 +267,7 @@ public class EffectiveRightsTab extends VerticalLayout {
    */
   private void showDnBrowserDialog(TextField targetField) {
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No servers selected");
+      NotificationHelper.showError("No servers selected");
       return;
     }
 
@@ -288,19 +286,19 @@ public class EffectiveRightsTab extends VerticalLayout {
 
   private void performSearch() {
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showError("No servers selected");
+      NotificationHelper.showError("No servers selected");
       return;
     }
 
     String searchBase = searchBaseField.getValue();
     if (searchBase == null || searchBase.trim().isEmpty()) {
-      showError("Search base is required");
+      NotificationHelper.showError("Search base is required");
       return;
     }
 
     String effectiveRightsFor = effectiveRightsForField.getValue();
     if (effectiveRightsFor == null || effectiveRightsFor.trim().isEmpty()) {
-      showError("Effective Rights For DN is required");
+      NotificationHelper.showError("Effective Rights For DN is required");
       return;
     }
 
@@ -320,12 +318,12 @@ public class EffectiveRightsTab extends VerticalLayout {
       try {
         int parsedLimit = Integer.parseInt(sizeLimitStr.trim());
         if (parsedLimit < 0) {
-          showError("Search size limit must be 0 or greater");
+          NotificationHelper.showError("Search size limit must be 0 or greater");
           return;
         }
         sizeLimit = parsedLimit;
       } catch (NumberFormatException e) {
-        showError("Search size limit must be a valid number");
+        NotificationHelper.showError("Search size limit must be a valid number");
         return;
       }
     } else {
@@ -366,7 +364,7 @@ public class EffectiveRightsTab extends VerticalLayout {
           // Show error to user but continue processing other servers
           final String errorMsg = e.getMessage();
           getUI().ifPresent(ui -> ui.access(() -> 
-              showError("Error searching server " + server.getName() + ": " + errorMsg)));
+              NotificationHelper.showError("Error searching server " + server.getName() + ": " + errorMsg)));
         }
       }
 
@@ -384,22 +382,22 @@ public class EffectiveRightsTab extends VerticalLayout {
             
             if (results.isEmpty()) {
               if (sizeLimitExceeded) {
-                showWarning("Search size limit (" + sizeLimit + ") exceeded but no entries were returned. Try adjusting your search criteria.");
+                NotificationHelper.showWarning("Search size limit (" + sizeLimit + ") exceeded but no entries were returned. Try adjusting your search criteria.");
               } else {
-                showInfo("No entries found matching the search criteria");
+                NotificationHelper.showInfo("No entries found matching the search criteria");
               }
             } else {
               String successMessage = "Found " + results.size() + " entries with effective rights information";
               if (sizeLimitExceeded) {
                 successMessage += " (size limit reached - more entries may be available)";
               }
-              showSuccess(successMessage);
+              NotificationHelper.showSuccess(successMessage);
             }
           } catch (Exception gridException) {
             logger.error("Exception during grid update", gridException);
             loadingContainer.setVisible(false);
             progressBar.setVisible(false);
-            showError("Error updating results: " + gridException.getMessage());
+            NotificationHelper.showError("Error updating results: " + gridException.getMessage());
           }
           
           ui.push();
@@ -497,26 +495,6 @@ public class EffectiveRightsTab extends VerticalLayout {
     result.setEntryRights(entryRights.toString());
     
     results.add(result);
-  }
-
-  private void showError(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.MIDDLE);
-    notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showSuccess(String message) {
-    Notification notification = Notification.show(message, 3000, Notification.Position.BOTTOM_START);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-  }
-
-  private void showInfo(String message) {
-    Notification notification = Notification.show(message, 4000, Notification.Position.MIDDLE);
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
-  }
-
-  private void showWarning(String message) {
-    Notification notification = Notification.show(message, 5000, Notification.Position.MIDDLE);
-    notification.addThemeVariants(NotificationVariant.LUMO_WARNING);
   }
 
   /**

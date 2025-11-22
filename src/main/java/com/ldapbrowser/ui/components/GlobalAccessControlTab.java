@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
@@ -13,8 +14,6 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
@@ -205,7 +204,7 @@ public class GlobalAccessControlTab extends VerticalLayout {
    */
   public void refreshData() {
     if (selectedServers == null || selectedServers.isEmpty()) {
-      showInfo("No servers selected. Please select at least one server from the navigation bar.");
+      NotificationHelper.showInfo("No servers selected. Please select at least one server from the navigation bar.");
       allAciInfo.clear();
       aciGrid.setItems(allAciInfo);
       aciDetailsPanel.removeAll();
@@ -245,7 +244,7 @@ public class GlobalAccessControlTab extends VerticalLayout {
       } catch (LDAPException | java.security.GeneralSecurityException e) {
         logger.error("Failed to retrieve global ACIs from server {}: {}", 
             server.getName(), e.getMessage());
-        showError("Failed to load ACIs from " + server.getName() + ": " + e.getMessage());
+        NotificationHelper.showError("Failed to load ACIs from " + server.getName() + ": " + e.getMessage());
       }
     }
 
@@ -253,9 +252,9 @@ public class GlobalAccessControlTab extends VerticalLayout {
     aciGrid.setItems(allAciInfo);
     
     if (allAciInfo.isEmpty()) {
-      showInfo("No global ACIs found on selected servers.");
+      NotificationHelper.showInfo("No global ACIs found on selected servers.");
     } else {
-      showSuccess("Loaded " + allAciInfo.size() + " global ACIs from " 
+      NotificationHelper.showSuccess("Loaded " + allAciInfo.size() + " global ACIs from " 
           + selectedServers.size() + " server(s).");
     }
   }
@@ -367,21 +366,6 @@ public class GlobalAccessControlTab extends VerticalLayout {
           .collect(Collectors.toList());
       aciGrid.setItems(filteredList);
     }
-  }
-
-  private void showError(String message) {
-    Notification n = Notification.show(message, 5000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_ERROR);
-  }
-
-  private void showInfo(String message) {
-    Notification n = Notification.show(message, 3000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_CONTRAST);
-  }
-
-  private void showSuccess(String message) {
-    Notification n = Notification.show(message, 3000, Notification.Position.TOP_END);
-    n.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
   }
 
   /**
