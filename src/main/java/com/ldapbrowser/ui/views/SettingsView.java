@@ -5,14 +5,13 @@ import com.ldapbrowser.service.EncryptionService;
 import com.ldapbrowser.service.KeystoreService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -171,9 +170,7 @@ public class SettingsView extends VerticalLayout {
       List<String> aliases = truststoreService.listCertificates();
       certificateGrid.setItems(aliases);
     } catch (Exception e) {
-      Notification.show("Error loading certificates: " + e.getMessage(),
-          3000, Notification.Position.MIDDLE)
-          .addThemeVariants(NotificationVariant.LUMO_ERROR);
+      NotificationHelper.showError("Error loading certificates: " + e.getMessage(), 3000);
     }
   }
 
@@ -256,8 +253,7 @@ public class SettingsView extends VerticalLayout {
     Button saveButton = new Button("Add Certificate", event -> {
       String alias = aliasField.getValue();
       if (alias == null || alias.trim().isEmpty()) {
-        Notification.show("Please enter a certificate alias", 3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        NotificationHelper.showError("Please enter a certificate alias", 3000);
         return;
       }
 
@@ -279,9 +275,7 @@ public class SettingsView extends VerticalLayout {
         }
 
         if (cert == null) {
-          Notification.show("Please upload a certificate file or paste PEM text",
-              3000, Notification.Position.MIDDLE)
-              .addThemeVariants(NotificationVariant.LUMO_ERROR);
+          NotificationHelper.showError("Please upload a certificate file or paste PEM text", 3000);
           return;
         }
 
@@ -289,12 +283,9 @@ public class SettingsView extends VerticalLayout {
         refreshCertificateGrid();
         updateStatsLabel(statsLabel);
         dialog.close();
-        Notification.show("Certificate added successfully", 3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        NotificationHelper.showSuccess("Certificate added successfully", 3000);
       } catch (Exception e) {
-        Notification.show("Error adding certificate: " + e.getMessage(),
-            5000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        NotificationHelper.showError("Error adding certificate: " + e.getMessage(), 5000);
       }
     });
     saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -331,9 +322,7 @@ public class SettingsView extends VerticalLayout {
         dialog.getFooter().add(closeButton);
         dialog.open();
       } catch (Exception e) {
-        Notification.show("Error loading certificate details: " + e.getMessage(),
-            3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        NotificationHelper.showError("Error loading certificate details: " + e.getMessage(), 3000);
       }
     });
   }
@@ -349,12 +338,9 @@ public class SettingsView extends VerticalLayout {
         truststoreService.removeCertificate(alias);
         refreshCertificateGrid();
         updateStatsLabel(statsLabel);
-        Notification.show("Certificate deleted successfully", 3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        NotificationHelper.showSuccess("Certificate deleted successfully", 3000);
       } catch (Exception e) {
-        Notification.show("Error deleting certificate: " + e.getMessage(),
-            3000, Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        NotificationHelper.showError("Error deleting certificate: " + e.getMessage(), 3000);
       }
     });
   }
@@ -394,15 +380,11 @@ public class SettingsView extends VerticalLayout {
     Button initButton = new Button("Initialize Keystore", event -> {
       try {
         keystoreService.initializeKeystoreIfNeeded();
-        Notification.show("Keystore initialized successfully", 3000,
-            Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        NotificationHelper.showSuccess("Keystore initialized successfully", 3000);
         updateKeystoreStatus(statusLabel);
         updateKeystoreStats(statsArea);
       } catch (Exception e) {
-        Notification.show("Failed to initialize keystore: " + e.getMessage(), 5000,
-            Notification.Position.MIDDLE)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        NotificationHelper.showError("Failed to initialize keystore: " + e.getMessage(), 5000);
       }
     });
     initButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -422,15 +404,11 @@ public class SettingsView extends VerticalLayout {
           keystoreService.rotateKey();
           // Re-encrypt all passwords with new key
           configurationService.migratePasswords(true);
-          Notification.show("Encryption key rotated and passwords re-encrypted", 3000,
-              Notification.Position.MIDDLE)
-              .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+          NotificationHelper.showSuccess("Encryption key rotated and passwords re-encrypted", 3000);
           updateKeystoreStats(statsArea);
           confirmDialog.close();
         } catch (Exception ex) {
-          Notification.show("Failed to rotate key: " + ex.getMessage(), 5000,
-              Notification.Position.MIDDLE)
-              .addThemeVariants(NotificationVariant.LUMO_ERROR);
+          NotificationHelper.showError("Failed to rotate key: " + ex.getMessage(), 5000);
         }
       });
       confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
@@ -558,14 +536,10 @@ public class SettingsView extends VerticalLayout {
       Button confirmButton = new Button("Encrypt", e -> {
         try {
           configurationService.migratePasswords(true);
-          Notification.show("All passwords encrypted successfully", 3000,
-              Notification.Position.MIDDLE)
-              .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+          NotificationHelper.showSuccess("All passwords encrypted successfully", 3000);
           confirmDialog.close();
         } catch (Exception ex) {
-          Notification.show("Failed to encrypt passwords: " + ex.getMessage(), 5000,
-              Notification.Position.MIDDLE)
-              .addThemeVariants(NotificationVariant.LUMO_ERROR);
+          NotificationHelper.showError("Failed to encrypt passwords: " + ex.getMessage(), 5000);
         }
       });
       confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -591,14 +565,10 @@ public class SettingsView extends VerticalLayout {
       Button confirmButton = new Button("Decrypt", e -> {
         try {
           configurationService.migratePasswords(false);
-          Notification.show("All passwords decrypted to cleartext", 3000,
-              Notification.Position.MIDDLE)
-              .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+          NotificationHelper.showSuccess("All passwords decrypted to cleartext", 3000);
           confirmDialog.close();
         } catch (Exception ex) {
-          Notification.show("Failed to decrypt passwords: " + ex.getMessage(), 5000,
-              Notification.Position.MIDDLE)
-              .addThemeVariants(NotificationVariant.LUMO_ERROR);
+          NotificationHelper.showError("Failed to decrypt passwords: " + ex.getMessage(), 5000);
         }
       });
       confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);

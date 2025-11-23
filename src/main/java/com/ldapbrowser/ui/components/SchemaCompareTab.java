@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.util.SchemaCompareUtil;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.schema.AttributeSyntaxDefinition;
@@ -19,8 +20,6 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
@@ -252,8 +251,7 @@ public class SchemaCompareTab extends VerticalLayout {
     if (errors > 0) {
       statusLabel.setText("Loaded with " + errors + " error(s). Extended schema info control " 
           + (allSupportExtended ? "used" : "disabled") + ".");
-      Notification n = Notification.show("Some servers failed to load schema.");
-      n.addThemeVariants(NotificationVariant.LUMO_ERROR);
+      NotificationHelper.showError("Some servers failed to load schema.");
       loggingService.logError("SCHEMA", "Schema comparison completed with " + errors + " errors");
     } else {
       statusLabel.setText("Schema loaded. Extended schema info control " 

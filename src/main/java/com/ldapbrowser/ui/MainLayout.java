@@ -3,7 +3,10 @@ package com.ldapbrowser.ui;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.ui.components.LogsDrawer;
 import com.ldapbrowser.ui.dialogs.HelpDialog;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.ui.views.AccessView;
 import com.ldapbrowser.ui.views.BrowseView;
 import com.ldapbrowser.ui.views.BulkView;
@@ -18,6 +21,7 @@ import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -43,20 +47,39 @@ public class MainLayout extends AppLayout {
   private static final String SELECTED_SERVERS_KEY = "selectedServers";
   private final ConfigurationService configService;
   private final LdapService ldapService;
+  private final LoggingService loggingService;
   private MultiSelectComboBox<String> serverSelect;
   private HorizontalLayout selectedServersContainer;
+  private Dialog logsDialog;
+  private Button logsButton;
+  private int unreadLogCount = 0;
 
   /**
    * Creates the main layout with navbar and drawer.
    *
    * @param configService configuration service
    * @param ldapService LDAP service for connection management
+   * @param loggingService logging service for activity logs
    */
-  public MainLayout(ConfigurationService configService, LdapService ldapService) {
+  public MainLayout(ConfigurationService configService, LdapService ldapService, 
+      LoggingService loggingService) {
     this.configService = configService;
     this.ldapService = ldapService;
+    this.loggingService = loggingService;
+    
+    // Set the logging service for NotificationHelper to use
+    NotificationHelper.setLoggingService(loggingService);
+    
     createHeader();
     createDrawer();
+    
+    // Register for log updates to show badge count
+    loggingService.addListener(entry -> {
+      getUI().ifPresent(ui -> ui.access(() -> {
+        unreadLogCount++;
+        updateLogsBadge();
+      }));
+    });
     
     // Clean up UI-scoped state on detach
     UI.getCurrent().addDetachListener(event -> {
@@ -120,6 +143,21 @@ public class MainLayout extends AppLayout {
       notifyCurrentViewOfServerChange();
     });
 
+    // Logs button with bell icon and badge
+    logsButton = new Button(VaadinIcon.BELL.create());
+    logsButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    logsButton.setTooltipText("Activity Logs");
+    logsButton.getStyle().set("position", "relative");
+    logsButton.addClickListener(event -> {
+      if (logsDialog == null) {
+        createLogsDialog();
+      }
+      logsDialog.open();
+      // Reset unread count when dialog is opened
+      unreadLogCount = 0;
+      updateLogsBadge();
+    });
+
     // Help button for top right
     Button helpButton = new Button(VaadinIcon.QUESTION_CIRCLE.create());
     helpButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
@@ -138,11 +176,40 @@ public class MainLayout extends AppLayout {
 
     header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
     header.setWidth("100%");
-    header.expand(selectedServersContainer); // Make this expand to push help button to the right
-    header.add(helpButton); // Add help button at the end
+    header.expand(selectedServersContainer); // Make this expand to push buttons to the right
+    header.add(logsButton, helpButton); // Add buttons at the end
     header.addClassNames("py-0", "px-m");
 
     addToNavbar(header);
+  }
+
+  /**
+   * Creates the logs dialog with activity logs drawer.
+   */
+  private void createLogsDialog() {
+    logsDialog = new Dialog();
+    logsDialog.setHeaderTitle("Activity Logs");
+    logsDialog.setModal(false);
+    logsDialog.setDraggable(true);
+    logsDialog.setResizable(true);
+    
+    // Set dialog size
+    logsDialog.setWidth("600px");
+    logsDialog.setHeight("800px");
+    
+    LogsDrawer logsDrawer = new LogsDrawer(loggingService);
+    logsDialog.add(logsDrawer);
+    
+    // Refresh logs when dialog opens
+    logsDialog.addOpenedChangeListener(event -> {
+      if (event.isOpened()) {
+        logsDrawer.refresh();
+      }
+    });
+    
+    Button closeButton = new Button("Close", e -> logsDialog.close());
+    closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    logsDialog.getFooter().add(closeButton);
   }
 
   /**
@@ -296,5 +363,18 @@ public class MainLayout extends AppLayout {
     Set<String> selected = (Set<String>) VaadinSession.getCurrent()
         .getAttribute(uiKey);
     return selected != null ? selected : new HashSet<>();
+  }
+
+  /**
+   * Updates the badge on the logs button to show unread count.
+   */
+  private void updateLogsBadge() {
+    if (unreadLogCount > 0) {
+      logsButton.getElement().setAttribute("badge", String.valueOf(unreadLogCount));
+      logsButton.getElement().getThemeList().add("badge");
+    } else {
+      logsButton.getElement().removeAttribute("badge");
+      logsButton.getElement().getThemeList().remove("badge");
+    }
   }
 }

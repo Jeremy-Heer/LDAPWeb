@@ -7,6 +7,7 @@ import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.EntryEditor;
 import com.ldapbrowser.ui.components.LdapTreeBrowser;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
@@ -14,8 +15,6 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -195,9 +194,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
         entryEditor.editEntry(entry);
       }
     } catch (Exception e) {
-      Notification.show("Failed to load entry details: " + e.getMessage(),
-          3000, Notification.Position.BOTTOM_END)
-          .addThemeVariants(NotificationVariant.LUMO_ERROR);
+      NotificationHelper.showError("Failed to load entry details: " + e.getMessage(), 3000);
       // Show basic entry info
       entryEditor.editEntry(entry);
     }
@@ -270,8 +267,6 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
   }
 
   private void showServerNotFound(String serverName) {
-    Notification.show("Server not found: " + serverName,
-        3000, Notification.Position.BOTTOM_END)
-        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+    NotificationHelper.showError("Server not found: " + serverName, 3000);
   }
 }

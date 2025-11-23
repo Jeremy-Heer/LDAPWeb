@@ -8,6 +8,7 @@ import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
 import com.ldapbrowser.ui.components.EntryEditor;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
@@ -16,8 +17,6 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -482,8 +481,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     SearchScope scope = scopeSelect.getValue();
 
     if (baseDn == null || baseDn.isEmpty()) {
-      Notification.show("Please enter a search base", 3000, Notification.Position.MIDDLE)
-          .addThemeVariants(NotificationVariant.LUMO_ERROR);
+      NotificationHelper.showError("Please enter a search base", 3000);
       return;
     }
 
@@ -494,11 +492,9 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     // Get selected servers from session
     Set<String> selectedServers = MainLayout.getSelectedServers();
     if (selectedServers.isEmpty()) {
-      Notification.show(
+      NotificationHelper.showError(
           "Please select at least one server from the navbar",
-          3000,
-          Notification.Position.MIDDLE
-      ).addThemeVariants(NotificationVariant.LUMO_ERROR);
+          3000);
       return;
     }
 
@@ -529,11 +525,9 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
               currentResults.addAll(results);
               logger.info("Search on {} returned {} results", serverName, results.size());
             } catch (LDAPException | GeneralSecurityException e) {
-              Notification.show(
+              NotificationHelper.showError(
                   "Search failed on " + serverName + ": " + e.getMessage(),
-                  5000,
-                  Notification.Position.MIDDLE
-              ).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                  5000);
               logger.error("Search failed on {}", serverName, e);
             }
           });
@@ -548,22 +542,18 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     gridFilterField.clear();
     
     resultsGrid.setItems(currentResults);
-    Notification.show(
+    NotificationHelper.showSuccess(
         "Search complete: " + currentResults.size() + " entries found",
-        3000,
-        Notification.Position.BOTTOM_END
-    ).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        3000);
   }
 
   private void showBrowseDialog() {
     // Get the selected servers from the session
     Set<String> selectedServers = MainLayout.getSelectedServers();
     if (selectedServers == null || selectedServers.isEmpty()) {
-      Notification notification = Notification.show(
+      NotificationHelper.showError(
           "Please select a server from the Connections page",
-          3000,
-          Notification.Position.MIDDLE);
-      notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+          3000);
       return;
     }
 
@@ -574,11 +564,9 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
         .collect(java.util.stream.Collectors.toList());
 
     if (selectedConfigs.isEmpty()) {
-      Notification notification = Notification.show(
+      NotificationHelper.showError(
           "Server configuration not found",
-          3000,
-          Notification.Position.MIDDLE);
-      notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+          3000);
       return;
     }
 

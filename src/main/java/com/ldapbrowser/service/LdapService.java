@@ -66,6 +66,7 @@ public class LdapService {
   private final Map<String, Integer> currentPages = new ConcurrentHashMap<>();
   
   private final TruststoreService truststoreService;
+  private final LoggingService loggingService;
   
   // Track the last trust manager used for certificate validation
   private final Map<String, TrustStoreTrustManager> trustManagers = new ConcurrentHashMap<>();
@@ -74,9 +75,11 @@ public class LdapService {
    * Constructor with dependency injection.
    *
    * @param truststoreService service for managing trusted certificates
+   * @param loggingService service for activity logging
    */
-  public LdapService(TruststoreService truststoreService) {
+  public LdapService(TruststoreService truststoreService, LoggingService loggingService) {
     this.truststoreService = truststoreService;
+    this.loggingService = loggingService;
   }
 
   /**
@@ -729,6 +732,24 @@ public class LdapService {
     
     pool.modify(dn, mod);
     logger.info("Modified attribute {} on {}", attributeName, dn);
+    
+    // Generate LDIF format
+    StringBuilder ldif = new StringBuilder();
+    ldif.append("dn: ").append(dn).append("\n");
+    ldif.append("changetype: modify\n");
+    ldif.append("replace: ").append(attributeName).append("\n");
+    for (String value : values) {
+      ldif.append(attributeName).append(": ").append(value).append("\n");
+    }
+    ldif.append("-");
+    
+    // Log to activity log
+    loggingService.logModification(
+        config.getName(),
+        "Modified attribute '" + attributeName + "' on entry",
+        dn,
+        ldif.toString()
+    );
   }
 
   /**
@@ -757,6 +778,24 @@ public class LdapService {
     
     pool.modify(dn, mod);
     logger.info("Added attribute {} to {}", attributeName, dn);
+    
+    // Generate LDIF format
+    StringBuilder ldif = new StringBuilder();
+    ldif.append("dn: ").append(dn).append("\n");
+    ldif.append("changetype: modify\n");
+    ldif.append("add: ").append(attributeName).append("\n");
+    for (String value : values) {
+      ldif.append(attributeName).append(": ").append(value).append("\n");
+    }
+    ldif.append("-");
+    
+    // Log to activity log
+    loggingService.logModification(
+        config.getName(),
+        "Added attribute '" + attributeName + "' to entry",
+        dn,
+        ldif.toString()
+    );
   }
 
   /**
@@ -779,6 +818,21 @@ public class LdapService {
     
     pool.modify(dn, mod);
     logger.info("Deleted attribute {} from {}", attributeName, dn);
+    
+    // Generate LDIF format
+    StringBuilder ldif = new StringBuilder();
+    ldif.append("dn: ").append(dn).append("\n");
+    ldif.append("changetype: modify\n");
+    ldif.append("delete: ").append(attributeName).append("\n");
+    ldif.append("-");
+    
+    // Log to activity log
+    loggingService.logModification(
+        config.getName(),
+        "Deleted attribute '" + attributeName + "' from entry",
+        dn,
+        ldif.toString()
+    );
   }
 
   /**

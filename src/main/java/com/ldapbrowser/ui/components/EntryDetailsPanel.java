@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.grid.Grid;
@@ -10,8 +11,6 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.theme.lumo.LumoUtility;
@@ -226,8 +225,7 @@ public class EntryDetailsPanel extends VerticalLayout {
         );
       });
 
-      Notification.show("DN copied to clipboard", 2000, Notification.Position.BOTTOM_END)
-          .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+      NotificationHelper.showInfo("DN copied to clipboard", 2000);
     }
   }
 
@@ -238,12 +236,9 @@ public class EntryDetailsPanel extends VerticalLayout {
             currentEntry.getDn(), false);
         showEntry(refreshedEntry);
 
-        Notification.show("Entry refreshed", 2000, Notification.Position.BOTTOM_END)
-            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        NotificationHelper.showSuccess("Entry refreshed", 2000);
       } catch (Exception e) {
-        Notification.show("Failed to refresh entry: " + e.getMessage(),
-            3000, Notification.Position.BOTTOM_END)
-            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        NotificationHelper.showError("Failed to refresh entry: " + e.getMessage(), 3000);
       }
     }
   }

@@ -2,6 +2,7 @@ package com.ldapbrowser.ui.dialogs;
 
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.TruststoreService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -247,21 +248,13 @@ public class TlsCertificateDialog extends Dialog {
       logger.info("Imported certificate for {} with alias: {}", serverConfig.getName(), alias);
 
       // Show success message
-      com.vaadin.flow.component.notification.Notification.show(
-          "Certificate imported successfully as: " + alias,
-          3000,
-          com.vaadin.flow.component.notification.Notification.Position.MIDDLE
-      );
+      NotificationHelper.showSuccess("Certificate imported successfully as: " + alias);
 
       onComplete.accept(true);
       close();
     } catch (Exception e) {
       logger.error("Failed to import certificate", e);
-      com.vaadin.flow.component.notification.Notification.show(
-          "Failed to import certificate: " + e.getMessage(),
-          5000,
-          com.vaadin.flow.component.notification.Notification.Position.MIDDLE
-      );
+      NotificationHelper.showError("Failed to import certificate: " + e.getMessage());
     }
   }
 

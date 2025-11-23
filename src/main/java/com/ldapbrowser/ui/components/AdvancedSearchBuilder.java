@@ -2,14 +2,13 @@ package com.ldapbrowser.ui.components;
 
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -210,9 +209,7 @@ public class AdvancedSearchBuilder extends VerticalLayout {
             "navigator.clipboard.writeText($0).then(() => {}, () => {});",
             filter
         );
-        Notification notification = Notification.show("Filter copied to clipboard", 2000,
-            Notification.Position.BOTTOM_CENTER);
-        notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        NotificationHelper.showInfo("Filter copied to clipboard", 2000);
       }
     });
     

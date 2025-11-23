@@ -4,11 +4,11 @@ import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.treegrid.TreeGrid;
 import com.vaadin.flow.data.provider.hierarchy.TreeData;
@@ -793,8 +793,14 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
   }
 
   private void showNotification(String message, NotificationVariant variant) {
-    Notification notification = Notification.show(message, 3000,
-        Notification.Position.BOTTOM_END);
-    notification.addThemeVariants(variant);
+    if (variant == NotificationVariant.LUMO_ERROR) {
+      NotificationHelper.showError(message, 3000);
+    } else if (variant == NotificationVariant.LUMO_SUCCESS) {
+      NotificationHelper.showSuccess(message, 3000);
+    } else if (variant == NotificationVariant.LUMO_WARNING) {
+      NotificationHelper.showWarning(message, 3000);
+    } else {
+      NotificationHelper.showInfo(message, 3000);
+    }
   }
 }
