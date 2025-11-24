@@ -184,7 +184,13 @@ public class SchemaManageTab extends VerticalLayout {
         .setResizable(true)
         .setSortable(true);
 
-    objectClassGrid.addColumn(se -> se.getElement().getNameOrOID())
+    objectClassGrid.addColumn(se -> {
+      ObjectClassDefinition oc = se.getElement();
+      if (oc.getNames() != null && oc.getNames().length > 0) {
+        return String.join(", ", Arrays.asList(oc.getNames()));
+      }
+      return oc.getOID();
+    })
         .setHeader("Name")
         .setFlexGrow(2)
         .setResizable(true)
@@ -241,7 +247,13 @@ public class SchemaManageTab extends VerticalLayout {
         .setResizable(true)
         .setSortable(true);
 
-    attributeTypeGrid.addColumn(se -> se.getElement().getNameOrOID())
+    attributeTypeGrid.addColumn(se -> {
+      AttributeTypeDefinition at = se.getElement();
+      if (at.getNames() != null && at.getNames().length > 0) {
+        return String.join(", ", Arrays.asList(at.getNames()));
+      }
+      return at.getOID();
+    })
         .setHeader("Name")
         .setFlexGrow(2)
         .setResizable(true)
@@ -869,14 +881,19 @@ public class SchemaManageTab extends VerticalLayout {
           String.join(", ", oc.getSuperiorClasses()));
     }
 
+    // Get schema for clickable attribute links
+    Schema schema = getSchemaForElement(se);
+
+    // Required Attributes - clickable if schema available
     if (oc.getRequiredAttributes() != null && oc.getRequiredAttributes().length > 0) {
-      SchemaDetailDialogHelper.addDetailRow(details, "Required Attributes",
-          String.join(", ", oc.getRequiredAttributes()));
+      addClickableAttributeListToDetails(details, "Required Attributes",
+          oc.getRequiredAttributes(), schema, se.getServerName());
     }
 
+    // Optional Attributes - clickable if schema available
     if (oc.getOptionalAttributes() != null && oc.getOptionalAttributes().length > 0) {
-      SchemaDetailDialogHelper.addDetailRow(details, "Optional Attributes",
-          String.join(", ", oc.getOptionalAttributes()));
+      addClickableAttributeListToDetails(details, "Optional Attributes",
+          oc.getOptionalAttributes(), schema, se.getServerName());
     }
 
     // Extensions (additional properties)
@@ -974,6 +991,9 @@ public class SchemaManageTab extends VerticalLayout {
       }
       SchemaDetailDialogHelper.addDetailRow(details, "Extensions", extensions.toString());
     }
+
+    // Add "Used as May" and "Used as Must" sections
+    addAttributeUsageSection(details, at, se);
 
     // Add raw schema definition at the bottom
     SchemaDetailDialogHelper.addRawDefinition(details, at);
@@ -3262,5 +3282,204 @@ public class SchemaManageTab extends VerticalLayout {
       logger.debug("Failed to parse attribute type definition: {}", e.getMessage());
       // Don't update fields if parsing fails
     }
+  }
+
+  /**
+   * Add "Used as May" and "Used as Must" sections to attribute type details.
+   *
+   * @param details the layout to add sections to
+   * @param at the attribute type definition
+   * @param se the schema element
+   */
+  private void addAttributeUsageSection(VerticalLayout details, AttributeTypeDefinition at,
+      SchemaElement<AttributeTypeDefinition> se) {
+    try {
+      LdapServerConfig config = se.getServerConfig();
+      if (config == null) {
+        return;
+      }
+
+      Schema schema = ldapService.getSchema(config);
+      if (schema == null) {
+        return;
+      }
+
+      // Find all attribute names for this attribute type
+      Set<String> attrNames = new HashSet<>();
+      if (at.getNames() != null && at.getNames().length > 0) {
+        attrNames.addAll(Arrays.asList(at.getNames()));
+      }
+      attrNames.add(at.getOID());
+
+      // Find object classes that use this attribute
+      List<ObjectClassDefinition> usedAsMay = new ArrayList<>();
+      List<ObjectClassDefinition> usedAsMust = new ArrayList<>();
+
+      for (ObjectClassDefinition oc : schema.getObjectClasses()) {
+        // Check MAY list
+        if (oc.getOptionalAttributes() != null) {
+          for (String mayAttr : oc.getOptionalAttributes()) {
+            if (attrNames.contains(mayAttr)) {
+              usedAsMay.add(oc);
+              break;
+            }
+          }
+        }
+
+        // Check MUST list
+        if (oc.getRequiredAttributes() != null) {
+          for (String mustAttr : oc.getRequiredAttributes()) {
+            if (attrNames.contains(mustAttr)) {
+              usedAsMust.add(oc);
+              break;
+            }
+          }
+        }
+      }
+
+      // Add "Used as May" section
+      if (!usedAsMay.isEmpty()) {
+        addClickableObjectClassList(details, "Used as May", usedAsMay, se.getServerName(), config);
+      }
+
+      // Add "Used as Must" section
+      if (!usedAsMust.isEmpty()) {
+        addClickableObjectClassList(details, "Used as Must", usedAsMust, se.getServerName(), config);
+      }
+    } catch (Exception e) {
+      logger.warn("Failed to load attribute usage information: {}", e.getMessage());
+    }
+  }
+
+  /**
+   * Add a clickable list of object classes to the details panel.
+   *
+   * @param parent the parent layout
+   * @param label the section label
+   * @param objectClasses the list of object classes
+   * @param serverName the server name
+   * @param config the server configuration
+   */
+  private void addClickableObjectClassList(VerticalLayout parent, String label,
+      List<ObjectClassDefinition> objectClasses, String serverName, LdapServerConfig config) {
+    HorizontalLayout row = new HorizontalLayout();
+    row.setWidthFull();
+    row.setDefaultVerticalComponentAlignment(Alignment.START);
+    row.setSpacing(true);
+
+    Span labelSpan = new Span(label + ":");
+    labelSpan.getStyle().set("font-weight", "bold").set("min-width", "150px");
+
+    HorizontalLayout linksLayout = new HorizontalLayout();
+    linksLayout.setSpacing(false);
+    linksLayout.getStyle().set("flex-wrap", "wrap");
+
+    for (int i = 0; i < objectClasses.size(); i++) {
+      ObjectClassDefinition oc = objectClasses.get(i);
+      
+      Button linkButton = new Button(oc.getNameOrOID());
+      linkButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_SMALL);
+      linkButton.getStyle().set("padding", "0").set("min-height", "auto");
+      
+      // Get schema for nested lookups
+      try {
+        Schema schema = ldapService.getSchema(config);
+        linkButton.addClickListener(e -> 
+            SchemaDetailDialogHelper.showObjectClassDialog(oc, serverName, schema));
+      } catch (Exception ex) {
+        linkButton.addClickListener(e -> 
+            SchemaDetailDialogHelper.showObjectClassDialog(oc, serverName));
+      }
+      
+      linksLayout.add(linkButton);
+      
+      if (i < objectClasses.size() - 1) {
+        Span comma = new Span(", ");
+        comma.getStyle().set("padding", "0 2px");
+        linksLayout.add(comma);
+      }
+    }
+
+    row.add(labelSpan, linksLayout);
+    row.setFlexGrow(1, linksLayout);
+
+    parent.add(row);
+  }
+
+  /**
+   * Add a clickable list of attributes to the details panel.
+   *
+   * @param parent the parent layout
+   * @param label the section label
+   * @param attributeNames the attribute names array
+   * @param schema the schema for looking up attribute definitions
+   * @param serverName the server name
+   */
+  private void addClickableAttributeListToDetails(VerticalLayout parent, String label,
+      String[] attributeNames, Schema schema, String serverName) {
+    HorizontalLayout row = new HorizontalLayout();
+    row.setWidthFull();
+    row.setDefaultVerticalComponentAlignment(Alignment.START);
+    row.setSpacing(true);
+
+    Span labelSpan = new Span(label + ":");
+    labelSpan.getStyle().set("font-weight", "bold").set("min-width", "150px");
+
+    HorizontalLayout linksLayout = new HorizontalLayout();
+    linksLayout.setSpacing(false);
+    linksLayout.getStyle().set("flex-wrap", "wrap");
+
+    for (int i = 0; i < attributeNames.length; i++) {
+      String attrName = attributeNames[i];
+      
+      Button linkButton = new Button(attrName);
+      linkButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_SMALL);
+      linkButton.getStyle().set("padding", "0").set("min-height", "auto");
+      
+      if (schema != null) {
+        AttributeTypeDefinition attrType = schema.getAttributeType(attrName);
+        if (attrType != null) {
+          linkButton.addClickListener(e -> 
+              SchemaDetailDialogHelper.showAttributeTypeDialog(attrType, serverName, schema));
+        } else {
+          // If attribute type not found, disable the button
+          linkButton.setEnabled(false);
+        }
+      } else {
+        // No schema available, disable the button
+        linkButton.setEnabled(false);
+      }
+      
+      linksLayout.add(linkButton);
+      
+      if (i < attributeNames.length - 1) {
+        Span comma = new Span(", ");
+        comma.getStyle().set("padding", "0 2px");
+        linksLayout.add(comma);
+      }
+    }
+
+    row.add(labelSpan, linksLayout);
+    row.setFlexGrow(1, linksLayout);
+
+    parent.add(row);
+  }
+
+  /**
+   * Get the Schema for a SchemaElement.
+   *
+   * @param se the schema element
+   * @return the Schema or null if not available
+   */
+  private Schema getSchemaForElement(SchemaElement<?> se) {
+    try {
+      LdapServerConfig config = se.getServerConfig();
+      if (config != null) {
+        return ldapService.getSchema(config);
+      }
+    } catch (Exception e) {
+      logger.warn("Failed to get schema for element: {}", e.getMessage());
+    }
+    return null;
   }
 }

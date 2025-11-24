@@ -1,5 +1,107 @@
 # LDAP Web Browser
 
+## v0.32 - Schema Enhancements ✅ COMPLETED
+
+### Implemented Features
+
+#### 1. **Multiple Names Display in Schema Grids**
+- Display all alternative names for schema elements in Name column
+- Shows comma-separated list when element has multiple names
+- Applies to:
+  - Object Class grid in Schema / Manage tab
+  - Attribute Type grid in Schema / Manage tab
+
+#### 2. **Enhanced Attribute Type Details Dialog**
+- **"Used as May" Section** - Shows object classes with this attribute as optional
+  - Lists all object classes that include this attribute in their MAY list
+  - Each object class name is a clickable link
+  - Opens object class details dialog when clicked
+  
+- **"Used as Must" Section** - Shows object classes with this attribute as required
+  - Lists all object classes that include this attribute in their MUST list
+  - Each object class name is a clickable link
+  - Opens object class details dialog when clicked
+
+#### 3. **Enhanced Object Class Details Dialog**
+- **Optional Attributes Section** - Interactive attribute links
+  - Each optional (MAY) attribute name becomes a clickable link
+  - Opens attribute type details dialog when clicked
+  
+- **Required Attributes Section** - Interactive attribute links
+  - Each required (MUST) attribute name becomes a clickable link
+  - Opens attribute type details dialog when clicked
+
+### Implementation Details
+
+**Grid Display Updates:**
+- Modified `objectClassGrid` Name column to display all alternative names comma-separated
+- Modified `attributeTypeGrid` Name column to display all alternative names comma-separated
+- Falls back to OID if no names available
+- Enhanced grid readability for schema elements with multiple identifiers
+
+**Attribute Type Details Enhancements:**
+- Added `addAttributeUsageSection()` method in `SchemaManageTab`
+- Added `addAttributeUsageToDialog()` method in `SchemaDetailDialogHelper`
+- Builds reverse index of which object classes reference each attribute
+- Searches through all object class MAY and MUST lists
+- Matches against all attribute names (not just primary name)
+- Displays "Used as May" section with clickable object class links
+- Displays "Used as Must" section with clickable object class links
+- Each link opens corresponding object class details dialog
+
+**Object Class Details Enhancements:**
+- Added `addClickableAttributeListToDetails()` method in `SchemaManageTab`
+- Added `addClickableAttributeList()` method in `SchemaDetailDialogHelper`
+- Required Attributes section now displays as clickable links
+- Optional Attributes section now displays as clickable links
+- Each link opens corresponding attribute type details dialog
+- Links disabled if attribute definition not found in schema
+
+**Dialog Enhancement Architecture:**
+- Created overloaded methods accepting `Schema` parameter
+- `showAttributeTypeDialog(at, server, schema)` - with usage info
+- `showObjectClassDialog(oc, server, schema)` - with clickable attributes
+- Original methods delegate to new versions with null schema
+- Maintains backward compatibility with Entry Editor context menus
+- Schema-aware dialogs provide full cross-reference navigation
+
+**Helper Methods:**
+- `getSchemaForElement()` - retrieves schema from SchemaElement
+- `addClickableObjectClassList()` - creates object class link buttons
+- `addClickableObjectClassListToDialog()` - dialog variant
+- `addClickableAttributeListToDetails()` - creates attribute link buttons
+- All link buttons use `LUMO_TERTIARY_INLINE` styling for clean appearance
+- Comma separators styled for proper spacing
+
+**Cross-Reference Navigation:**
+- Click object class in "Used as May" → opens object class details
+- Click object class in "Used as Must" → opens object class details
+- Click attribute in "Required Attributes" → opens attribute details
+- Click attribute in "Optional Attributes" → opens attribute details
+- All nested dialogs maintain Schema context for continued navigation
+- Supports deep schema exploration without losing context
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/SchemaManageTab.java` (~120 lines added)
+  - Updated grid column definitions for multiple names
+  - Added attribute usage section methods
+  - Added clickable attribute list methods
+  - Updated showObjectClassDetails with clickable attributes
+  - Updated showAttributeTypeDetails with usage sections
+- `src/main/java/com/ldapbrowser/ui/utils/SchemaDetailDialogHelper.java` (~170 lines added)
+  - Added overloaded dialog methods with Schema parameter
+  - Added attribute usage calculation and display
+  - Added clickable object class list methods
+  - Added clickable attribute list methods
+  - Enhanced dialog cross-referencing capabilities
+- `pom.xml` - Updated version to 0.32
+- `docs/changelog.md` - Updated with v0.32 completion details
+
+### Build Verification
+- Ready for compilation and testing
+
+---
+
 ## v0.31 - Schema Details in Entry Editor ✅ COMPLETED
   - Right-click on attribute name / value row
     - "View Attribute Type in Schema" - context menu

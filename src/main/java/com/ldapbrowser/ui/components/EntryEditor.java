@@ -1215,7 +1215,7 @@ public class EntryEditor extends VerticalLayout {
         return;
       }
 
-      SchemaDetailDialogHelper.showAttributeTypeDialog(attrType, serverConfig.getName());
+      SchemaDetailDialogHelper.showAttributeTypeDialog(attrType, serverConfig.getName(), schema);
     } catch (Exception e) {
       logger.error("Error displaying attribute type details: {}", e.getMessage(), e);
       NotificationHelper.showError("Error displaying schema details: " + e.getMessage());
@@ -1247,7 +1247,7 @@ public class EntryEditor extends VerticalLayout {
         return;
       }
 
-      SchemaDetailDialogHelper.showObjectClassDialog(objClass, serverConfig.getName());
+      SchemaDetailDialogHelper.showObjectClassDialog(objClass, serverConfig.getName(), schema);
     } catch (Exception e) {
       logger.error("Error displaying object class details: {}", e.getMessage(), e);
       NotificationHelper.showError("Error displaying schema details: " + e.getMessage());
