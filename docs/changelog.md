@@ -1,5 +1,24 @@
 # LDAP Web Browser
 
+## v0.30 - Entry Editor Enhancements
+  - Each Attribute name and value should be its own grid row
+  - Example:
+```
+cn            admins
+objectClass   groupOfUniqueNames
+objectClass   top
+uniqueMember  uid=admin,dc=example,dc=com
+uniqueMember  uid=user.1,ou=People,dc=example,dc=com
+```
+  - Actions column removed and functionality moved to right-click context menu
+  - Right-click on a Attribute Name / Value row presents these menu options
+    - Add Value
+      Will present a text field to add a row with a new value
+    - Delete Value
+      Will remove the selected row
+    - Delete All Values
+      Will remove all values for the selected attribute
+
 ## v0.29 - 2025-11-24 ✅ COMPLETED - Add Filter Context Menu to Tree Grid Rows
 
 ### Implemented Features

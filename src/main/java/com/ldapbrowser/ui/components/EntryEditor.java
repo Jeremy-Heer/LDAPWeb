@@ -19,6 +19,7 @@ import com.vaadin.flow.component.contextmenu.MenuItem;
 import com.vaadin.flow.component.contextmenu.SubMenu;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.contextmenu.GridContextMenu;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -27,6 +28,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -145,13 +147,11 @@ public class EntryEditor extends VerticalLayout {
         .setComparator(AttributeRow::getName);
 
     attributeGrid.addColumn(new ComponentRenderer<>(this::createValueComponent))
-        .setHeader("Values")
+        .setHeader("Value")
         .setFlexGrow(2);
 
-    attributeGrid.addColumn(new ComponentRenderer<>(this::createActionButtons))
-        .setHeader("Actions")
-        .setFlexGrow(0)
-        .setWidth("160px");
+    // Initialize context menu for attribute actions
+    initializeAttributeContextMenu();
 
     // Action buttons
     addAttributeButton = new Button("Add Attribute", new Icon(VaadinIcon.PLUS));
@@ -173,6 +173,23 @@ public class EntryEditor extends VerticalLayout {
 
     setButtonsEnabled(false);
     clearPendingChanges();
+  }
+
+  private void initializeAttributeContextMenu() {
+    GridContextMenu<AttributeRow> contextMenu = new GridContextMenu<>(attributeGrid);
+    
+    contextMenu.setDynamicContentHandler(row -> {
+      contextMenu.removeAll();
+      
+      if (row == null) {
+      return false;
+    }
+    
+    contextMenu.addItem("Edit Value", event -> openEditValueDialog(row));
+    contextMenu.addItem("Add Value", event -> openAddValueDialog(row));
+    contextMenu.addItem("Delete Value", event -> deleteValue(row));
+    contextMenu.addItem("Delete All Values", event -> deleteAllValues(row));      return true;
+    });
   }
 
   private void setupLayout() {
@@ -314,6 +331,9 @@ public class EntryEditor extends VerticalLayout {
     List<AttributeRow> rows = new ArrayList<>();
     boolean showOperational = showOperationalAttributesCheckbox.getValue();
 
+    // Collect attributes with their values in sorted order
+    List<Map.Entry<String, List<String>>> sortedAttrs = new ArrayList<>();
+    
     // Add regular attributes
     for (Map.Entry<String, List<String>> attr : fullEntry.getAttributes().entrySet()) {
       String attrName = attr.getKey();
@@ -323,24 +343,24 @@ public class EntryEditor extends VerticalLayout {
         continue;
       }
 
-      rows.add(new AttributeRow(attrName, attr.getValue()));
+      sortedAttrs.add(attr);
     }
     
     // Add operational attributes if checkbox is checked
     if (showOperational && fullEntry.getOperationalAttributes() != null) {
       for (Map.Entry<String, List<String>> attr : fullEntry.getOperationalAttributes().entrySet()) {
-        rows.add(new AttributeRow(attr.getKey(), attr.getValue()));
+        sortedAttrs.add(attr);
       }
     }
 
     // Sort attributes: by classification (required, optional, operational), then alphabetically
-    rows.sort((row1, row2) -> {
-      String attr1 = row1.getName();
-      String attr2 = row2.getName();
+    sortedAttrs.sort((attr1, attr2) -> {
+      String name1 = attr1.getKey();
+      String name2 = attr2.getKey();
 
       // Get classifications for both attributes
-      AttributeClassification class1 = classifyAttribute(attr1);
-      AttributeClassification class2 = classifyAttribute(attr2);
+      AttributeClassification class1 = classifyAttribute(name1);
+      AttributeClassification class2 = classifyAttribute(name2);
 
       // Compare by classification first
       int classCompare = Integer.compare(class1.ordinal(), class2.ordinal());
@@ -349,8 +369,26 @@ public class EntryEditor extends VerticalLayout {
       }
 
       // Within same classification, sort alphabetically
-      return attr1.compareToIgnoreCase(attr2);
+      return name1.compareToIgnoreCase(name2);
     });
+
+    // Create one row per attribute name/value pair
+    for (Map.Entry<String, List<String>> attr : sortedAttrs) {
+      String attrName = attr.getKey();
+      List<String> values = attr.getValue();
+      
+      // Sort objectClass values alphabetically
+      if ("objectClass".equalsIgnoreCase(attrName)) {
+        values = new ArrayList<>(values);
+        values.sort(String.CASE_INSENSITIVE_ORDER);
+      }
+      
+      // Create a row for each value
+      for (int i = 0; i < values.size(); i++) {
+        boolean isFirst = (i == 0);
+        rows.add(new AttributeRow(attrName, values.get(i), i, isFirst));
+      }
+    }
 
     attributeGrid.setItems(rows);
   }
@@ -395,6 +433,11 @@ public class EntryEditor extends VerticalLayout {
   }
 
   private Span createAttributeNameComponent(AttributeRow row) {
+    // Only show attribute name for the first value of each attribute
+    if (!row.isFirstValueOfAttribute()) {
+      return new Span();
+    }
+    
     Span nameSpan = new Span(row.getName());
     nameSpan.getStyle().set("font-weight", "500");
 
@@ -511,43 +554,14 @@ public class EntryEditor extends VerticalLayout {
     return AttributeClassification.UNKNOWN;
   }
 
-  private VerticalLayout createValueComponent(AttributeRow row) {
-    VerticalLayout layout = new VerticalLayout();
-    layout.setPadding(false);
-    layout.setSpacing(false);
-
-    for (String value : row.getValues()) {
-      Span valueSpan = new Span(value);
-      valueSpan.getStyle().set("display", "block");
-      valueSpan.getStyle().set("margin-bottom", "4px");
-      if (value.length() > 50) {
-        valueSpan.getStyle().set("font-size", "smaller");
-      }
-      layout.add(valueSpan);
+  private Span createValueComponent(AttributeRow row) {
+    Span valueSpan = new Span(row.getValue());
+    
+    if (row.getValue().length() > 50) {
+      valueSpan.getStyle().set("font-size", "smaller");
     }
 
-    return layout;
-  }
-
-  private HorizontalLayout createActionButtons(AttributeRow row) {
-    Button editButton = new Button(new Icon(VaadinIcon.EDIT));
-    editButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
-    editButton.addClickListener(e -> openEditAttributeDialog(row));
-    editButton.getElement().setAttribute("title", "Edit attribute");
-
-    Button deleteButton = new Button(new Icon(VaadinIcon.TRASH));
-    deleteButton.addThemeVariants(
-        ButtonVariant.LUMO_SMALL,
-        ButtonVariant.LUMO_TERTIARY,
-        ButtonVariant.LUMO_ERROR
-    );
-    deleteButton.addClickListener(e -> deleteAttribute(row));
-    deleteButton.getElement().setAttribute("title", "Delete attribute");
-
-    HorizontalLayout layout = new HorizontalLayout(editButton, deleteButton);
-    layout.setSpacing(false);
-    layout.setPadding(false);
-    return layout;
+    return valueSpan;
   }
 
   private void openAddAttributeDialog() {
@@ -668,49 +682,127 @@ public class EntryEditor extends VerticalLayout {
     return validAttributes;
   }
 
-  private void openEditAttributeDialog(AttributeRow row) {
+  private void openEditValueDialog(AttributeRow row) {
     Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Edit Attribute: " + row.getName());
+    dialog.setHeaderTitle("Edit Value: " + row.getName());
 
-    TextArea valueArea = new TextArea("Values (one per line)");
-    valueArea.setWidthFull();
-    valueArea.setHeight("200px");
-    valueArea.setValue(String.join("\n", row.getValues()));
+    TextField valueField = new TextField("Value");
+    valueField.setWidthFull();
+    valueField.setValue(row.getValue() != null ? row.getValue() : "");
 
     Button saveButton = new Button("Save", e -> {
-      String valuesText = valueArea.getValue();
+      String newValue = valueField.getValue();
       
-      if (valuesText == null || valuesText.trim().isEmpty()) {
-        NotificationHelper.showError("At least one value is required.");
+      if (newValue == null || newValue.trim().isEmpty()) {
+        NotificationHelper.showError("Value cannot be empty.");
         return;
       }
 
-      List<String> values = Arrays.asList(valuesText.split("\n"));
-      values.replaceAll(String::trim);
-      values.removeIf(String::isEmpty);
-
-      currentEntry.getAttributes().put(row.getName(), new ArrayList<>(values));
-      modifiedAttributes.add(row.getName());
-      markPendingChanges();
-      refreshAttributeDisplay();
-      NotificationHelper.showSuccess("Updated attribute '" + row.getName() + "'.");
-      dialog.close();
+      List<String> allValues = currentEntry.getAttributeValues(row.getName());
+      if (allValues != null && row.getValueIndex() < allValues.size()) {
+        allValues.set(row.getValueIndex(), newValue.trim());
+        currentEntry.getAttributes().put(row.getName(), new ArrayList<>(allValues));
+        modifiedAttributes.add(row.getName());
+        markPendingChanges();
+        refreshAttributeDisplay();
+        NotificationHelper.showSuccess("Updated value for '" + row.getName() + "'.");
+        dialog.close();
+      } else {
+        NotificationHelper.showError("Unable to update value.");
+      }
     });
     saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
 
-    VerticalLayout layout = new VerticalLayout(valueArea);
+    VerticalLayout layout = new VerticalLayout(valueField);
     layout.setWidth("400px");
     dialog.add(layout);
     dialog.getFooter().add(cancelButton, saveButton);
     dialog.open();
   }
 
-  private void deleteAttribute(AttributeRow row) {
+  private void openAddValueDialog(AttributeRow row) {
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Add Value: " + row.getName());
+
+    TextField valueField = new TextField("New Value");
+    valueField.setWidthFull();
+    valueField.setPlaceholder("Enter new value...");
+
+    Button addButton = new Button("Add", e -> {
+      String newValue = valueField.getValue();
+      
+      if (newValue == null || newValue.trim().isEmpty()) {
+        NotificationHelper.showError("Value cannot be empty.");
+        return;
+      }
+
+      List<String> allValues = currentEntry.getAttributeValues(row.getName());
+      if (allValues == null) {
+        allValues = new ArrayList<>();
+      } else {
+        allValues = new ArrayList<>(allValues);
+      }
+      
+      // Check for duplicate values
+      if (allValues.contains(newValue.trim())) {
+        NotificationHelper.showWarning("This value already exists for '" + row.getName() + "'.");
+        return;
+      }
+      
+      allValues.add(newValue.trim());
+      currentEntry.getAttributes().put(row.getName(), allValues);
+      modifiedAttributes.add(row.getName());
+      markPendingChanges();
+      refreshAttributeDisplay();
+      NotificationHelper.showSuccess("Added new value to '" + row.getName() + "'.");
+      dialog.close();
+    });
+    addButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button cancelButton = new Button("Cancel", e -> dialog.close());
+
+    VerticalLayout layout = new VerticalLayout(valueField);
+    layout.setWidth("400px");
+    dialog.add(layout);
+    dialog.getFooter().add(cancelButton, addButton);
+    dialog.open();
+  }
+
+  private void deleteValue(AttributeRow row) {
+    List<String> allValues = currentEntry.getAttributeValues(row.getName());
+    
+    if (allValues == null || row.getValueIndex() >= allValues.size()) {
+      NotificationHelper.showError("Unable to delete value.");
+      return;
+    }
+
+    if (allValues.size() == 1) {
+      NotificationHelper.showWarning("Cannot delete the last value. Use 'Delete All Values' to remove the entire attribute.");
+      return;
+    }
+
     ConfirmDialog dialog = new ConfirmDialog();
-    dialog.setHeader("Delete Attribute");
-    dialog.setText("Are you sure you want to delete the attribute '" + row.getName() + "'?");
+    dialog.setHeader("Delete Value");
+    dialog.setText("Are you sure you want to delete this value from '" + row.getName() + "'?\n\nValue: " + row.getValue());
+    dialog.setCancelable(true);
+    dialog.setConfirmText("Delete");
+    dialog.addConfirmListener(e -> {
+      allValues.remove(row.getValueIndex());
+      currentEntry.getAttributes().put(row.getName(), new ArrayList<>(allValues));
+      modifiedAttributes.add(row.getName());
+      markPendingChanges();
+      refreshAttributeDisplay();
+      NotificationHelper.showSuccess("Deleted value from '" + row.getName() + "'.");
+    });
+    dialog.open();
+  }
+
+  private void deleteAllValues(AttributeRow row) {
+    ConfirmDialog dialog = new ConfirmDialog();
+    dialog.setHeader("Delete All Values");
+    dialog.setText("Are you sure you want to delete all values for the attribute '" + row.getName() + "'?");
     dialog.setCancelable(true);
     dialog.setConfirmText("Delete");
     dialog.addConfirmListener(e -> {
@@ -718,7 +810,7 @@ public class EntryEditor extends VerticalLayout {
       modifiedAttributes.add(row.getName());
       markPendingChanges();
       refreshAttributeDisplay();
-      NotificationHelper.showSuccess("Deleted attribute '" + row.getName() + "'.");
+      NotificationHelper.showSuccess("Deleted all values for '" + row.getName() + "'.");
     });
     dialog.open();
   }
@@ -1080,25 +1172,27 @@ public class EntryEditor extends VerticalLayout {
 
   /**
    * Data class for attribute rows in the grid.
+   * Each row represents a single attribute name/value pair.
    */
   public static class AttributeRow {
     private String name;
-    private List<String> values;
+    private String value;
+    private int valueIndex;
+    private boolean isFirstValueOfAttribute;
 
     /**
-     * Creates attribute row.
+     * Creates attribute row for a single value.
      *
      * @param name attribute name
-     * @param values attribute values
+     * @param value single attribute value
+     * @param valueIndex index of this value (0-based)
+     * @param isFirstValueOfAttribute true if this is the first value for this attribute
      */
-    public AttributeRow(String name, List<String> values) {
+    public AttributeRow(String name, String value, int valueIndex, boolean isFirstValueOfAttribute) {
       this.name = name;
-      this.values = new ArrayList<>(values);
-      
-      // Sort objectClass values alphabetically
-      if ("objectClass".equalsIgnoreCase(name)) {
-        this.values.sort(String.CASE_INSENSITIVE_ORDER);
-      }
+      this.value = value;
+      this.valueIndex = valueIndex;
+      this.isFirstValueOfAttribute = isFirstValueOfAttribute;
     }
 
     public String getName() {
@@ -1109,12 +1203,28 @@ public class EntryEditor extends VerticalLayout {
       this.name = name;
     }
 
-    public List<String> getValues() {
-      return values;
+    public String getValue() {
+      return value;
     }
 
-    public void setValues(List<String> values) {
-      this.values = new ArrayList<>(values);
+    public void setValue(String value) {
+      this.value = value;
+    }
+
+    public int getValueIndex() {
+      return valueIndex;
+    }
+
+    public void setValueIndex(int valueIndex) {
+      this.valueIndex = valueIndex;
+    }
+
+    public boolean isFirstValueOfAttribute() {
+      return isFirstValueOfAttribute;
+    }
+
+    public void setFirstValueOfAttribute(boolean isFirstValueOfAttribute) {
+      this.isFirstValueOfAttribute = isFirstValueOfAttribute;
     }
   }
 }
