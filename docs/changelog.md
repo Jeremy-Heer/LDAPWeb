@@ -1,5 +1,23 @@
 # LDAP Web Browser
 
+## v0.31 - Schema Details in Entry Editor ✅ COMPLETED
+  - Right-click on attribute name / value row
+    - "View Attribute Type in Schema" - context menu
+    - when selected, a pop up dialog same as attribute details view from Schema / Manage / Attribute tab
+  - If attribute name / value row is object Class,
+    - "View Object Class Type in Schema" - context menu
+    - when selected, a pop up dialog same as object classes details view from schema / manage / object classses
+    - the object class to display its details is the value of the object class row selected.
+  
+  **Implementation Details:**
+  - Created `SchemaDetailDialogHelper` utility class to display schema details in modal dialogs
+  - Dialogs use 800px width for better readability
+  - Added copy-to-clipboard button for raw schema definitions
+  - Enhanced Entry Editor context menu with conditional items based on attribute type
+  - Refactored Schema Management Tab to use shared utility, eliminating code duplication
+  - Supports both regular attributes and objectClass attributes with multi-value support
+  - Includes comprehensive error handling and user notifications
+
 ## v0.30 - Entry Editor Enhancements
   - Each Attribute name and value should be its own grid row
   - Example:

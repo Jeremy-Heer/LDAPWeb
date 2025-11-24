@@ -5,6 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.utils.NotificationHelper;
+import com.ldapbrowser.ui.utils.SchemaDetailDialogHelper;
 import com.unboundid.ldap.sdk.Modification;
 import com.unboundid.ldap.sdk.ModificationType;
 import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
@@ -182,13 +183,32 @@ public class EntryEditor extends VerticalLayout {
       contextMenu.removeAll();
       
       if (row == null) {
-      return false;
-    }
-    
-    contextMenu.addItem("Edit Value", event -> openEditValueDialog(row));
-    contextMenu.addItem("Add Value", event -> openAddValueDialog(row));
-    contextMenu.addItem("Delete Value", event -> deleteValue(row));
-    contextMenu.addItem("Delete All Values", event -> deleteAllValues(row));      return true;
+        return false;
+      }
+      
+      contextMenu.addItem("Edit Value", event -> openEditValueDialog(row));
+      contextMenu.addItem("Add Value", event -> openAddValueDialog(row));
+      contextMenu.addItem("Delete Value", event -> deleteValue(row));
+      contextMenu.addItem("Delete All Values", event -> deleteAllValues(row));
+      
+      // Add schema detail menu items
+      String attributeName = row.getName();
+      if (attributeName != null && !attributeName.trim().isEmpty()) {
+        if (attributeName.equalsIgnoreCase("objectClass")) {
+          // For objectClass attributes, show object class details
+          String objectClassName = row.getValue();
+          if (objectClassName != null && !objectClassName.trim().isEmpty()) {
+            contextMenu.addItem("View Object Class Type in Schema", 
+                event -> showObjectClassInSchema(objectClassName));
+          }
+        } else {
+          // For all other attributes, show attribute type details
+          contextMenu.addItem("View Attribute Type in Schema", 
+              event -> showAttributeTypeInSchema(attributeName));
+        }
+      }
+      
+      return true;
     });
   }
 
@@ -1168,6 +1188,70 @@ public class EntryEditor extends VerticalLayout {
     modifiedAttributes.clear();
     saveButton.setText("Save Changes");
     saveButton.getStyle().remove("font-weight");
+  }
+
+  /**
+   * Shows attribute type details in a modal dialog.
+   *
+   * @param attributeName the attribute name to display
+   */
+  private void showAttributeTypeInSchema(String attributeName) {
+    if (serverConfig == null) {
+      NotificationHelper.showError("No server configuration available");
+      return;
+    }
+
+    try {
+      Schema schema = ldapService.getSchema(serverConfig);
+      if (schema == null) {
+        NotificationHelper.showError("Schema not available for this server");
+        return;
+      }
+
+      AttributeTypeDefinition attrType = schema.getAttributeType(attributeName);
+      if (attrType == null) {
+        NotificationHelper.showError("Attribute type '" + attributeName 
+            + "' not found in schema");
+        return;
+      }
+
+      SchemaDetailDialogHelper.showAttributeTypeDialog(attrType, serverConfig.getName());
+    } catch (Exception e) {
+      logger.error("Error displaying attribute type details: {}", e.getMessage(), e);
+      NotificationHelper.showError("Error displaying schema details: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Shows object class details in a modal dialog.
+   *
+   * @param objectClassName the object class name to display
+   */
+  private void showObjectClassInSchema(String objectClassName) {
+    if (serverConfig == null) {
+      NotificationHelper.showError("No server configuration available");
+      return;
+    }
+
+    try {
+      Schema schema = ldapService.getSchema(serverConfig);
+      if (schema == null) {
+        NotificationHelper.showError("Schema not available for this server");
+        return;
+      }
+
+      ObjectClassDefinition objClass = schema.getObjectClass(objectClassName);
+      if (objClass == null) {
+        NotificationHelper.showError("Object class '" + objectClassName 
+            + "' not found in schema");
+        return;
+      }
+
+      SchemaDetailDialogHelper.showObjectClassDialog(objClass, serverConfig.getName());
+    } catch (Exception e) {
+      logger.error("Error displaying object class details: {}", e.getMessage(), e);
+      NotificationHelper.showError("Error displaying schema details: " + e.getMessage());
+    }
   }
 
   /**

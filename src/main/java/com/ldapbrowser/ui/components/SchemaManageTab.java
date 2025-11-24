@@ -6,6 +6,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.utils.NotificationHelper;
+import com.ldapbrowser.ui.utils.SchemaDetailDialogHelper;
 import com.unboundid.ldap.sdk.schema.AttributeSyntaxDefinition;
 import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
 import com.unboundid.ldap.sdk.schema.MatchingRuleDefinition;
@@ -849,32 +850,32 @@ public class SchemaManageTab extends VerticalLayout {
 
     details.add(headerLayout);
 
-    addDetailRow(details, "Server", se.getServerName());
-    addDetailRow(details, "OID", oc.getOID());
-    addDetailRow(details, "Names",
+    SchemaDetailDialogHelper.addDetailRow(details, "Server", se.getServerName());
+    SchemaDetailDialogHelper.addDetailRow(details, "OID", oc.getOID());
+    SchemaDetailDialogHelper.addDetailRow(details, "Names",
         oc.getNames() != null ? String.join(", ", Arrays.asList(oc.getNames())) : "");
-    addDetailRow(details, "Description", oc.getDescription());
+    SchemaDetailDialogHelper.addDetailRow(details, "Description", oc.getDescription());
 
     // Schema file (extension)
     String ocSchemaFile = getSchemaFileFromExtensions(oc.getExtensions());
-    addDetailRow(details, "Schema File", ocSchemaFile);
+    SchemaDetailDialogHelper.addDetailRow(details, "Schema File", ocSchemaFile);
 
-    addDetailRow(details, "Type",
+    SchemaDetailDialogHelper.addDetailRow(details, "Type",
         oc.getObjectClassType() != null ? oc.getObjectClassType().getName() : "");
-    addDetailRow(details, "Obsolete", oc.isObsolete() ? "Yes" : "No");
+    SchemaDetailDialogHelper.addDetailRow(details, "Obsolete", oc.isObsolete() ? "Yes" : "No");
 
     if (oc.getSuperiorClasses() != null && oc.getSuperiorClasses().length > 0) {
-      addDetailRow(details, "Superior Classes",
+      SchemaDetailDialogHelper.addDetailRow(details, "Superior Classes",
           String.join(", ", oc.getSuperiorClasses()));
     }
 
     if (oc.getRequiredAttributes() != null && oc.getRequiredAttributes().length > 0) {
-      addDetailRow(details, "Required Attributes",
+      SchemaDetailDialogHelper.addDetailRow(details, "Required Attributes",
           String.join(", ", oc.getRequiredAttributes()));
     }
 
     if (oc.getOptionalAttributes() != null && oc.getOptionalAttributes().length > 0) {
-      addDetailRow(details, "Optional Attributes",
+      SchemaDetailDialogHelper.addDetailRow(details, "Optional Attributes",
           String.join(", ", oc.getOptionalAttributes()));
     }
 
@@ -887,11 +888,11 @@ public class SchemaManageTab extends VerticalLayout {
         }
         extensions.append(entry.getKey()).append("=").append(String.join(",", entry.getValue()));
       }
-      addDetailRow(details, "Extensions", extensions.toString());
+      SchemaDetailDialogHelper.addDetailRow(details, "Extensions", extensions.toString());
     }
 
     // Add raw schema definition at the bottom
-    addRawDefinition(details, oc);
+    SchemaDetailDialogHelper.addRawDefinition(details, oc);
 
     detailsPanel.add(details);
   }
@@ -922,44 +923,44 @@ public class SchemaManageTab extends VerticalLayout {
 
     details.add(headerLayout);
 
-    addDetailRow(details, "Server", se.getServerName());
-    addDetailRow(details, "OID", at.getOID());
-    addDetailRow(details, "Names",
+    SchemaDetailDialogHelper.addDetailRow(details, "Server", se.getServerName());
+    SchemaDetailDialogHelper.addDetailRow(details, "OID", at.getOID());
+    SchemaDetailDialogHelper.addDetailRow(details, "Names",
         at.getNames() != null ? String.join(", ", Arrays.asList(at.getNames())) : "");
-    addDetailRow(details, "Description", at.getDescription());
+    SchemaDetailDialogHelper.addDetailRow(details, "Description", at.getDescription());
 
     // Schema file (extension)
     String atSchemaFile = getSchemaFileFromExtensions(at.getExtensions());
-    addDetailRow(details, "Schema File", atSchemaFile);
+    SchemaDetailDialogHelper.addDetailRow(details, "Schema File", atSchemaFile);
 
-    addDetailRow(details, "Syntax OID", at.getSyntaxOID());
-    addDetailRow(details, "Obsolete", at.isObsolete() ? "Yes" : "No");
-    addDetailRow(details, "Single Value", at.isSingleValued() ? "Yes" : "No");
-    addDetailRow(details, "Collective", at.isCollective() ? "Yes" : "No");
-    addDetailRow(details, "No User Modification",
+    SchemaDetailDialogHelper.addDetailRow(details, "Syntax OID", at.getSyntaxOID());
+    SchemaDetailDialogHelper.addDetailRow(details, "Obsolete", at.isObsolete() ? "Yes" : "No");
+    SchemaDetailDialogHelper.addDetailRow(details, "Single Value", at.isSingleValued() ? "Yes" : "No");
+    SchemaDetailDialogHelper.addDetailRow(details, "Collective", at.isCollective() ? "Yes" : "No");
+    SchemaDetailDialogHelper.addDetailRow(details, "No User Modification",
         at.isNoUserModification() ? "Yes" : "No");
 
     // Usage
     if (at.getUsage() != null) {
-      addDetailRow(details, "Usage", at.getUsage().getName());
+      SchemaDetailDialogHelper.addDetailRow(details, "Usage", at.getUsage().getName());
     }
 
     if (at.getSuperiorType() != null) {
-      addDetailRow(details, "Superior Type", at.getSuperiorType());
+      SchemaDetailDialogHelper.addDetailRow(details, "Superior Type", at.getSuperiorType());
     }
 
     if (at.getEqualityMatchingRule() != null) {
-      addDetailRow(details, "Equality Matching Rule", at.getEqualityMatchingRule());
+      SchemaDetailDialogHelper.addDetailRow(details, "Equality Matching Rule", at.getEqualityMatchingRule());
     }
 
     // Ordering matching rule
     if (at.getOrderingMatchingRule() != null) {
-      addDetailRow(details, "Ordering Matching Rule", at.getOrderingMatchingRule());
+      SchemaDetailDialogHelper.addDetailRow(details, "Ordering Matching Rule", at.getOrderingMatchingRule());
     }
 
     // Substring matching rule
     if (at.getSubstringMatchingRule() != null) {
-      addDetailRow(details, "Substring Matching Rule", at.getSubstringMatchingRule());
+      SchemaDetailDialogHelper.addDetailRow(details, "Substring Matching Rule", at.getSubstringMatchingRule());
     }
 
     // Extensions (additional properties)
@@ -971,11 +972,11 @@ public class SchemaManageTab extends VerticalLayout {
         }
         extensions.append(entry.getKey()).append("=").append(String.join(",", entry.getValue()));
       }
-      addDetailRow(details, "Extensions", extensions.toString());
+      SchemaDetailDialogHelper.addDetailRow(details, "Extensions", extensions.toString());
     }
 
     // Add raw schema definition at the bottom
-    addRawDefinition(details, at);
+    SchemaDetailDialogHelper.addRawDefinition(details, at);
 
     detailsPanel.add(details);
   }
@@ -992,16 +993,16 @@ public class SchemaManageTab extends VerticalLayout {
     header.getStyle().set("margin-bottom", "16px");
     details.add(header);
 
-    addDetailRow(details, "Server", se.getServerName());
-    addDetailRow(details, "OID", mr.getOID());
-    addDetailRow(details, "Names",
+    SchemaDetailDialogHelper.addDetailRow(details, "Server", se.getServerName());
+    SchemaDetailDialogHelper.addDetailRow(details, "OID", mr.getOID());
+    SchemaDetailDialogHelper.addDetailRow(details, "Names",
         mr.getNames() != null ? String.join(", ", Arrays.asList(mr.getNames())) : "");
-    addDetailRow(details, "Description", mr.getDescription());
-    addDetailRow(details, "Syntax OID", mr.getSyntaxOID());
-    addDetailRow(details, "Obsolete", mr.isObsolete() ? "Yes" : "No");
+    SchemaDetailDialogHelper.addDetailRow(details, "Description", mr.getDescription());
+    SchemaDetailDialogHelper.addDetailRow(details, "Syntax OID", mr.getSyntaxOID());
+    SchemaDetailDialogHelper.addDetailRow(details, "Obsolete", mr.isObsolete() ? "Yes" : "No");
 
     // Add raw schema definition at the bottom
-    addRawDefinition(details, mr);
+    SchemaDetailDialogHelper.addRawDefinition(details, mr);
 
     detailsPanel.add(details);
   }
@@ -1018,16 +1019,16 @@ public class SchemaManageTab extends VerticalLayout {
     header.getStyle().set("margin-bottom", "16px");
     details.add(header);
 
-    addDetailRow(details, "Server", se.getServerName());
-    addDetailRow(details, "OID", mru.getOID());
-    addDetailRow(details, "Names",
+    SchemaDetailDialogHelper.addDetailRow(details, "Server", se.getServerName());
+    SchemaDetailDialogHelper.addDetailRow(details, "OID", mru.getOID());
+    SchemaDetailDialogHelper.addDetailRow(details, "Names",
         mru.getNames() != null ? String.join(", ", Arrays.asList(mru.getNames())) : "");
-    addDetailRow(details, "Description", mru.getDescription());
-    addDetailRow(details, "Obsolete", mru.isObsolete() ? "Yes" : "No");
+    SchemaDetailDialogHelper.addDetailRow(details, "Description", mru.getDescription());
+    SchemaDetailDialogHelper.addDetailRow(details, "Obsolete", mru.isObsolete() ? "Yes" : "No");
 
     if (mru.getApplicableAttributeTypes() != null
         && mru.getApplicableAttributeTypes().length > 0) {
-      addDetailRow(details, "Applicable Attribute Types",
+      SchemaDetailDialogHelper.addDetailRow(details, "Applicable Attribute Types",
           String.join(", ", mru.getApplicableAttributeTypes()));
     }
 
@@ -1038,11 +1039,11 @@ public class SchemaManageTab extends VerticalLayout {
         extensionsText.append(entry.getKey()).append(": ")
             .append(String.join(", ", entry.getValue())).append("\n");
       }
-      addDetailRow(details, "Extensions", extensionsText.toString());
+      SchemaDetailDialogHelper.addDetailRow(details, "Extensions", extensionsText.toString());
     }
 
     // Add raw schema definition at the bottom
-    addRawDefinition(details, mru);
+    SchemaDetailDialogHelper.addRawDefinition(details, mru);
 
     detailsPanel.add(details);
   }
@@ -1059,9 +1060,9 @@ public class SchemaManageTab extends VerticalLayout {
     header.getStyle().set("margin-bottom", "16px");
     details.add(header);
 
-    addDetailRow(details, "Server", se.getServerName());
-    addDetailRow(details, "OID", syn.getOID());
-    addDetailRow(details, "Description", syn.getDescription());
+    SchemaDetailDialogHelper.addDetailRow(details, "Server", se.getServerName());
+    SchemaDetailDialogHelper.addDetailRow(details, "OID", syn.getOID());
+    SchemaDetailDialogHelper.addDetailRow(details, "Description", syn.getDescription());
 
     // Extensions (if any)
     if (syn.getExtensions() != null && !syn.getExtensions().isEmpty()) {
@@ -1070,33 +1071,13 @@ public class SchemaManageTab extends VerticalLayout {
         extensionsText.append(entry.getKey()).append(": ")
             .append(String.join(", ", entry.getValue())).append("\n");
       }
-      addDetailRow(details, "Extensions", extensionsText.toString());
+      SchemaDetailDialogHelper.addDetailRow(details, "Extensions", extensionsText.toString());
     }
 
     // Add raw schema definition at the bottom
-    addRawDefinition(details, syn);
+    SchemaDetailDialogHelper.addRawDefinition(details, syn);
 
     detailsPanel.add(details);
-  }
-
-  private void addDetailRow(VerticalLayout parent, String label, String value) {
-    if (value != null && !value.trim().isEmpty()) {
-      HorizontalLayout row = new HorizontalLayout();
-      row.setWidthFull();
-      row.setDefaultVerticalComponentAlignment(Alignment.START);
-      row.setSpacing(true);
-
-      Span labelSpan = new Span(label + ":");
-      labelSpan.getStyle().set("font-weight", "bold").set("min-width", "150px");
-
-      Span valueSpan = new Span(value);
-      valueSpan.getStyle().set("word-wrap", "break-word");
-
-      row.add(labelSpan, valueSpan);
-      row.setFlexGrow(1, valueSpan);
-
-      parent.add(row);
-    }
   }
 
   /**
@@ -1689,8 +1670,11 @@ public class SchemaManageTab extends VerticalLayout {
     return null;
   }
 
+
+
   /**
    * Gets the raw definition string from a schema element.
+   * Used when modifying schema elements to get the original definition.
    *
    * @param schemaElement schema element
    * @return raw definition string
@@ -1748,60 +1732,7 @@ public class SchemaManageTab extends VerticalLayout {
     return filtered;
   }
 
-  /**
-   * Adds a read-only, monospace TextArea containing the raw schema definition
-   * to the provided details layout.
-   *
-   * @param details details layout
-   * @param schemaElement schema element
-   */
-  private void addRawDefinition(VerticalLayout details, Object schemaElement) {
-    String raw = getRawDefinitionString(schemaElement);
-    if (raw != null && !raw.trim().isEmpty()) {
-      // Create header with copy button
-      HorizontalLayout rawHeader = new HorizontalLayout();
-      rawHeader.setWidthFull();
-      rawHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
-      rawHeader.getStyle().set("margin-top", "8px");
-      
-      Span rawLabel = new Span("Raw Definition");
-      rawLabel.getStyle()
-          .set("font-weight", "500")
-          .set("font-size", "var(--lumo-font-size-s)");
-      
-      Button copyButton = new Button(new Icon(VaadinIcon.COPY));
-      copyButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
-      copyButton.setTooltipText("Copy to clipboard");
-      copyButton.addClickListener(e -> {
-        copyButton.getElement().executeJs(
-            "navigator.clipboard.writeText($0).then(() => {" +
-            "  const notification = document.createElement('vaadin-notification');" +
-            "  notification.renderer = function(root) {" +
-            "    root.textContent = 'Copied to clipboard';" +
-            "  };" +
-            "  notification.position = 'bottom-start';" +
-            "  notification.duration = 2000;" +
-            "  notification.open();" +
-            "});",
-            raw
-        );
-      });
-      
-      rawHeader.add(rawLabel, copyButton);
-      rawHeader.setFlexGrow(1, rawLabel);
-      
-      TextArea rawArea = new TextArea();
-      rawArea.setValue(raw);
-      rawArea.setReadOnly(true);
-      rawArea.setWidthFull();
-      rawArea.setHeight("200px");
-      // Use monospace and preserve whitespace
-      rawArea.getStyle().set("font-family", "monospace");
-      rawArea.getElement().getStyle().set("white-space", "pre");
-      
-      details.add(rawHeader, rawArea);
-    }
-  }
+
 
   /**
    * Builds an object class definition string from the provided fields.
