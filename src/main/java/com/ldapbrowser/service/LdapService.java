@@ -956,8 +956,25 @@ public class LdapService {
    */
   public BrowseResult browseEntriesWithPage(LdapServerConfig config, String baseDn, int pageNumber)
       throws LDAPException {
+    return browseEntriesWithPage(config, baseDn, pageNumber, null);
+  }
+
+  /**
+   * Browses entries with specific page number and custom filter using LDAP paged results control.
+   * Uses automatic retry logic to recover from stale connections.
+   *
+   * @param config server configuration
+   * @param baseDn base DN
+   * @param pageNumber page number (0-based)
+   * @param searchFilter custom LDAP search filter (null or empty for default)
+   * @return browse result with entries and pagination info
+   * @throws LDAPException if browse fails
+   */
+  public BrowseResult browseEntriesWithPage(LdapServerConfig config, String baseDn, 
+      int pageNumber, String searchFilter) throws LDAPException {
     try {
-      return executeWithRetry(config, pool -> browsePage(config, baseDn, pageNumber, pool));
+      return executeWithRetry(config, 
+          pool -> browsePage(config, baseDn, pageNumber, pool, searchFilter));
     } catch (GeneralSecurityException e) {
       throw new LDAPException(
           ResultCode.LOCAL_ERROR,
@@ -973,11 +990,12 @@ public class LdapService {
    * @param baseDn base DN
    * @param pageNumber page number
    * @param pool connection pool to use
+   * @param searchFilter custom LDAP search filter (null or empty for default)
    * @return browse result
    * @throws LDAPException if browse fails
    */
   private BrowseResult browsePage(LdapServerConfig config, String baseDn, 
-      int pageNumber, LDAPConnectionPool pool)
+      int pageNumber, LDAPConnectionPool pool, String searchFilter)
       throws LDAPException {
     
     // Create a unique key for this search context
@@ -999,9 +1017,13 @@ public class LdapService {
     } else if (storedPage == null || storedPage != pageNumber - 1) {
       // We don't have the right cookie position - need to iterate from beginning
       // This happens when jumping to arbitrary pages or after a refresh
-      return browseEntriesWithPagingIteration(config, baseDn, pageNumber);
+      return browseEntriesWithPagingIteration(config, baseDn, pageNumber, searchFilter);
     }
     // else: we have the right cookie for sequential navigation (page = storedPage + 1)
+    
+    // Use custom filter if provided, otherwise default
+    String filter = (searchFilter != null && !searchFilter.isEmpty()) 
+        ? searchFilter : "(objectClass=*)";
     
     // Create the paged search control
     SimplePagedResultsControl pagedControl;
@@ -1015,7 +1037,7 @@ public class LdapService {
     SearchRequest searchRequest = new SearchRequest(
         baseDn,
         SearchScope.ONE,
-        "(objectClass=*)",
+        filter,
         "objectClass", "cn", "ou", "dc"
     );
     
@@ -1112,11 +1134,13 @@ public class LdapService {
    * @param config server configuration
    * @param baseDn base DN
    * @param targetPage target page number
+   * @param searchFilter custom LDAP search filter (null or empty for default)
    * @return browse result for target page
    * @throws LDAPException if operation fails
    */
   private BrowseResult browseEntriesWithPagingIteration(LdapServerConfig config, 
-                                                         String baseDn, int targetPage)
+                                                         String baseDn, int targetPage,
+                                                         String searchFilter)
       throws LDAPException {
     // Clear any existing state and start from page 0
     String searchKey = config.getName() + ":" + baseDn;
@@ -1128,7 +1152,7 @@ public class LdapService {
     BrowseResult lastResult = null;
     
     for (int currentPage = 0; currentPage <= targetPage && hasMorePages; currentPage++) {
-      lastResult = browseEntriesWithPage(config, baseDn, currentPage);
+      lastResult = browseEntriesWithPage(config, baseDn, currentPage, searchFilter);
       
       if (currentPage == targetPage) {
         // This is our target page

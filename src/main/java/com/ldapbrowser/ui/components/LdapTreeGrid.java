@@ -5,11 +5,19 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.utils.NotificationHelper;
+import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.LDAPException;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.contextmenu.GridContextMenu;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.treegrid.TreeGrid;
 import com.vaadin.flow.data.provider.hierarchy.TreeData;
 import com.vaadin.flow.data.provider.hierarchy.TreeDataProvider;
@@ -38,6 +46,9 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
   // Include private naming contexts flag
   private boolean includePrivateNamingContexts = false;
 
+  // Store filters by DN (in-memory only, no persistence)
+  private final Map<String, String> entryFilters = new HashMap<>();
+
   /**
    * Creates a new LDAP tree grid.
    *
@@ -59,6 +70,13 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
 
     // Add icon column
     addComponentColumn(this::createIconComponent)
+        .setHeader("")
+        .setWidth("40px")
+        .setFlexGrow(0)
+        .setSortable(false);
+
+    // Add filter icon column
+    addComponentColumn(this::createFilterIconComponent)
         .setHeader("")
         .setWidth("40px")
         .setFlexGrow(0)
@@ -138,6 +156,38 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
           expandEntry(selectedEntry);
         }
       }
+    });
+
+    // Add context menu
+    initializeContextMenu();
+  }
+
+  /**
+   * Initializes the context menu for filter management.
+   */
+  private void initializeContextMenu() {
+    GridContextMenu<LdapEntry> contextMenu = new GridContextMenu<>(this);
+
+    contextMenu.setDynamicContentHandler(entry -> {
+      contextMenu.removeAll();
+
+      if (entry == null || !isFilterableEntry(entry)) {
+        return false;
+      }
+
+      // Add Filter menu item
+      contextMenu.addItem("Add Filter", event -> showAddFilterDialog(entry));
+
+      // Remove Filter menu item
+      String existingFilter = entryFilters.get(entry.getDn());
+      var removeItem = contextMenu.addItem("Remove Filter", event -> removeFilter(entry));
+
+      // Gray out if no filter exists
+      if (existingFilter == null || existingFilter.isEmpty()) {
+        removeItem.setEnabled(false);
+      }
+
+      return true;
     });
   }
 
@@ -342,6 +392,20 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     Icon icon = new Icon(VaadinIcon.FILE_TEXT);
     icon.getStyle().set("color", "#757575");
     return icon;
+  }
+
+  private Icon createFilterIconComponent(LdapEntry entry) {
+    String filter = entryFilters.get(entry.getDn());
+    if (filter != null && !filter.isEmpty()) {
+      Icon filterIcon = new Icon(VaadinIcon.FILTER);
+      filterIcon.getStyle().set("color", "var(--lumo-primary-color)");
+      filterIcon.setTooltipText(filter);
+      return filterIcon;
+    }
+    // Return empty icon to maintain spacing
+    Icon emptyIcon = new Icon();
+    emptyIcon.setVisible(false);
+    return emptyIcon;
   }
 
   private String getEntryDisplayName(LdapEntry entry) {
@@ -679,7 +743,11 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
    */
   private void loadChildrenPage(LdapEntry parent, LdapServerConfig serverConfig, int pageNumber) {
     try {
-      BrowseResult result = ldapService.browseEntriesWithPage(serverConfig, parent.getDn(), pageNumber);
+      // Get custom filter for this entry (if any)
+      String customFilter = entryFilters.get(parent.getDn());
+      
+      BrowseResult result = ldapService.browseEntriesWithPage(
+          serverConfig, parent.getDn(), pageNumber, customFilter);
       List<LdapEntry> children = result.getEntries();
 
       getUI().ifPresent(ui -> ui.access(() -> {
@@ -802,5 +870,155 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     } else {
       NotificationHelper.showInfo(message, 3000);
     }
+  }
+
+  /**
+   * Checks if an entry is filterable (not a server node, Root DSE, pagination, or placeholder).
+   */
+  private boolean isFilterableEntry(LdapEntry entry) {
+    if (entry == null) {
+      return false;
+    }
+
+    // Exclude server nodes
+    if (entry.getDn().startsWith("SERVER:")) {
+      return false;
+    }
+
+    // Exclude Root DSE
+    if (entry.getDn().isEmpty() || "Root DSE".equals(entry.getRdn())) {
+      return false;
+    }
+
+    // Exclude pagination controls
+    if (!entry.getAttributeValues("isPagination").isEmpty()) {
+      return false;
+    }
+
+    // Exclude placeholders
+    if (entry.getDn().startsWith("_placeholder_")) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Shows dialog for adding/editing a filter.
+   */
+  private void showAddFilterDialog(LdapEntry entry) {
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Add LDAP Filter");
+    dialog.setWidth("500px");
+
+    VerticalLayout layout = new VerticalLayout();
+    layout.setPadding(true);
+    layout.setSpacing(true);
+
+    // Info text
+    Span infoText = new Span("Enter an LDAP search filter to limit child entries:");
+    infoText.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+    // DN display
+    Span dnText = new Span("DN: " + entry.getDn());
+    dnText.getStyle().set("font-weight", "bold");
+
+    // Filter input field
+    TextField filterField = new TextField("LDAP Filter");
+    filterField.setWidthFull();
+    filterField.setPlaceholder("(objectClass=person)");
+    filterField.setHelperText("Example: (objectClass=groupOfUniqueNames)");
+
+    // Pre-populate if filter already exists
+    String existingFilter = entryFilters.get(entry.getDn());
+    if (existingFilter != null && !existingFilter.isEmpty()) {
+      filterField.setValue(existingFilter);
+    }
+
+    layout.add(infoText, dnText, filterField);
+
+    // Buttons
+    Button saveButton = new Button("Save", e -> {
+      String filter = filterField.getValue();
+      if (filter != null && !filter.trim().isEmpty()) {
+        // Validate filter using UnboundID SDK
+        try {
+          Filter.create(filter.trim());
+          applyFilter(entry, filter.trim());
+          dialog.close();
+        } catch (LDAPException ex) {
+          NotificationHelper.showError(
+              "Invalid filter syntax: " + ex.getMessage(), 5000);
+        }
+      } else {
+        NotificationHelper.showError("Please enter a filter", 3000);
+      }
+    });
+    saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button cancelButton = new Button("Cancel", e -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, saveButton);
+    dialog.add(layout);
+    dialog.open();
+  }
+
+  /**
+   * Applies a filter to an entry.
+   */
+  private void applyFilter(LdapEntry entry, String filter) {
+    // Store filter in map
+    entryFilters.put(entry.getDn(), filter);
+
+    // Refresh display to show filter icon
+    dataProvider.refreshItem(entry, false);
+
+    // If entry is expanded, reload children with new filter
+    if (isExpanded(entry)) {
+      // Collapse and clear existing children
+      collapse(entry);
+      List<LdapEntry> children = new ArrayList<>(treeData.getChildren(entry));
+      for (LdapEntry child : children) {
+        treeData.removeItem(child);
+      }
+
+      // Re-add placeholder
+      LdapEntry placeholder = createPlaceholderEntry();
+      treeData.addItem(entry, placeholder);
+
+      // Expand to trigger reload
+      expand(entry);
+      loadChildren(entry);
+    }
+
+    NotificationHelper.showSuccess("Filter applied successfully", 3000);
+  }
+
+  /**
+   * Removes a filter from an entry.
+   */
+  private void removeFilter(LdapEntry entry) {
+    // Remove filter from map
+    entryFilters.remove(entry.getDn());
+
+    // Refresh display to hide filter icon
+    dataProvider.refreshItem(entry, false);
+
+    // If expanded, reload children without filter
+    if (isExpanded(entry)) {
+      collapse(entry);
+      List<LdapEntry> children = new ArrayList<>(treeData.getChildren(entry));
+      for (LdapEntry child : children) {
+        treeData.removeItem(child);
+      }
+
+      LdapEntry placeholder = createPlaceholderEntry();
+      treeData.addItem(entry, placeholder);
+
+      expand(entry);
+      loadChildren(entry);
+    }
+
+    NotificationHelper.showSuccess("Filter removed successfully", 3000);
   }
 }

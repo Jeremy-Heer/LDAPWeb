@@ -1,5 +1,159 @@
 # LDAP Web Browser
 
+## v0.29 - 2025-11-24 ✅ COMPLETED - Add Filter Context Menu to Tree Grid Rows
+
+### Implemented Features
+
+#### 1. **Context Menu for LDAP Filters** - Right-click menu on tree grid entries
+- ✅ Added `GridContextMenu` to `LdapTreeGrid` for filter management
+- ✅ Dynamic context menu with two items:
+  - "Add Filter" - Opens dialog to input LDAP search filter
+  - "Remove Filter" - Removes existing filter (disabled if no filter exists)
+- ✅ Context menu only appears on filterable entries (excludes server nodes, Root DSE, pagination controls, placeholders)
+
+#### 2. **Filter Dialog with Validation** - Professional filter input interface
+- ✅ Created `showAddFilterDialog()` method with modal dialog
+- ✅ Shows entry DN for context
+- ✅ TextField for LDAP filter input with placeholder examples
+- ✅ **Filter Validation**: Uses UnboundID SDK `Filter.create()` to validate filter syntax
+- ✅ Displays validation errors via `NotificationHelper` with specific error messages
+- ✅ Pre-populates existing filter when editing
+
+#### 3. **Filter Icon Column** - Visual indicator for filtered entries
+- ✅ Added filter icon column after main icon column (40px fixed width)
+- ✅ Shows `VaadinIcon.FILTER` icon when filter exists for entry
+- ✅ Filter icon displays in primary color for visibility
+- ✅ **Tooltip displays full filter text** on hover
+- ✅ Empty icon (hidden) when no filter to maintain spacing
+
+#### 4. **In-Memory Filter Storage** - Session-only filter persistence
+- ✅ Added `entryFilters` map: `Map<String, String>` storing DN → filter mapping
+- ✅ **No persistence**: Filters cleared on page refresh (as requested)
+- ✅ Filters maintained per entry DN for multi-node filtering
+- ✅ Filter storage cleared when tree is cleared
+
+#### 5. **Filter Application Logic** - Applies filters when loading children
+- ✅ Modified `loadChildrenPage()` to retrieve filter from `entryFilters` map
+- ✅ Passes custom filter to `browseEntriesWithPage()` method
+- ✅ When filter applied:
+  - Collapses entry if expanded
+  - Clears existing children
+  - Re-adds placeholder
+  - Expands and reloads with new filter
+- ✅ Success notification on filter apply/remove
+
+#### 6. **LdapService Enhancements** - Backend support for custom filters
+- ✅ Added overloaded `browseEntriesWithPage()` accepting `searchFilter` parameter
+- ✅ Original method delegates to new method with `null` filter
+- ✅ Modified `browsePage()` to accept and use custom `searchFilter` parameter
+- ✅ Filter defaults to `(objectClass=*)` if null or empty
+- ✅ Updated `browseEntriesWithPagingIteration()` to pass filter through pagination
+
+#### 7. **Filter Management Methods** - Complete filter lifecycle
+- ✅ `isFilterableEntry()` - Validates if entry can have filters
+- ✅ `showAddFilterDialog()` - Shows filter input dialog with validation
+- ✅ `applyFilter()` - Stores filter and reloads children
+- ✅ `removeFilter()` - Clears filter and reloads children
+- ✅ `createFilterIconComponent()` - Creates icon with tooltip
+
+### Technical Details
+
+**Filter Validation Flow:**
+1. User enters filter text in dialog
+2. Click "Save" button triggers validation
+3. `Filter.create(filterText)` called (UnboundID SDK)
+4. If `LDAPException` thrown, show error notification with message
+5. If valid, call `applyFilter()` to store and apply
+
+**Filter Application Flow:**
+1. Filter stored in `entryFilters` map (DN as key)
+2. Filter icon appears in icon column with tooltip
+3. When entry expanded, `loadChildren()` called
+4. `loadChildrenPage()` retrieves filter from map
+5. Passes filter to `ldapService.browseEntriesWithPage()`
+6. LDAP search uses custom filter instead of `(objectClass=*)`
+7. Only matching children displayed in tree
+
+**Filter Display:**
+- Filter NOT shown in entry display name (as requested)
+- Filter shown ONLY as icon with tooltip
+- Tooltip shows full filter text regardless of length
+- Icon appears only when filter exists
+
+**Non-Persistence:**
+- Filters stored in instance variable `Map<String, String>`
+- No serialization, no local storage, no database
+- Filters lost on page refresh or view reload
+- Clean slate on each session
+
+### Files Created
+- None (all changes in existing files)
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/LdapTreeGrid.java` - Added filter context menu, icon column, and filter management (~200 lines added)
+- `src/main/java/com/ldapbrowser/service/LdapService.java` - Added filter parameter support (~30 lines changed)
+- `pom.xml` - Updated version to 0.29
+- `docs/changelog.md` - Updated with v0.29 completion details
+
+### Build Verification
+- ✅ `mvn clean compile` - Successful (26 source files)
+- ✅ 0 compilation errors
+- ✅ All imports resolved correctly
+- ✅ Proper exception handling throughout
+- ✅ Follows Google Java style conventions
+
+### User Experience Features
+- **Right-click context menu** - Intuitive filter access on any entry
+- **Filter validation** - Immediate feedback on invalid filter syntax
+- **Visual indicators** - Filter icon shows filtered entries at a glance
+- **Tooltip information** - Full filter text on hover
+- **Non-intrusive** - Filter doesn't clutter entry display names
+- **Seamless refresh** - Children reload automatically when filter applied/removed
+- **Professional notifications** - Success/error messages guide user
+
+### Example Usage
+
+**Scenario: Filter users in an OU**
+1. Right-click on `ou=People,dc=example,dc=com`
+2. Select "Add Filter" from context menu
+3. Enter filter: `(objectClass=person)`
+4. Click "Save"
+5. Filter icon appears next to entry with tooltip showing filter
+6. Expand entry - only person entries shown
+7. Right-click entry again → "Remove Filter" to clear
+
+**Scenario: Invalid filter**
+1. Right-click on entry
+2. Select "Add Filter"
+3. Enter invalid filter: `(cn=test` (missing closing paren)
+4. Click "Save"
+5. Error notification: "Invalid filter syntax: ..."
+6. Correct filter and try again
+
+**Scenario: Multiple filters**
+1. Apply filter to `ou=People`: `(objectClass=inetOrgPerson)`
+2. Apply filter to `ou=Groups`: `(objectClass=groupOfUniqueNames)`
+3. Both entries show filter icons
+4. Each expands with respective filter applied
+5. Filters independent of each other
+
+---
+  - Add Filter
+    - grid row context menu item
+    - Prompt with a text field dialog to input an ldap search filter
+    - After filter is supplied and saved:
+      - displayed to the right of the LDAP DN for the tree grid item
+        - example: dc=example,dc-com - Filtered "(objectClass=groupofuniquenames)"
+      - This filter is then used when performing ldap searches to display child
+          entries when the filtered entry is toggled to expand
+      - will limit using this search filter the items retreived from ldap and displayed
+          in the tree grid
+  - Remove Filter
+    - Grayed out contect menu if no existing filter exist
+    - When selected and a filter exist for this grid item, the filter is removed
+  - filter data is unique to each tree grid item allowing multiple filters to be created
+      in the tree grid at different points in the ldap tree
+
 ## v0.28 - Schema Browser UI enhancements
 
 ## v0.27 - Notifications and Logs Dialog
