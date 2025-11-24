@@ -168,7 +168,7 @@ public class SchemaManageTab extends VerticalLayout {
     gridContainer.setSpacing(false);
 
     detailsPanel = new VerticalLayout();
-    detailsPanel.setWidth("400px");
+    detailsPanel.setSizeFull();
     detailsPanel.setPadding(true);
     detailsPanel.setSpacing(true);
   }
@@ -483,7 +483,7 @@ public class SchemaManageTab extends VerticalLayout {
 
     // Right panel for details
     VerticalLayout rightPanel = new VerticalLayout();
-    rightPanel.setWidth("400px");
+    rightPanel.setSizeFull();
     rightPanel.setPadding(false);
     rightPanel.setSpacing(false);
 
@@ -841,6 +841,7 @@ public class SchemaManageTab extends VerticalLayout {
     ObjectClassDefinition oc = se.getElement();
 
     VerticalLayout details = new VerticalLayout();
+    details.setSizeFull();
     details.setSpacing(true);
     details.setPadding(true);
 
@@ -919,6 +920,7 @@ public class SchemaManageTab extends VerticalLayout {
     AttributeTypeDefinition at = se.getElement();
 
     VerticalLayout details = new VerticalLayout();
+    details.setSizeFull();
     details.setSpacing(true);
     details.setPadding(true);
 
@@ -1006,6 +1008,7 @@ public class SchemaManageTab extends VerticalLayout {
     MatchingRuleDefinition mr = se.getElement();
 
     VerticalLayout details = new VerticalLayout();
+    details.setSizeFull();
     details.setSpacing(true);
     details.setPadding(true);
 
@@ -1032,6 +1035,7 @@ public class SchemaManageTab extends VerticalLayout {
     MatchingRuleUseDefinition mru = se.getElement();
 
     VerticalLayout details = new VerticalLayout();
+    details.setSizeFull();
     details.setSpacing(true);
     details.setPadding(true);
 
@@ -1073,6 +1077,7 @@ public class SchemaManageTab extends VerticalLayout {
     AttributeSyntaxDefinition syn = se.getElement();
 
     VerticalLayout details = new VerticalLayout();
+    details.setSizeFull();
     details.setSpacing(true);
     details.setPadding(true);
 

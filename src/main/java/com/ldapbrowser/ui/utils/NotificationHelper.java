@@ -20,14 +20,11 @@ import com.vaadin.flow.server.VaadinSession;
  */
 public final class NotificationHelper {
 
-  // Standard durations in milliseconds
-  private static final int SUCCESS_DURATION = 3000;
+  // Standard duration in milliseconds for error notifications
   private static final int ERROR_DURATION = 5000;
-  private static final int INFO_DURATION = 4000;
-  private static final int WARNING_DURATION = 4000;
 
   // Standard position for all notifications
-  private static final Notification.Position POSITION = Notification.Position.TOP_END;
+  private static final Notification.Position POSITION = Notification.Position.BOTTOM_END;
 
   // Session attribute key for LoggingService
   private static final String LOGGING_SERVICE_KEY = "notificationHelper.loggingService";
@@ -65,14 +62,12 @@ public final class NotificationHelper {
   /**
    * Displays a success notification with green theme.
    * Duration: 3 seconds.
+   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the success message to display
    */
   public static void showSuccess(String message) {
-    Notification notification = Notification.show(message, SUCCESS_DURATION, POSITION);
-    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-    
-    // Log to activity log
+    // Suppress UI notification - only log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logInfo("UI", message);
@@ -99,14 +94,12 @@ public final class NotificationHelper {
   /**
    * Displays an informational notification with blue theme.
    * Duration: 4 seconds.
+   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the informational message to display
    */
   public static void showInfo(String message) {
-    Notification notification = Notification.show(message, INFO_DURATION, POSITION);
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
-    
-    // Log to activity log
+    // Suppress UI notification - only log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logInfo("UI", message);
@@ -116,14 +109,12 @@ public final class NotificationHelper {
   /**
    * Displays a warning notification with contrast theme.
    * Duration: 4 seconds.
+   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the warning message to display
    */
   public static void showWarning(String message) {
-    Notification notification = Notification.show(message, WARNING_DURATION, POSITION);
-    notification.addThemeVariants(NotificationVariant.LUMO_CONTRAST);
-    
-    // Log to activity log
+    // Suppress UI notification - only log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logWarning("UI", message);
@@ -131,16 +122,32 @@ public final class NotificationHelper {
   }
 
   /**
-   * Displays a success notification with custom duration.
+   * Displays a success notification for MODIFY operations with green theme.
+   * This is used specifically for LDAP MODIFY operations that should remain visible.
+   * Duration: 3 seconds.
    *
    * @param message the success message to display
-   * @param duration the duration in milliseconds
    */
-  public static void showSuccess(String message, int duration) {
-    Notification notification = Notification.show(message, duration, POSITION);
+  public static void showModifySuccess(String message) {
+    Notification notification = Notification.show(message, 3000, POSITION);
     notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
     
     // Log to activity log
+    LoggingService loggingService = getLoggingService();
+    if (loggingService != null) {
+      loggingService.logInfo("UI", message);
+    }
+  }
+
+  /**
+   * Displays a success notification with custom duration.
+   * Note: UI notification suppressed to reduce noise. Message is logged only.
+   *
+   * @param message the success message to display
+   * @param duration the duration in milliseconds (ignored, kept for API compatibility)
+   */
+  public static void showSuccess(String message, int duration) {
+    // Suppress UI notification - only log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logInfo("UI", message);
@@ -166,15 +173,13 @@ public final class NotificationHelper {
 
   /**
    * Displays an informational notification with custom duration.
+   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the informational message to display
-   * @param duration the duration in milliseconds
+   * @param duration the duration in milliseconds (ignored, kept for API compatibility)
    */
   public static void showInfo(String message, int duration) {
-    Notification notification = Notification.show(message, duration, POSITION);
-    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
-    
-    // Log to activity log
+    // Suppress UI notification - only log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logInfo("UI", message);
@@ -183,15 +188,13 @@ public final class NotificationHelper {
 
   /**
    * Displays a warning notification with custom duration.
+   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the warning message to display
-   * @param duration the duration in milliseconds
+   * @param duration the duration in milliseconds (ignored, kept for API compatibility)
    */
   public static void showWarning(String message, int duration) {
-    Notification notification = Notification.show(message, duration, POSITION);
-    notification.addThemeVariants(NotificationVariant.LUMO_CONTRAST);
-    
-    // Log to activity log
+    // Suppress UI notification - only log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logWarning("UI", message);

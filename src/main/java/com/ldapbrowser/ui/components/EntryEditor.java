@@ -876,7 +876,7 @@ public class EntryEditor extends VerticalLayout {
       }
 
       clearPendingChanges();
-      NotificationHelper.showSuccess("Entry saved successfully.");
+      NotificationHelper.showModifySuccess("Entry saved successfully.");
       refreshEntry();
     } catch (Exception e) {
       NotificationHelper.showError("Failed to save entry: " + e.getMessage());

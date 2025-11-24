@@ -1,5 +1,62 @@
 # LDAP Web Browser
 
+## v0.32.2 - Notification Noise Reduction ✅ COMPLETED
+
+### Implemented Features
+
+#### **Reduced Notification Noise**
+- Suppressed informational, success, and warning notifications throughout the application
+- Only the following notifications are now displayed:
+  - **Error notifications** - All error conditions continue to show UI notifications
+  - **MODIFY operation success** - LDAP entry modification success notifications remain visible
+- All suppressed notifications are still logged to the activity log for audit purposes
+
+#### **Notification Position Update**
+- All remaining notifications now appear at `BOTTOM_END` position
+- Provides less intrusive user experience
+- Notifications no longer cover important UI elements at the top of the screen
+
+### Implementation Details
+
+**NotificationHelper Updates:**
+- Changed standard notification position from `TOP_END` to `BOTTOM_END`
+- Modified `showSuccess()`, `showInfo()`, and `showWarning()` methods to suppress UI notifications
+- Added new `showModifySuccess()` method specifically for LDAP MODIFY operations
+- Kept `showError()` method unchanged to continue displaying error notifications
+- All suppressed notifications still log to activity log via `LoggingService`
+- Removed unused duration constants after refactoring
+
+**EntryEditor Updates:**
+- Updated "Entry saved successfully" notification to use `showModifySuccess()`
+- Ensures LDAP MODIFY operation success remains visible to users
+- Intermediate UI state changes (add/edit/delete attribute values) are now silent
+
+**Benefits:**
+- Cleaner user interface with less notification clutter
+- Critical errors remain immediately visible
+- MODIFY operations provide user feedback
+- Complete audit trail maintained in activity log
+- Better focus on important user actions
+
+## v0.32.1 - Schema View / Manage sub tab enhancements ✅ COMPLETED
+
+### Implemented Features
+
+#### **Details Panel Expansion**
+- Object Class and Attribute Type details now properly expand to fill available space
+- Details view automatically resizes when the vertical split divider is moved
+- Applies to all schema element detail views:
+  - Object Class details
+  - Attribute Type details
+  - Matching Rule details
+  - Matching Rule Use details
+  - Syntax details
+
+### Implementation Details
+- Added `setSizeFull()` to all detail VerticalLayout components
+- Details panels now expand/contract dynamically with the resizable divider
+- Improved user experience when viewing detailed schema information
+
 ## v0.32 - Schema Enhancements ✅ COMPLETED
 
 ### Implemented Features
