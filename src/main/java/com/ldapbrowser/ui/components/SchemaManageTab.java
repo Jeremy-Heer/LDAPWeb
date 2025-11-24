@@ -26,6 +26,7 @@ import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -489,13 +490,12 @@ public class SchemaManageTab extends VerticalLayout {
     rightPanel.add(detailsHeader, detailsPanel);
     rightPanel.setFlexGrow(1, detailsPanel);
 
-    // Main horizontal split
-    HorizontalLayout mainLayout = new HorizontalLayout();
+    // Main horizontal split with resizable divider
+    SplitLayout mainLayout = new SplitLayout();
     mainLayout.setSizeFull();
-    mainLayout.setPadding(false);
-    mainLayout.setSpacing(false);
-    mainLayout.add(leftPanel, rightPanel);
-    mainLayout.setFlexGrow(1, leftPanel);
+    mainLayout.addToPrimary(leftPanel);
+    mainLayout.addToSecondary(rightPanel);
+    mainLayout.setSplitterPosition(70); // 70% for grid, 30% for details
 
     add(mainLayout);
     setFlexGrow(1, mainLayout);

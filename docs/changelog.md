@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.28 - Schema Browser UI enhancements
+
 ## v0.27 - Notifications and Logs Dialog
 
 ## v0.26 - NotificationHelper Utility Class & Code Standardization
