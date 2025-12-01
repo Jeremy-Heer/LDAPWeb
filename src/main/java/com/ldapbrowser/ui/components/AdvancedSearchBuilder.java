@@ -3,9 +3,11 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.ui.utils.NotificationHelper;
+import com.unboundid.ldap.sdk.Filter;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -16,6 +18,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Advanced Search Builder component for constructing complex LDAP search filters.
@@ -98,6 +101,71 @@ public class AdvancedSearchBuilder extends VerticalLayout {
   private TextArea generatedFilterArea;
   private TextArea resultFilterField;
   private HorizontalLayout rootOperatorLayout;
+
+  /**
+   * Creates a reusable filter builder dialog with Apply/Cancel buttons.
+   * This eliminates code duplication between SearchView and LdapTreeGrid.
+   *
+   * @param ldapService the LDAP service instance
+   * @param title dialog title (e.g., "Filter Builder" or "Edit LDAP Filter")
+   * @param existingFilter optional existing filter string to pre-populate (can be null)
+   * @param searchBase optional search base DN to pre-populate (can be null)
+   * @param onApply callback invoked with the generated filter when user clicks Apply
+   * @return configured Dialog ready to be opened
+   */
+  public static Dialog createFilterBuilderDialog(
+      LdapService ldapService,
+      String title,
+      String existingFilter,
+      String searchBase,
+      java.util.function.Consumer<String> onApply) {
+    
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle(title);
+    dialog.setWidth("900px");
+    dialog.setHeight("700px");
+    dialog.setModal(true);
+    dialog.setCloseOnOutsideClick(false);
+
+    AdvancedSearchBuilder filterBuilder = new AdvancedSearchBuilder(ldapService);
+    filterBuilder.getStyle()
+        .set("border", "1px solid var(--lumo-contrast-20pct)")
+        .set("border-radius", "var(--lumo-border-radius-m)")
+        .set("background-color", "var(--lumo-contrast-5pct)")
+        .set("padding", "var(--lumo-space-m)");
+
+    // Pre-populate if editing an existing filter
+    if (existingFilter != null && !existingFilter.isEmpty()) {
+      filterBuilder.setFilterFromString(existingFilter);
+    }
+
+    // Pre-populate search base if provided
+    if (searchBase != null && !searchBase.isEmpty()) {
+      filterBuilder.setSearchBase(searchBase);
+    }
+
+    filterBuilder.setSizeFull();
+
+    // Apply button
+    Button applyButton = new Button("Apply", e -> {
+      String generatedFilter = filterBuilder.getGeneratedFilter();
+      if (generatedFilter != null && !generatedFilter.isEmpty()) {
+        onApply.accept(generatedFilter);
+        dialog.close();
+      } else {
+        NotificationHelper.showWarning("Please build a valid filter first", 3000);
+      }
+    });
+    applyButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    // Cancel button
+    Button cancelButton = new Button("Cancel", e -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, applyButton);
+    dialog.add(filterBuilder);
+
+    return dialog;
+  }
 
   /**
    * Creates the Advanced Search Builder.
@@ -358,6 +426,133 @@ public class AdvancedSearchBuilder extends VerticalLayout {
   }
 
   /**
+   * Parse and populate the filter builder from an LDAP filter string.
+   * This method attempts to parse the filter and populate the visual builder.
+   * 
+   * @param filterString the LDAP filter string to parse (e.g., "(cn=john)")
+   */
+  public void setFilterFromString(String filterString) {
+    if (filterString == null || filterString.trim().isEmpty()) {
+      return;
+    }
+
+    // Clear existing filter groups
+    filterGroups.clear();
+    filterGroupsContainer.removeAll();
+
+    try {
+      // Parse the filter string and populate UI
+      parseAndPopulateFilter(filterString.trim());
+    } catch (Exception e) {
+      // If parsing fails, fall back to manual filter text
+      NotificationHelper.showWarning(
+          "Could not parse filter into visual builder. "
+          + "You can edit it manually in the text area.", 5000);
+      generatedFilterArea.setValue(filterString.trim());
+      resultFilterField.setValue(filterString.trim());
+      addInitialFilterGroup();
+    }
+  }
+
+  /**
+   * Parse a filter string and populate the filter builder UI.
+   */
+  private void parseAndPopulateFilter(String filter) {
+    // Remove outer parentheses if present
+    String trimmed = filter.trim();
+    if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+      trimmed = trimmed.substring(1, trimmed.length() - 1);
+    }
+
+    // Check if it's a logical operator at the root level
+    if (trimmed.startsWith("&") || trimmed.startsWith("|") || trimmed.startsWith("!")) {
+      char operator = trimmed.charAt(0);
+      String content = trimmed.substring(1);
+      
+      // Set root operator
+      switch (operator) {
+        case '&':
+          rootLogicalOperator.setValue(LogicalOperator.AND);
+          break;
+        case '|':
+          rootLogicalOperator.setValue(LogicalOperator.OR);
+          break;
+        case '!':
+          rootLogicalOperator.setValue(LogicalOperator.NOT);
+          break;
+      }
+
+      // Parse sub-filters as separate groups
+      List<String> subFilters = extractSubFilters(content);
+      for (String subFilter : subFilters) {
+        FilterGroup group = new FilterGroup();
+        filterGroups.add(group);
+        filterGroupsContainer.add(group);
+        group.populateFromFilter(subFilter);
+      }
+    } else {
+      // Single filter expression - create one group with one unit
+      FilterGroup group = new FilterGroup();
+      filterGroups.add(group);
+      filterGroupsContainer.add(group);
+      group.populateFromFilter("(" + trimmed + ")");
+    }
+
+    if (filterGroups.isEmpty()) {
+      addInitialFilterGroup();
+    }
+
+    updateRootOperatorVisibility();
+    updateGeneratedFilter();
+  }
+
+  /**
+   * Escapes special characters in LDAP filter values according to RFC 4515.
+   * 
+   * @param value the raw value to escape
+   * @return the escaped value safe for LDAP filters
+   */
+  private String escapeFilterValue(String value) {
+    if (value == null || value.isEmpty()) {
+      return value;
+    }
+    
+    return value
+        .replace("\\", "\\5c")  // Backslash must be first!
+        .replace("*", "\\2a")
+        .replace("(", "\\28")
+        .replace(")", "\\29")
+        .replace("\0", "\\00");
+  }
+
+  /**
+   * Extract individual sub-filters from a compound filter.
+   * Handles nested parentheses properly.
+   */
+  private List<String> extractSubFilters(String content) {
+    List<String> filters = new ArrayList<>();
+    int depth = 0;
+    int startIdx = 0;
+
+    for (int i = 0; i < content.length(); i++) {
+      char c = content.charAt(i);
+      if (c == '(') {
+        if (depth == 0) {
+          startIdx = i;
+        }
+        depth++;
+      } else if (c == ')') {
+        depth--;
+        if (depth == 0) {
+          filters.add(content.substring(startIdx, i + 1));
+        }
+      }
+    }
+
+    return filters;
+  }
+
+  /**
    * Filter Group - represents a logical grouping of filter units.
    */
   private class FilterGroup extends VerticalLayout {
@@ -488,6 +683,58 @@ public class AdvancedSearchBuilder extends VerticalLayout {
         return "(" + groupOp.getSymbol() + String.join("", unitFilters) + ")";
       }
     }
+
+    /**
+     * Populate this filter group from a filter string.
+     */
+    public void populateFromFilter(String filter) {
+      // Clear existing units (except keep structure)
+      filterUnits.clear();
+      filterUnitsContainer.removeAll();
+
+      String trimmed = filter.trim();
+      if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+        trimmed = trimmed.substring(1, trimmed.length() - 1);
+      }
+
+      // Check for logical operator
+      if (trimmed.startsWith("&") || trimmed.startsWith("|") || trimmed.startsWith("!")) {
+        char operator = trimmed.charAt(0);
+        String content = trimmed.substring(1);
+
+        // Set group operator
+        switch (operator) {
+          case '&':
+            groupLogicalOperator.setValue(LogicalOperator.AND);
+            break;
+          case '|':
+            groupLogicalOperator.setValue(LogicalOperator.OR);
+            break;
+          case '!':
+            groupLogicalOperator.setValue(LogicalOperator.NOT);
+            break;
+        }
+
+        // Extract and populate sub-filters
+        List<String> subFilters = extractSubFilters(content);
+        for (String subFilter : subFilters) {
+          FilterUnit unit = new FilterUnit();
+          filterUnits.add(unit);
+          filterUnitsContainer.add(unit);
+          unit.populateFromFilter(subFilter);
+        }
+      } else {
+        // Single filter expression
+        FilterUnit unit = new FilterUnit();
+        filterUnits.add(unit);
+        filterUnitsContainer.add(unit);
+        unit.populateFromFilter("(" + trimmed + ")");
+      }
+
+      if (filterUnits.isEmpty()) {
+        addInitialFilterUnit();
+      }
+    }
   }
 
   /**
@@ -590,31 +837,92 @@ public class AdvancedSearchBuilder extends VerticalLayout {
       switch (operator) {
         case EQUALS:
           return value != null && !value.trim().isEmpty() 
-              ? "(" + attribute + "=" + value + ")" : "";
+              ? "(" + attribute + "=" + escapeFilterValue(value) + ")" : "";
         case NOT_EQUALS:
           return value != null && !value.trim().isEmpty() 
-              ? "(!(" + attribute + "=" + value + "))" : "";
+              ? "(!(" + attribute + "=" + escapeFilterValue(value) + "))" : "";
         case GREATER_EQUAL:
           return value != null && !value.trim().isEmpty() 
-              ? "(" + attribute + ">=" + value + ")" : "";
+              ? "(" + attribute + ">=" + escapeFilterValue(value) + ")" : "";
         case LESS_EQUAL:
           return value != null && !value.trim().isEmpty() 
-              ? "(" + attribute + "<=" + value + ")" : "";
+              ? "(" + attribute + "<=" + escapeFilterValue(value) + ")" : "";
         case STARTS_WITH:
           return value != null && !value.trim().isEmpty() 
-              ? "(" + attribute + "=" + value + "*)" : "";
+              ? "(" + attribute + "=" + escapeFilterValue(value) + "*)" : "";
         case ENDS_WITH:
           return value != null && !value.trim().isEmpty() 
-              ? "(" + attribute + "=*" + value + ")" : "";
+              ? "(" + attribute + "=*" + escapeFilterValue(value) + ")" : "";
         case CONTAINS:
           return value != null && !value.trim().isEmpty() 
-              ? "(" + attribute + "=*" + value + "*)" : "";
+              ? "(" + attribute + "=*" + escapeFilterValue(value) + "*)" : "";
         case EXISTS:
           return "(" + attribute + "=*)";
         case NOT_EXISTS:
           return "(!(" + attribute + "=*))";
         default:
           return "";
+      }
+    }
+
+    /**
+     * Populate this filter unit from a filter string.
+     */
+    public void populateFromFilter(String filter) {
+      String trimmed = filter.trim();
+      if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+        trimmed = trimmed.substring(1, trimmed.length() - 1);
+      }
+
+      // Handle NOT operator wrapping
+      boolean isNegated = false;
+      if (trimmed.startsWith("!")) {
+        isNegated = true;
+        trimmed = trimmed.substring(1);
+        if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+          trimmed = trimmed.substring(1, trimmed.length() - 1);
+        }
+      }
+
+      // Parse the filter expression
+      int equalPos = trimmed.indexOf('=');
+      if (equalPos > 0) {
+        String attr = trimmed.substring(0, equalPos).trim();
+        String val = trimmed.substring(equalPos + 1).trim();
+
+        attributeCombo.setValue(attr);
+
+        // Determine operator based on value pattern
+        if (val.equals("*")) {
+          operatorCombo.setValue(isNegated ? FilterOperator.NOT_EXISTS : FilterOperator.EXISTS);
+          valueField.setValue("");
+        } else if (val.startsWith("*") && val.endsWith("*") && val.length() > 2) {
+          operatorCombo.setValue(FilterOperator.CONTAINS);
+          valueField.setValue(val.substring(1, val.length() - 1));
+        } else if (val.startsWith("*")) {
+          operatorCombo.setValue(FilterOperator.ENDS_WITH);
+          valueField.setValue(val.substring(1));
+        } else if (val.endsWith("*")) {
+          operatorCombo.setValue(FilterOperator.STARTS_WITH);
+          valueField.setValue(val.substring(0, val.length() - 1));
+        } else {
+          operatorCombo.setValue(isNegated ? FilterOperator.NOT_EQUALS : FilterOperator.EQUALS);
+          valueField.setValue(val);
+        }
+
+        updateValueFieldVisibility();
+      } else if (trimmed.contains(">=")) {
+        int pos = trimmed.indexOf(">=");
+        attributeCombo.setValue(trimmed.substring(0, pos).trim());
+        operatorCombo.setValue(FilterOperator.GREATER_EQUAL);
+        valueField.setValue(trimmed.substring(pos + 2).trim());
+        updateValueFieldVisibility();
+      } else if (trimmed.contains("<=")) {
+        int pos = trimmed.indexOf("<=");
+        attributeCombo.setValue(trimmed.substring(0, pos).trim());
+        operatorCombo.setValue(FilterOperator.LESS_EQUAL);
+        valueField.setValue(trimmed.substring(pos + 2).trim());
+        updateValueFieldVisibility();
       }
     }
   }

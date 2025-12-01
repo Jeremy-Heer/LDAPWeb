@@ -15,6 +15,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.HeaderRow;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -23,6 +24,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
@@ -54,10 +56,10 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   private Select<SearchScope> scopeSelect;
   private MultiSelectComboBox<String> returnAttributesField;
   private Button searchButton;
-  private TextField gridFilterField;
   private Grid<LdapEntry> resultsGrid;
   private EntryEditor entryEditor;
   private List<LdapEntry> currentResults;
+  private Map<String, TextField> columnFilters;
 
   /**
    * Creates the Search view.
@@ -69,6 +71,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     this.configService = configService;
     this.ldapService = ldapService;
     this.currentResults = new ArrayList<>();
+    this.columnFilters = new java.util.HashMap<>();
 
     setSizeFull();
     setPadding(false);
@@ -137,9 +140,24 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     searchBaseLayout.add(searchBaseField, browseButton);
     searchBaseLayout.expand(searchBaseField);
 
+    // Filter field with Filter Builder button
+    HorizontalLayout filterLayout = new HorizontalLayout();
+    filterLayout.setWidthFull();
+    filterLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    filterLayout.setSpacing(false);
+    filterLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+    
     filterField = new TextField("Filter");
     filterField.setWidthFull();
     filterField.setPlaceholder("(objectClass=*)");
+
+    Button filterBuilderButton = new Button(VaadinIcon.FILTER.create());
+    filterBuilderButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    filterBuilderButton.setTooltipText("Filter Builder");
+    filterBuilderButton.addClickListener(e -> showFilterBuilderDialog());
+
+    filterLayout.add(filterField, filterBuilderButton);
+    filterLayout.expand(filterField);
 
     scopeSelect = new Select<>();
     scopeSelect.setLabel("Scope");
@@ -203,29 +221,18 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
       }
     });
 
-    compactSearchRow.add(searchBaseLayout, filterField, scopeSelect, returnAttributesField);
+    compactSearchRow.add(searchBaseLayout, filterLayout, scopeSelect, returnAttributesField);
     compactSearchRow.setFlexGrow(2, searchBaseLayout);
-    compactSearchRow.setFlexGrow(2, filterField);
+    compactSearchRow.setFlexGrow(2, filterLayout);
     compactSearchRow.setFlexGrow(0, scopeSelect);
     compactSearchRow.setFlexGrow(1, returnAttributesField);
 
-    // Second row: action buttons and grid filter
+    // Second row: action buttons
     searchButton = new Button("Search", VaadinIcon.SEARCH.create());
     searchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     searchButton.addClickListener(e -> performSearch());
 
-    Button filterBuilderButton = new Button("Filter Builder", VaadinIcon.FILTER.create());
-    filterBuilderButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    filterBuilderButton.addClickListener(e -> showFilterBuilderDialog());
-
-    gridFilterField = new TextField();
-    gridFilterField.setPlaceholder("Filter results...");
-    gridFilterField.setPrefixComponent(VaadinIcon.SEARCH.create());
-    gridFilterField.setClearButtonVisible(true);
-    gridFilterField.setWidth("300px");
-    gridFilterField.addValueChangeListener(e -> filterResults(e.getValue()));
-
-    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton, filterBuilderButton, gridFilterField);
+    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton);
     buttonLayout.setSpacing(true);
     buttonLayout.setDefaultVerticalComponentAlignment(Alignment.CENTER);
 
@@ -234,69 +241,17 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   }
 
   private void showFilterBuilderDialog() {
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Filter Builder");
-    dialog.setWidth("900px");
-    dialog.setHeight("700px");
-    dialog.setModal(true);
-    dialog.setCloseOnOutsideClick(false);
-
-    VerticalLayout dialogLayout = new VerticalLayout();
-    dialogLayout.setSizeFull();
-    dialogLayout.setPadding(true);
-    dialogLayout.setSpacing(true);
-
-    // Filter field (manual entry)
-    TextField dialogFilterField = new TextField("Filter");
-    dialogFilterField.setWidthFull();
-    dialogFilterField.setPlaceholder("(objectClass=*)");
-    dialogFilterField.setValue(filterField.getValue() != null ? filterField.getValue() : "");
-
-    // Filter builder component
-    AdvancedSearchBuilder filterBuilder = new AdvancedSearchBuilder(ldapService);
-    filterBuilder.getStyle()
-        .set("border", "1px solid var(--lumo-contrast-20pct)")
-        .set("border-radius", "var(--lumo-border-radius-m)")
-        .set("background-color", "var(--lumo-contrast-5pct)")
-        .set("padding", "var(--lumo-space-m)");
-    
-    // Set current search base in filter builder if available
+    String currentFilter = filterField.getValue();
     String currentBase = searchBaseField.getValue();
-    if (currentBase != null && !currentBase.isEmpty()) {
-      filterBuilder.setSearchBase(currentBase);
-    }
-
-    // Button to apply filter from builder to the text field
-    Button applyFilterButton = new Button("Apply Filter from Builder", VaadinIcon.ARROW_DOWN.create());
-    applyFilterButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    applyFilterButton.addClickListener(e -> {
-      String generatedFilter = filterBuilder.getGeneratedFilter();
-      if (generatedFilter != null && !generatedFilter.isEmpty()) {
-        dialogFilterField.setValue(generatedFilter);
-      }
-    });
-
-    HorizontalLayout filterBuilderHeader = new HorizontalLayout();
-    filterBuilderHeader.setWidthFull();
-    filterBuilderHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
-    filterBuilderHeader.add(new com.vaadin.flow.component.html.H4("Visual Filter Builder"), applyFilterButton);
-    filterBuilderHeader.setFlexGrow(1, filterBuilderHeader.getComponentAt(0));
-
-    dialogLayout.add(dialogFilterField, filterBuilderHeader, filterBuilder);
-    dialogLayout.setFlexGrow(1, filterBuilder);
-
-    // Dialog buttons in header
-    Button applyButton = new Button("Apply", e -> {
-      filterField.setValue(dialogFilterField.getValue());
-      dialog.close();
-    });
-    applyButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-
-    dialog.getHeader().add(applyButton, cancelButton);
-
-    dialog.add(dialogLayout);
+    
+    Dialog dialog = AdvancedSearchBuilder.createFilterBuilderDialog(
+        ldapService,
+        "Filter Builder",
+        currentFilter,
+        currentBase,
+        filter -> filterField.setValue(filter)
+    );
+    
     dialog.open();
   }
 
@@ -318,32 +273,130 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
    * Updates the grid columns based on selected return attributes.
    * Always starts with Server and Distinguished Name columns,
    * followed by columns for each selected attribute.
+   * Adds filter text fields in the header row for each column.
    */
   private void updateGridColumns(Grid<LdapEntry> grid, List<String> selectedAttributes) {
     grid.removeAllColumns();
+    columnFilters.clear();
 
     // Always add Server column
-    grid.addColumn(LdapEntry::getServerName)
+    Grid.Column<LdapEntry> serverColumn = grid.addColumn(LdapEntry::getServerName)
         .setHeader("Server")
         .setWidth("150px")
         .setFlexGrow(0)
         .setResizable(true);
 
     // Always add Distinguished Name column
-    grid.addColumn(LdapEntry::getDn)
+    Grid.Column<LdapEntry> dnColumn = grid.addColumn(LdapEntry::getDn)
         .setHeader("Distinguished Name")
         .setFlexGrow(1)
         .setResizable(true);
 
     // Add columns for selected attributes
+    List<Grid.Column<LdapEntry>> attributeColumns = new ArrayList<>();
+    List<String> attributeNames = new ArrayList<>();
     if (selectedAttributes != null && !selectedAttributes.isEmpty()) {
       for (String attrName : selectedAttributes) {
-        grid.addColumn(entry -> {
+        Grid.Column<LdapEntry> col = grid.addColumn(entry -> {
           List<String> values = entry.getAttributeValues(attrName);
           return values.isEmpty() ? "" : String.join(", ", values);
         }).setHeader(attrName).setWidth("200px").setResizable(true);
+        attributeColumns.add(col);
+        attributeNames.add(attrName);
       }
     }
+
+    // Only append header row if not already present (after column setup)
+    // getHeaderRows() always has at least 1 row (the default header with column names)
+    // so we only add our filter row if size == 1
+    HeaderRow filterRow;
+    if (grid.getHeaderRows().size() == 1) {
+      filterRow = grid.appendHeaderRow();
+    } else {
+      filterRow = grid.getHeaderRows().get(1); // Reuse existing filter row
+    }
+
+    // Server column filter
+    TextField serverFilter = new TextField();
+    serverFilter.setPlaceholder("Filter...");
+    serverFilter.setClearButtonVisible(true);
+    serverFilter.setWidthFull();
+    serverFilter.setValueChangeMode(ValueChangeMode.EAGER);
+    serverFilter.addValueChangeListener(e -> applyColumnFilters());
+    filterRow.getCell(serverColumn).setComponent(serverFilter);
+    columnFilters.put("server", serverFilter);
+
+    // DN column filter
+    TextField dnFilter = new TextField();
+    dnFilter.setPlaceholder("Filter...");
+    dnFilter.setClearButtonVisible(true);
+    dnFilter.setWidthFull();
+    dnFilter.setValueChangeMode(ValueChangeMode.EAGER);
+    dnFilter.addValueChangeListener(e -> applyColumnFilters());
+    filterRow.getCell(dnColumn).setComponent(dnFilter);
+    columnFilters.put("dn", dnFilter);
+
+    // Attribute column filters
+    for (int i = 0; i < attributeColumns.size(); i++) {
+      TextField attrFilter = new TextField();
+      attrFilter.setPlaceholder("Filter...");
+      attrFilter.setClearButtonVisible(true);
+      attrFilter.setWidthFull();
+      attrFilter.setValueChangeMode(ValueChangeMode.EAGER);
+      attrFilter.addValueChangeListener(e -> applyColumnFilters());
+      filterRow.getCell(attributeColumns.get(i)).setComponent(attrFilter);
+      columnFilters.put("attr_" + attributeNames.get(i), attrFilter);
+    }
+  }
+
+  /**
+   * Applies column filters to the results grid.
+   */
+  private void applyColumnFilters() {
+    if (currentResults == null || currentResults.isEmpty()) {
+      return;
+    }
+
+    List<LdapEntry> filteredResults = new ArrayList<>(currentResults);
+
+    // Apply server filter
+    TextField serverFilter = columnFilters.get("server");
+    if (serverFilter != null && serverFilter.getValue() != null && !serverFilter.getValue().isEmpty()) {
+      String serverFilterValue = serverFilter.getValue().toLowerCase();
+      filteredResults = filteredResults.stream()
+          .filter(entry -> entry.getServerName().toLowerCase().contains(serverFilterValue))
+          .collect(java.util.stream.Collectors.toList());
+    }
+
+    // Apply DN filter
+    TextField dnFilter = columnFilters.get("dn");
+    if (dnFilter != null && dnFilter.getValue() != null && !dnFilter.getValue().isEmpty()) {
+      String dnFilterValue = dnFilter.getValue().toLowerCase();
+      filteredResults = filteredResults.stream()
+          .filter(entry -> entry.getDn().toLowerCase().contains(dnFilterValue))
+          .collect(java.util.stream.Collectors.toList());
+    }
+
+    // Apply attribute filters
+    for (Map.Entry<String, TextField> filterEntry : columnFilters.entrySet()) {
+      String key = filterEntry.getKey();
+      if (key.startsWith("attr_")) {
+        String attrName = key.substring(5); // Remove "attr_" prefix
+        TextField attrFilter = filterEntry.getValue();
+        if (attrFilter != null && attrFilter.getValue() != null && !attrFilter.getValue().isEmpty()) {
+          String attrFilterValue = attrFilter.getValue().toLowerCase();
+          filteredResults = filteredResults.stream()
+              .filter(entry -> {
+                List<String> values = entry.getAttributeValues(attrName);
+                return values.stream()
+                    .anyMatch(value -> value.toLowerCase().contains(attrFilterValue));
+              })
+              .collect(java.util.stream.Collectors.toList());
+        }
+      }
+    }
+
+    resultsGrid.setItems(filteredResults);
   }
 
   /**
@@ -432,49 +485,6 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     dialog.open();
   }
 
-  private void filterResults(String filterText) {
-    if (filterText == null || filterText.isEmpty()) {
-      // No filter, show all results
-      resultsGrid.setItems(currentResults);
-      return;
-    }
-
-    // Filter results based on the text
-    String lowerCaseFilter = filterText.toLowerCase();
-    List<LdapEntry> filteredResults = currentResults.stream()
-        .filter(entry -> {
-          // Check if DN matches
-          if (entry.getDn().toLowerCase().contains(lowerCaseFilter)) {
-            return true;
-          }
-          // Check if RDN matches
-          if (entry.getRdn() != null && entry.getRdn().toLowerCase().contains(lowerCaseFilter)) {
-            return true;
-          }
-          // Check if server name matches
-          if (entry.getServerName().toLowerCase().contains(lowerCaseFilter)) {
-            return true;
-          }
-          // Check if any attribute value matches
-          for (Map.Entry<String, List<String>> attr : entry.getAttributes().entrySet()) {
-            // Check attribute name
-            if (attr.getKey().toLowerCase().contains(lowerCaseFilter)) {
-              return true;
-            }
-            // Check attribute values
-            for (String value : attr.getValue()) {
-              if (value.toLowerCase().contains(lowerCaseFilter)) {
-                return true;
-              }
-            }
-          }
-          return false;
-        })
-        .collect(java.util.stream.Collectors.toList());
-
-    resultsGrid.setItems(filteredResults);
-  }
-
   private void performSearch() {
     String baseDn = searchBaseField.getValue();
     String filter = filterField.getValue();
@@ -538,8 +548,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
         selectedAttributes != null ? selectedAttributes : new ArrayList<>());
     updateGridColumns(resultsGrid, selectedAttributesList);
 
-    // Clear the grid filter when new search is performed
-    gridFilterField.clear();
+    // Column filters will be cleared when updateGridColumns creates new headers
     
     resultsGrid.setItems(currentResults);
     NotificationHelper.showSuccess(

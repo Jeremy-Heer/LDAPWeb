@@ -1,5 +1,103 @@
 # LDAP Web Browser
 
+## v0.32.3 - Filter Enhancements ✅ COMPLETED
+
+### Implemented Features
+
+#### **LDAP Tree Grid - Context Menu Enhancement**
+- ✅ Context menu now dynamically displays "Edit Filter" when a filter already exists for a grid row
+- ✅ Shows "Add Filter" when no filter exists for the row
+- ✅ Provides clear indication of filter state to users
+
+#### **LDAP Tree Grid - AdvancedSearchBuilder Integration**
+- ✅ Replaced simple "Add LDAP Filter" dialog with full AdvancedSearchBuilder component
+- ✅ Modal dialog (900x700px) provides comprehensive filter building interface
+- ✅ Filter builder includes:
+  - Multiple filter groups with logical operators (AND, OR, NOT)
+  - Visual filter construction with common LDAP attributes
+  - Real-time filter preview
+  - Pre-population of existing filters for editing
+- ✅ Filter validation using UnboundID SDK before applying to tree
+- ✅ Displays DN context ("Filtering children of: ...") in dialog
+
+#### **LDAP Search View - Column Filtering**
+- ✅ Removed single "Filter results..." text field from button bar
+- ✅ Added individual filter text fields in grid header row for each column
+- ✅ Filter fields for:
+  - Server column
+  - Distinguished Name column
+  - All selected return attribute columns
+- ✅ Eager value change mode for real-time filtering as user types
+- ✅ Clear button on each filter field
+- ✅ Filters work independently and combine (AND logic)
+- ✅ Column-specific filtering improves precision and usability
+
+### Technical Details
+
+**LdapTreeGrid.java modifications:**
+- Added import for `AdvancedSearchBuilder`
+- Modified `initializeContextMenu()` to check for existing filter and set menu label accordingly
+- Replaced `showAddFilterDialog()` implementation:
+  - Dialog size increased to 900x700px for better filter builder visibility
+  - Integrated `AdvancedSearchBuilder` component with styling
+  - Pre-populates existing filter using `filterBuilder.setFilter(existingFilter)`
+  - Button changed from "Save" to "Apply Filter"
+  - Maintains filter validation with UnboundID SDK
+
+**SearchView.java modifications:**
+- Added imports for `HeaderRow` and `ValueChangeMode`
+- Removed `gridFilterField` TextField and its button layout integration
+- Added `columnFilters` Map<String, TextField> to store filter references
+- Modified `updateGridColumns()`:
+  - Creates header row with `grid.appendHeaderRow()`
+  - Adds TextField filter for each column
+  - Stores filter references with keys: "server", "dn", "attr_<attributeName>"
+  - Sets `ValueChangeMode.EAGER` for real-time filtering
+- Added `applyColumnFilters()` method:
+  - Filters `currentResults` based on all active column filters
+  - Applies filters sequentially (AND logic)
+  - Case-insensitive substring matching for all columns
+  - Attribute columns check against all values in multi-valued attributes
+- Removed old `filterResults(String filterText)` method (no longer needed)
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/LdapTreeGrid.java` - Context menu dynamic labeling and AdvancedSearchBuilder integration (~15 lines changed, dialog implementation ~70 lines)
+- `src/main/java/com/ldapbrowser/ui/views/SearchView.java` - Column filtering implementation (~120 lines changed/added)
+- `docs/changelog.md` - Updated with v0.32.3 completion details
+
+### Build Verification
+- ✅ `mvn compile` - BUILD SUCCESS
+- ✅ All compilation successful (Nothing to compile - all classes up to date)
+- ✅ Checkstyle warnings (non-blocking, existing pattern)
+- ✅ Proper imports and exception handling
+
+### User Experience Improvements
+- **Clear Filter State:** Users can immediately see if a tree node has a filter applied
+- **Powerful Filter Building:** AdvancedSearchBuilder provides visual, guided filter construction
+- **Precise Column Filtering:** Search results can be filtered per-column for targeted data exploration
+- **Real-time Feedback:** Column filters apply instantly as user types
+- **Professional UI:** Consistent with existing filter builder usage in Search view
+
+### Example Usage
+
+**LDAP Tree Grid - Edit Filter:**
+1. Right-click on an entry in the tree
+2. If no filter exists: "Add Filter" appears
+3. If filter exists: "Edit Filter" appears (with filter icon visible)
+4. Click menu item to open large AdvancedSearchBuilder dialog
+5. Build or modify filter visually
+6. Click "Apply Filter" to update children filter
+
+**Search View - Column Filtering:**
+1. Perform LDAP search to populate results grid
+2. Notice filter text fields in header row of each column
+3. Type in "Server" column filter to show only specific server results
+4. Type in "cn" attribute column to filter by common name values
+5. All filters combine to narrow results progressively
+6. Clear any filter field to remove that constraint
+
+---
+
 ## v0.32.2 - Notification Noise Reduction ✅ COMPLETED
 
 ### Implemented Features

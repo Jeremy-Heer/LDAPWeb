@@ -4,6 +4,7 @@ import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.LDAPException;
@@ -175,11 +176,13 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
         return false;
       }
 
-      // Add Filter menu item
-      contextMenu.addItem("Add Filter", event -> showAddFilterDialog(entry));
+      // Add/Edit Filter menu item - changes based on whether filter exists
+      String existingFilter = entryFilters.get(entry.getDn());
+      String menuLabel = (existingFilter != null && !existingFilter.isEmpty()) 
+          ? "Edit Filter" : "Add Filter";
+      contextMenu.addItem(menuLabel, event -> showAddFilterDialog(entry));
 
       // Remove Filter menu item
-      String existingFilter = entryFilters.get(entry.getDn());
       var removeItem = contextMenu.addItem("Remove Filter", event -> removeFilter(entry));
 
       // Gray out if no filter exists
@@ -904,62 +907,21 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
   }
 
   /**
-   * Shows dialog for adding/editing a filter.
+   * Shows dialog for adding/editing a filter using AdvancedSearchBuilder.
    */
   private void showAddFilterDialog(LdapEntry entry) {
-    Dialog dialog = new Dialog();
-    dialog.setHeaderTitle("Add LDAP Filter");
-    dialog.setWidth("500px");
-
-    VerticalLayout layout = new VerticalLayout();
-    layout.setPadding(true);
-    layout.setSpacing(true);
-
-    // Info text
-    Span infoText = new Span("Enter an LDAP search filter to limit child entries:");
-    infoText.getStyle().set("color", "var(--lumo-secondary-text-color)");
-
-    // DN display
-    Span dnText = new Span("DN: " + entry.getDn());
-    dnText.getStyle().set("font-weight", "bold");
-
-    // Filter input field
-    TextField filterField = new TextField("LDAP Filter");
-    filterField.setWidthFull();
-    filterField.setPlaceholder("(objectClass=person)");
-    filterField.setHelperText("Example: (objectClass=groupOfUniqueNames)");
-
-    // Pre-populate if filter already exists
     String existingFilter = entryFilters.get(entry.getDn());
-    if (existingFilter != null && !existingFilter.isEmpty()) {
-      filterField.setValue(existingFilter);
-    }
-
-    layout.add(infoText, dnText, filterField);
-
-    // Buttons
-    Button saveButton = new Button("Save", e -> {
-      String filter = filterField.getValue();
-      if (filter != null && !filter.trim().isEmpty()) {
-        // Validate filter using UnboundID SDK
-        try {
-          Filter.create(filter.trim());
-          applyFilter(entry, filter.trim());
-          dialog.close();
-        } catch (LDAPException ex) {
-          NotificationHelper.showError(
-              "Invalid filter syntax: " + ex.getMessage(), 5000);
-        }
-      } else {
-        NotificationHelper.showError("Please enter a filter", 3000);
-      }
-    });
-    saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    Button cancelButton = new Button("Cancel", e -> dialog.close());
-
-    dialog.getFooter().add(cancelButton, saveButton);
-    dialog.add(layout);
+    String title = (existingFilter != null && !existingFilter.isEmpty()) 
+        ? "Edit LDAP Filter" : "Add LDAP Filter";
+    
+    Dialog dialog = AdvancedSearchBuilder.createFilterBuilderDialog(
+        ldapService,
+        title,
+        existingFilter,
+        entry.getDn(),
+        filter -> applyFilter(entry, filter)
+    );
+    
     dialog.open();
   }
 
