@@ -17,7 +17,9 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
@@ -59,7 +61,10 @@ public class BulkSearchTab extends VerticalLayout {
   // UI Components
   private TextField searchBaseField;
   private Button searchBaseBrowseButton;
-  private TextArea searchFilterField;
+  private TextField filterField;
+  private Button filterBuilderButton;
+  private Select<SearchScope> scopeSelect;
+  private MultiSelectComboBox<String> returnAttributesField;
   private Checkbox continueOnErrorCheckbox;
   private Checkbox permissiveModifyCheckbox;
   private Checkbox noOperationCheckbox;
@@ -89,20 +94,77 @@ public class BulkSearchTab extends VerticalLayout {
   }
 
   private void initializeComponents() {
-    // Search fields
+    // Search Base field
     searchBaseField = new TextField("Search Base");
     searchBaseField.setWidthFull();
     searchBaseField.setPlaceholder("dc=example,dc=com");
 
-    searchBaseBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
+    searchBaseBrowseButton = new Button(VaadinIcon.FOLDER_OPEN.create());
     searchBaseBrowseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    searchBaseBrowseButton.setTooltipText("Browse LDAP directory");
+    searchBaseBrowseButton.setTooltipText("Select DN from Directory");
     searchBaseBrowseButton.addClickListener(e -> showDnBrowserDialog(searchBaseField));
 
-    searchFilterField = new TextArea("Search Filter");
-    searchFilterField.setWidthFull();
-    searchFilterField.setHeight("100px");
-    searchFilterField.setPlaceholder("(objectClass=person)");
+    // Filter field (changed from TextArea to TextField)
+    filterField = new TextField("Filter");
+    filterField.setWidthFull();
+    filterField.setPlaceholder("(objectClass=person)");
+
+    // Filter Builder button
+    filterBuilderButton = new Button(VaadinIcon.FILTER.create());
+    filterBuilderButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    filterBuilderButton.setTooltipText("Filter Builder");
+    filterBuilderButton.addClickListener(e -> showFilterBuilderDialog());
+
+    // Scope selector
+    scopeSelect = new Select<>();
+    scopeSelect.setLabel("Scope");
+    scopeSelect.setItems(SearchScope.values());
+    scopeSelect.setValue(SearchScope.SUB);
+    scopeSelect.setItemLabelGenerator(scope -> {
+      if (scope == SearchScope.BASE) {
+        return "Base";
+      } else if (scope == SearchScope.ONE) {
+        return "One Level";
+      } else if (scope == SearchScope.SUB) {
+        return "Subtree";
+      } else if (scope == SearchScope.SUBORDINATE_SUBTREE) {
+        return "Subordinate";
+      }
+      return scope.toString();
+    });
+    scopeSelect.setWidth("150px");
+
+    // Return Attributes field
+    returnAttributesField = new MultiSelectComboBox<>("Return Attributes");
+    returnAttributesField.setPlaceholder("All attributes");
+    returnAttributesField.setWidth("250px");
+    returnAttributesField.setAllowCustomValue(true);
+    
+    // Add common default attributes
+    List<String> commonAttributes = new ArrayList<>();
+    commonAttributes.add("uid");
+    commonAttributes.add("cn");
+    commonAttributes.add("sn");
+    commonAttributes.add("givenName");
+    commonAttributes.add("mail");
+    commonAttributes.add("objectClass");
+    commonAttributes.add("ou");
+    commonAttributes.add("dc");
+    commonAttributes.add("description");
+    returnAttributesField.setItems(commonAttributes);
+    
+    // Set default value to "uid"
+    returnAttributesField.setValue(java.util.Collections.singleton("uid"));
+    
+    returnAttributesField.addCustomValueSetListener(event -> {
+      String customValue = event.getDetail();
+      if (customValue != null && !customValue.trim().isEmpty()) {
+        Set<String> currentValues = returnAttributesField.getSelectedItems();
+        List<String> newValues = new ArrayList<>(currentValues);
+        newValues.add(customValue.trim());
+        returnAttributesField.setValue(newValues);
+      }
+    });
 
     // Option checkboxes
     continueOnErrorCheckbox = new Checkbox("Continue on error");
@@ -124,8 +186,8 @@ public class BulkSearchTab extends VerticalLayout {
     ldifTemplateArea = new TextArea("LDIF Template");
     ldifTemplateArea.setWidthFull();
     ldifTemplateArea.setHeight("150px");
-    ldifTemplateArea.setValue("changetype: modify\nreplace: userpassword\nuserpassword: Secret123");
-    ldifTemplateArea.setPlaceholder("changetype: modify\nreplace: userpassword\nuserpassword: Secret123");
+    ldifTemplateArea.setValue("dn: {DN}\nchangetype: modify\nreplace: description\ndescription: Example value for {uid}");
+    ldifTemplateArea.setPlaceholder("Use {DN} for entry DN and {attribute} for any returned attribute value\n\nExample:\ndn: {DN}\nchangetype: modify\nreplace: description\ndescription: Example value for {uid}");
 
     // Run button
     runButton = new Button("Run", new Icon(VaadinIcon.PLAY));
@@ -162,7 +224,37 @@ public class BulkSearchTab extends VerticalLayout {
     contentLayout.setSpacing(true);
     contentLayout.addClassName("bulk-search-field-group");
 
-    // Options layout
+    // Compact search row (matching SearchView layout)
+    HorizontalLayout compactSearchRow = new HorizontalLayout();
+    compactSearchRow.setWidthFull();
+    compactSearchRow.setDefaultVerticalComponentAlignment(Alignment.END);
+    compactSearchRow.setSpacing(true);
+
+    // Search Base with Browse button
+    HorizontalLayout searchBaseLayout = new HorizontalLayout();
+    searchBaseLayout.setWidthFull();
+    searchBaseLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    searchBaseLayout.setSpacing(false);
+    searchBaseLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+    searchBaseLayout.add(searchBaseField, searchBaseBrowseButton);
+    searchBaseLayout.expand(searchBaseField);
+
+    // Filter with Filter Builder button
+    HorizontalLayout filterLayout = new HorizontalLayout();
+    filterLayout.setWidthFull();
+    filterLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    filterLayout.setSpacing(false);
+    filterLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+    filterLayout.add(filterField, filterBuilderButton);
+    filterLayout.expand(filterField);
+
+    compactSearchRow.add(searchBaseLayout, filterLayout, scopeSelect, returnAttributesField);
+    compactSearchRow.setFlexGrow(2, searchBaseLayout);
+    compactSearchRow.setFlexGrow(2, filterLayout);
+    compactSearchRow.setFlexGrow(0, scopeSelect);
+    compactSearchRow.setFlexGrow(1, returnAttributesField);
+
+    // Options layout (checkboxes below search row)
     HorizontalLayout optionsLayout = new HorizontalLayout();
     optionsLayout.setWidthFull();
     optionsLayout.setSpacing(true);
@@ -174,24 +266,33 @@ public class BulkSearchTab extends VerticalLayout {
     actionLayout.setSpacing(true);
     actionLayout.add(operationModeCombo, runButton);
 
-    // Search base with browse button
-    HorizontalLayout searchBaseLayout = new HorizontalLayout(searchBaseField, searchBaseBrowseButton);
-    searchBaseLayout.setWidthFull();
-    searchBaseLayout.setAlignItems(Alignment.END);
-    searchBaseLayout.setSpacing(false);
-    searchBaseLayout.expand(searchBaseField);
-
     contentLayout.add(
         new H4("Bulk Search Operations"),
         new Span("Perform bulk operations on LDAP search results"),
-        searchBaseLayout,
-        searchFilterField,
+        compactSearchRow,
         optionsLayout,
         ldifTemplateArea,
         actionLayout,
         progressContainer,
-        downloadLink);    add(contentLayout);
+        downloadLink);
+    
+    add(contentLayout);
     setFlexGrow(1, contentLayout);
+  }
+
+  private void showFilterBuilderDialog() {
+    String currentFilter = filterField.getValue();
+    String currentBase = searchBaseField.getValue();
+    
+    Dialog dialog = AdvancedSearchBuilder.createFilterBuilderDialog(
+        ldapService,
+        "Filter Builder",
+        currentFilter,
+        currentBase,
+        filter -> filterField.setValue(filter)
+    );
+    
+    dialog.open();
   }
 
   private void performBulkOperation() {
@@ -204,8 +305,10 @@ public class BulkSearchTab extends VerticalLayout {
     }
 
     String searchBase = searchBaseField.getValue();
-    String searchFilter = searchFilterField.getValue();
+    String searchFilter = filterField.getValue();
     String ldifTemplate = ldifTemplateArea.getValue();
+    SearchScope scope = scopeSelect.getValue();
+    Set<String> returnAttributes = returnAttributesField.getSelectedItems();
     String operationMode = operationModeCombo.getValue();
 
     if (searchBase == null || searchBase.trim().isEmpty()) {
@@ -239,11 +342,13 @@ public class BulkSearchTab extends VerticalLayout {
       for (LdapServerConfig config : serverConfigs) {
         try {
           // Perform search to get entries
+          String[] attrs = returnAttributes.isEmpty() ? null : returnAttributes.toArray(new String[0]);
           List<LdapEntry> entries = ldapService.search(
               config,
               searchBase.trim(),
               searchFilter.trim(),
-              SearchScope.SUB);
+              scope,
+              attrs);
 
           if (entries.isEmpty()) {
             loggingService.logInfo("BULK_SEARCH", "No entries found on server: " + config.getName());
@@ -458,12 +563,20 @@ public class BulkSearchTab extends VerticalLayout {
     // Replace DN placeholder
     ldif = ldif.replace("{DN}", entry.getDn());
 
-    // Replace attribute placeholders
+    // Replace attribute placeholders - try all attribute names (original case and uppercase)
     for (String attrName : entry.getAttributes().keySet()) {
       List<String> values = entry.getAttributes().get(attrName);
       if (!values.isEmpty()) {
-        String placeholder = "{" + attrName.toUpperCase() + "}";
-        ldif = ldif.replace(placeholder, values.get(0));
+        // Support both {attributeName} and {ATTRIBUTENAME} placeholders
+        String placeholderOriginal = "{" + attrName + "}";
+        String placeholderUpper = "{" + attrName.toUpperCase() + "}";
+        String placeholderLower = "{" + attrName.toLowerCase() + "}";
+        
+        // Replace all variations with the first value
+        String firstValue = values.get(0);
+        ldif = ldif.replace(placeholderOriginal, firstValue);
+        ldif = ldif.replace(placeholderUpper, firstValue);
+        ldif = ldif.replace(placeholderLower, firstValue);
       }
     }
 
@@ -478,7 +591,6 @@ public class BulkSearchTab extends VerticalLayout {
   private void createDownloadLink(String content, String fileName) {
     StreamResource resource = new StreamResource(fileName,
         () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
-
     downloadLink.setHref(resource);
     downloadLink.setVisible(true);
   }
@@ -532,8 +644,10 @@ public class BulkSearchTab extends VerticalLayout {
 
   public void clear() {
     searchBaseField.clear();
-    searchFilterField.clear();
-    ldifTemplateArea.setValue("changetype: modify\nreplace: userpassword\nuserpassword: Secret123");
+    filterField.clear();
+    scopeSelect.setValue(SearchScope.SUB);
+    returnAttributesField.setValue(java.util.Collections.singleton("uid"));
+    ldifTemplateArea.setValue("changetype: modify\nreplace: description\ndescription: Example value for {uid}");
     continueOnErrorCheckbox.setValue(false);
     permissiveModifyCheckbox.setValue(false);
     noOperationCheckbox.setValue(false);

@@ -1,5 +1,140 @@
 # LDAP Web Browser
 
+## v0.33 - Bulk Search tab enhancements ✅ COMPLETED
+
+### Implemented Features
+
+#### **UI Restructuring - Compact Search Row Layout**
+- ✅ Complete redesign of BulkSearchTab to match SearchView layout
+- ✅ Compact single-row search interface with four sections:
+  - **Search Base + Browse Button** - DN selector with directory browser icon
+  - **Filter + Filter Builder Button** - LDAP filter with visual builder
+  - **Scope Selector** - Base, One Level, Subtree, Subordinate options  
+  - **Return Attributes** - Multi-select combo box with common attributes
+- ✅ Moved checkboxes (Continue on Error, Permissive Modify, No Operation) below search row
+- ✅ Professional flex-grow layout: Search Base (2x), Filter (2x), Scope (fixed), Return Attributes (1x)
+
+#### **New UI Components**
+- ✅ **Filter Builder Integration** - Filter Builder button opens AdvancedSearchBuilder dialog
+- ✅ **Scope Select** - Dropdown with Base/One Level/Subtree/Subordinate options (default: Subtree)
+- ✅ **Return Attributes Field** - MultiSelectComboBox with:
+  - Common attributes: uid, cn, sn, givenName, mail, objectClass, ou, dc, description
+  - Custom value support for ad-hoc attributes
+  - Default selection: "uid"
+- ✅ Changed Filter from TextArea to TextField for consistency with SearchView
+
+#### **Enhanced Search Logic**
+- ✅ Search operations now use selected scope instead of hardcoded SUB
+- ✅ Return attributes passed to ldapService.search() for targeted attribute retrieval
+- ✅ Empty return attributes = all attributes (standard LDAP behavior)
+- ✅ Attribute filtering improves search performance and reduces data transfer
+
+#### **Dynamic Variable Substitution in LDIF Templates**
+- ✅ Enhanced LDIF template processing with dynamic variable substitution
+- ✅ Template variables use curly brace syntax: `{attributeName}`
+- ✅ Case-insensitive matching supports: `{DN}`, `{uid}`, `{UID}`, `{Uid}`
+- ✅ Works with any attribute returned from search (first value used for multi-valued attributes)
+- ✅ Example template:
+```ldif
+dn: {DN}
+changetype: modify
+replace: description
+description: Example value for {uid}
+```
+
+#### **Updated Defaults and UX**
+- ✅ Default template demonstrates variable substitution: `description: Example value for {uid}`
+- ✅ Placeholder text guides users on variable syntax
+- ✅ Filter Builder tooltip: "Filter Builder"
+- ✅ Browse button tooltip: "Select DN from Directory"
+- ✅ Clear button resets all fields to defaults
+
+### Implementation Details
+
+**Major Code Changes:**
+- Added imports for `Select`, `MultiSelectComboBox`, and `AdvancedSearchBuilder`
+- Replaced `TextArea searchFilterField` with `TextField filterField`
+- Added `Button filterBuilderButton`, `Select<SearchScope> scopeSelect`, `MultiSelectComboBox<String> returnAttributesField`
+- Complete `setupLayout()` redesign with HorizontalLayout for compact row
+- Added `showFilterBuilderDialog()` method using AdvancedSearchBuilder
+- Enhanced `generateLdifForEntry()` with triple case-variation matching
+
+**Search Operation Updates:**
+- `performBulkOperation()` now retrieves scope and return attributes from UI
+- Converts return attributes Set to String array for ldapService
+- Passes scope and attributes to `ldapService.search()` call
+- Maintains backward compatibility with empty attribute selection
+
+**Layout Structure:**
+```
+Compact Search Row (HorizontalLayout):
+  ├─ Search Base Layout (2x flex)
+  │   ├─ TextField (Search Base)
+  │   └─ Button (Browse DN)
+  ├─ Filter Layout (2x flex)
+  │   ├─ TextField (Filter)
+  │   └─ Button (Filter Builder)
+  ├─ Select (Scope - fixed width 150px)
+  └─ MultiSelectComboBox (Return Attributes - 1x flex, 250px width)
+
+Options Row (HorizontalLayout):
+  ├─ Checkbox (Continue on Error)
+  ├─ Checkbox (Permissive Modify)
+  └─ Checkbox (No Operation)
+```
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/BulkSearchTab.java` (~180 lines modified/added)
+  - Complete UI restructuring to match SearchView
+  - Added scope and return attributes functionality
+  - Integrated AdvancedSearchBuilder filter builder
+  - Enhanced variable substitution with case-insensitive matching
+  - Updated clear() method for new fields
+- `docs/changelog.md` - Updated with v0.33 completion details
+
+### Build Verification
+- ✅ `mvn compile` - BUILD SUCCESS
+- ✅ All classes up to date
+- ✅ Checkstyle warnings (non-blocking, existing pattern)
+- ✅ No compilation errors
+
+### Benefits
+- **Consistent UX:** BulkSearchTab now matches SearchView layout and behavior
+- **Powerful Filtering:** Visual filter builder replaces manual filter construction
+- **Flexible Search:** Scope and return attributes provide granular search control
+- **Performance:** Targeted attribute retrieval reduces network overhead
+- **Template Flexibility:** Variable substitution works with any returned attribute
+- **Professional UI:** Compact, organized interface maximizes screen space
+
+### Example Usage
+
+**Building a Filter:**
+1. Click Filter Builder icon next to Filter field
+2. Visually construct complex LDAP filter (AND/OR/NOT groups)
+3. Filter automatically populated into Filter field
+4. Click Run to execute
+
+**Using Variable Substitution:**
+```ldif
+# Template
+dn: {DN}
+changetype: modify
+replace: mail
+mail: {uid}@newdomain.com
+add: description
+description: Updated for {cn}
+
+# Result for uid=jsmith, cn=John Smith
+dn: uid=jsmith,ou=people,dc=example,dc=com
+changetype: modify
+replace: mail
+mail: jsmith@newdomain.com
+add: description
+description: Updated for John Smith
+```
+
+---
+
 ## v0.32.3 - Filter Enhancements ✅ COMPLETED
 
 ### Implemented Features
