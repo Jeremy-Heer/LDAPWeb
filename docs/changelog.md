@@ -1,5 +1,52 @@
 # LDAP Web Browser
 
+## v0.35 - Icon Color Enhancement ✅ COMPLETED
+
+### Overview
+Enhanced visual hierarchy and usability of the drawer navigation by adding distinctive colors to each navigation icon, making it easier to identify different sections at a glance.
+
+### Implemented Changes
+
+#### 1. **Colored Navigation Icons**
+- ✅ Added unique colors to all drawer navigation icons
+- ✅ Colors chosen to match the semantic meaning of each section
+- ✅ Consistent color scheme applied across the application
+
+#### 2. **Icon Color Assignments**
+- ✅ **Server** - Blue (`#2196F3`) - Represents infrastructure/connectivity
+- ✅ **Search** - Orange (`#FF9800`) - Stands out for frequently used search function
+- ✅ **Browse** - Green (`#4CAF50`) - Natural color for exploration/navigation
+- ✅ **Schema** - Purple (`#9C27B0`) - Distinguished color for technical/structural view
+- ✅ **Create** - Light Green (`#66BB6A`) - Positive action color
+- ✅ **Access** - Amber (`#FFC107`) - Security/permission related
+- ✅ **Bulk** - Deep Orange (`#FF5722`) - Attention-grabbing for bulk operations
+- ✅ **Export** - Teal (`#009688`) - Data export operations
+- ✅ **Settings** - Blue Grey (`#607D8B`) - Standard settings color
+
+#### 3. **Implementation Details**
+- Icons styled using `.getStyle().set("color", "#hexcode")` method
+- Colors applied after icon creation in `createDrawer()` method
+- Maintains existing icon functionality and behavior
+- Color styling is non-intrusive and preserves accessibility
+
+#### 4. **Benefits**
+- Improved visual navigation and section identification
+- Better user experience through visual cues
+- Consistent with modern UI design patterns
+- Easier to locate specific sections quickly
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/MainLayout.java`
+  - Updated `createDrawer()` method to add color styling to navigation icons
+  - Applied colors to Server, Search, Browse, Schema, Create, Access, Bulk, Export, and Settings icons
+  - Maintained all existing functionality while enhancing visual presentation
+
+### Technical Notes
+- Colors chosen from Material Design palette for consistency
+- Hex color codes used for precise color matching
+- Style applied via Vaadin's `getStyle()` API
+- No impact on accessibility or screen reader functionality
+
 ## v0.34 - Bulk Group Memberships enhancements ✅ COMPLETED
 
 ### Implemented Features

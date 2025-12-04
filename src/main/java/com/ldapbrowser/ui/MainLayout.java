@@ -218,25 +218,42 @@ public class MainLayout extends AppLayout {
   private void createDrawer() {
     SideNav sideNav = new SideNav();
     
-    // Create navigation items with icons
-    SideNavItem serverItem = new SideNavItem("Server", ServerView.class, 
-        VaadinIcon.SERVER.create());
-    SideNavItem searchItem = new SideNavItem("Search", SearchView.class, 
-        VaadinIcon.SEARCH.create());
-    SideNavItem browseItem = new SideNavItem("Browse", BrowseView.class, 
-        VaadinIcon.TREE_TABLE.create());
-    SideNavItem schemaItem = new SideNavItem("Schema", SchemaView.class, 
-        VaadinIcon.DATABASE.create());
-    SideNavItem createItem = new SideNavItem("Create", Create.class, 
-        VaadinIcon.PLUS_CIRCLE.create());
-    SideNavItem accessItem = new SideNavItem("Access", AccessView.class, 
-        VaadinIcon.KEY.create());
-    SideNavItem bulkItem = new SideNavItem("Bulk", BulkView.class, 
-        VaadinIcon.PACKAGE.create());
-    SideNavItem exportItem = new SideNavItem("Export", ExportView.class, 
-        VaadinIcon.DOWNLOAD.create());
-    SideNavItem settingsItem = new SideNavItem("Settings", SettingsView.class, 
-        VaadinIcon.COG.create());
+    // Create navigation items with colored icons
+    com.vaadin.flow.component.icon.Icon serverIcon = VaadinIcon.SERVER.create();
+    serverIcon.getStyle().set("color", "#2196F3");
+    SideNavItem serverItem = new SideNavItem("Server", ServerView.class, serverIcon);
+    
+    com.vaadin.flow.component.icon.Icon searchIcon = VaadinIcon.SEARCH.create();
+    searchIcon.getStyle().set("color", "#FF9800");
+    SideNavItem searchItem = new SideNavItem("Search", SearchView.class, searchIcon);
+    
+    com.vaadin.flow.component.icon.Icon browseIcon = VaadinIcon.TREE_TABLE.create();
+    browseIcon.getStyle().set("color", "#4CAF50");
+    SideNavItem browseItem = new SideNavItem("Browse", BrowseView.class, browseIcon);
+    
+    com.vaadin.flow.component.icon.Icon schemaIcon = VaadinIcon.DATABASE.create();
+    schemaIcon.getStyle().set("color", "#9C27B0");
+    SideNavItem schemaItem = new SideNavItem("Schema", SchemaView.class, schemaIcon);
+    
+    com.vaadin.flow.component.icon.Icon createIcon = VaadinIcon.PLUS_CIRCLE.create();
+    createIcon.getStyle().set("color", "#66BB6A");
+    SideNavItem createItem = new SideNavItem("Create", Create.class, createIcon);
+    
+    com.vaadin.flow.component.icon.Icon accessIcon = VaadinIcon.KEY.create();
+    accessIcon.getStyle().set("color", "#FFC107");
+    SideNavItem accessItem = new SideNavItem("Access", AccessView.class, accessIcon);
+    
+    com.vaadin.flow.component.icon.Icon bulkIcon = VaadinIcon.PACKAGE.create();
+    bulkIcon.getStyle().set("color", "#FF5722");
+    SideNavItem bulkItem = new SideNavItem("Bulk", BulkView.class, bulkIcon);
+    
+    com.vaadin.flow.component.icon.Icon exportIcon = VaadinIcon.DOWNLOAD.create();
+    exportIcon.getStyle().set("color", "#009688");
+    SideNavItem exportItem = new SideNavItem("Export", ExportView.class, exportIcon);
+    
+    com.vaadin.flow.component.icon.Icon settingsIcon = VaadinIcon.COG.create();
+    settingsIcon.getStyle().set("color", "#607D8B");
+    SideNavItem settingsItem = new SideNavItem("Settings", SettingsView.class, settingsIcon);
 
     // Add all items to SideNav
     sideNav.addItem(
