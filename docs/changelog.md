@@ -1,5 +1,133 @@
 # LDAP Web Browser
 
+## v0.34 - Bulk Group Memberships enhancements ✅ COMPLETED
+
+### Implemented Features
+
+#### 1. **Simplified Group Selection - Direct DN Entry**
+- ✅ Replaced "Group Name (cn)" and "Group Base DN" fields with single "Group DN" field
+- ✅ Group DN field has browse button to launch LDAP Tree browser for DN selection
+- ✅ Placeholder shows example: `cn=admins,ou=groups,dc=example,dc=com`
+- ✅ Helper text: "Full Distinguished Name of the group"
+- ✅ Eliminates the need for searching by group name and base DN
+
+#### 2. **Updated Group Retrieval Logic**
+- ✅ Modified `processBulkGroupMembership()` to use group DN directly
+- ✅ Removed group search logic that used cn and base DN
+- ✅ Now uses `ldapService.getEntry(serverConfig, groupDn, ...)` to retrieve group directly
+- ✅ Removed `groupBaseDn` parameter from method signature
+- ✅ Error message updated: "Group not found at DN: {groupDn}"
+
+#### 3. **LDIF Generation Updates**
+- ✅ Modified `generateGroupMembershipLdif()` to accept groupDn parameter instead of groupName
+- ✅ Updated method signature to use `String groupDn` instead of `String groupName`
+- ✅ Removed group search by cn and base DN in LDIF generation
+- ✅ LDIF comments now show "Group DN:" instead of "Group:"
+- ✅ Removed `groupBaseDn` parameter from method
+
+#### 4. **User List Placeholder Fix**
+- ✅ Fixed User List TextArea placeholder to display actual newlines
+- ✅ Changed from: `"Enter user IDs, one per line\\nExample:\\njdoe\\nmsmith\\nabrown"`
+- ✅ Changed to: `"jdoe\nmsmith\nabrown"`
+- ✅ Sample user IDs now display on separate lines as intended
+
+#### 5. **User Base DN Layout Fix**
+- ✅ Fixed User Base DN browse button alignment
+- ✅ Browse button now correctly appears on the same row as User Base DN field
+- ✅ HorizontalLayout properly configured with:
+  - `setSpacing(false)` for tight button coupling
+  - `setFlexGrow(1, userBaseDnField)` for proper field expansion
+  - `setAlignItems(Alignment.END)` for bottom alignment
+
+### Technical Implementation
+
+**UI Component Changes:**
+- Removed: `TextField groupNameField` and `TextField groupBaseDnField`
+- Added: `TextField groupDnField` and `Button groupDnBrowseButton`
+- Updated field declarations and initialization
+- Group DN field set as required with appropriate placeholder and helper text
+
+**Layout Restructuring:**
+- Created `groupDnLayout` HorizontalLayout for Group DN + browse button
+- Created `operationLayout` for operation combo box (previously grouped with group name)
+- Updated `userBaseDnLayout` alignment to ensure browse button appears correctly
+- Removed `groupBaseDnLayout` and `baseDnLayout` (no longer needed)
+- Updated `contentLayout.add()` to reflect new structure:
+  - Group DN layout
+  - Operation layout
+  - User Base DN layout
+  - User list area
+  - File upload
+  - Options layout
+  - Action layout
+
+**Method Signature Updates:**
+```java
+// Before:
+private int[] processBulkGroupMembership(LdapServerConfig serverConfig, String groupName, ...)
+private String generateGroupMembershipLdif(LdapServerConfig serverConfig, String groupName, ...)
+
+// After:
+private int[] processBulkGroupMembership(LdapServerConfig serverConfig, String groupDn, ...)
+private String generateGroupMembershipLdif(LdapServerConfig serverConfig, String groupDn, ...)
+```
+
+**Logic Changes:**
+- Removed group search filter: `"(&(|(objectClass=posixGroup)...)(cn=" + groupName + "))"`
+- Removed `ldapService.search()` call for finding group
+- Added direct group retrieval: `ldapService.getEntry(serverConfig, groupDn, "objectClass", "memberURL")`
+- Simplified validation logic (no multiple group checks needed)
+- Updated error messages to reference DN instead of name
+
+**Validation Updates:**
+- Group DN validation: `if (groupDn == null || groupDn.trim().isEmpty())`
+- Error message: "Group DN is required" (was "Group name is required")
+- Logging now includes group DN instead of group name
+- Clear method updated to clear `groupDnField` instead of `groupNameField` and `groupBaseDnField`
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/BulkGroupMembershipsTab.java` - Complete refactoring (~150 lines changed)
+  - Field declarations updated (removed 2, added 2)
+  - `initializeComponents()` simplified
+  - `setupLayout()` restructured
+  - `performBulkGroupOperation()` updated for DN validation
+  - `processBulkGroupMembership()` signature changed, search logic removed
+  - `generateGroupMembershipLdif()` signature changed, search logic removed
+  - `clear()` method updated
+- `docs/changelog.md` - Updated with v0.34 completion details
+
+### Build Verification
+- ✅ `mvn compile` - BUILD SUCCESS
+- ✅ All classes up to date
+- ✅ No compilation errors
+- ✅ Checkstyle warnings (non-blocking, existing pattern)
+
+### User Experience Improvements
+- **Simpler Interface:** Single Group DN field instead of two separate fields
+- **Direct Selection:** Browse button allows easy DN selection from LDAP tree
+- **Clearer Placeholder:** User list shows actual sample entries on separate lines
+- **Proper Alignment:** Browse buttons correctly positioned on same row as fields
+- **Faster Operations:** No group search required, direct DN lookup is more efficient
+- **More Reliable:** Eliminates issues with multiple groups having same cn
+- **Better Error Messages:** Shows exact DN that couldn't be found
+
+### Example Usage
+
+**Before v0.34:**
+1. Enter group name: "admins"
+2. Enter group base DN: "ou=groups,dc=example,dc=com"
+3. Application searches for group with cn=admins under base DN
+4. Multiple groups with same name could cause errors
+
+**After v0.34:**
+1. Click browse button next to Group DN field
+2. Navigate LDAP tree and select: "cn=admins,ou=groups,dc=example,dc=com"
+3. OR manually type the full DN
+4. Application retrieves group directly by DN (no search needed)
+5. More reliable and faster
+
+---
+
 ## v0.33 - Bulk Search tab enhancements ✅ COMPLETED
 
 ### Implemented Features

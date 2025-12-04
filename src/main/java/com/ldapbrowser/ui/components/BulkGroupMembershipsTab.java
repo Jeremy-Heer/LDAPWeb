@@ -55,11 +55,10 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
   private List<LdapServerConfig> serverConfigs;
 
   // UI Components
-  private TextField groupNameField;
+  private TextField groupDnField;
+  private Button groupDnBrowseButton;
   private TextField userBaseDnField;
   private Button userBaseDnBrowseButton;
-  private TextField groupBaseDnField;
-  private Button groupBaseDnBrowseButton;
   private ComboBox<String> operationComboBox;
   private TextArea userListArea;
   private Upload fileUpload;
@@ -84,44 +83,38 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
   }
 
   private void initializeComponents() {
-    // Group name field
-    groupNameField = new TextField("Group Name (cn)");
-    groupNameField.setWidthFull();
-    groupNameField.setPlaceholder("Enter group common name");
-    groupNameField.setRequired(true);
+    // Group DN field
+    groupDnField = new TextField("Group DN");
+    groupDnField.setWidthFull();
+    groupDnField.setPlaceholder("cn=admins,ou=groups,dc=example,dc=com");
+    groupDnField.setRequired(true);
 
-    // Base DN fields
+    groupDnBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
+    groupDnBrowseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    groupDnBrowseButton.setTooltipText("Browse LDAP directory");
+    groupDnBrowseButton.addClickListener(e -> showDnBrowserDialog(groupDnField));
+
+    // User Base DN field
     userBaseDnField = new TextField("User Base DN (Optional)");
     userBaseDnField.setWidthFull();
     userBaseDnField.setPlaceholder("If empty, uses server Base DN");
-    userBaseDnField.setHelperText("Base DN to search for users");
 
     userBaseDnBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
     userBaseDnBrowseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
     userBaseDnBrowseButton.setTooltipText("Browse LDAP directory");
     userBaseDnBrowseButton.addClickListener(e -> showDnBrowserDialog(userBaseDnField));
 
-    groupBaseDnField = new TextField("Group Base DN (Optional)");
-    groupBaseDnField.setWidthFull();
-    groupBaseDnField.setPlaceholder("If empty, uses server Base DN");
-    groupBaseDnField.setHelperText("Base DN to search for the group");
-
-    groupBaseDnBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
-    groupBaseDnBrowseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-    groupBaseDnBrowseButton.setTooltipText("Browse LDAP directory");
-    groupBaseDnBrowseButton.addClickListener(e -> showDnBrowserDialog(groupBaseDnField));
-
     // Operation selector
     operationComboBox = new ComboBox<>("Operation");
     operationComboBox.setItems("Add Members", "Remove Members");
     operationComboBox.setValue("Add Members");
-    operationComboBox.setWidthFull();
+    operationComboBox.setWidth("15em");
 
     // User list area
     userListArea = new TextArea("User List");
     userListArea.setWidthFull();
     userListArea.setHeight("200px");
-    userListArea.setPlaceholder("Enter user IDs, one per line\\nExample:\\njdoe\\nmsmith\\nabrown");
+    userListArea.setPlaceholder("jdoe\nmsmith\nabrown");
     userListArea.setHelperText("Enter user IDs (UIDs), one per line. You can also upload a text file.");
 
     // File upload
@@ -195,33 +188,28 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     contentLayout.setSpacing(true);
     contentLayout.addClassName("bulk-group-memberships-field-group");
 
-    // Group configuration layout
-    HorizontalLayout groupLayout = new HorizontalLayout();
-    groupLayout.setWidthFull();
-    groupLayout.setSpacing(true);
-    groupLayout.add(groupNameField, operationComboBox);
+    // Group DN layout (field + browse button)
+    HorizontalLayout groupDnLayout = new HorizontalLayout();
+    groupDnLayout.setSpacing(false);
+    groupDnLayout.setAlignItems(Alignment.END);
+    groupDnLayout.add(groupDnField, groupDnBrowseButton);
+    groupDnLayout.setFlexGrow(1, groupDnField);
 
     // User Base DN layout (field + browse button)
     HorizontalLayout userBaseDnLayout = new HorizontalLayout();
-    userBaseDnLayout.setWidthFull();
     userBaseDnLayout.setSpacing(false);
+    userBaseDnLayout.setAlignItems(Alignment.END);
     userBaseDnLayout.add(userBaseDnField, userBaseDnBrowseButton);
     userBaseDnLayout.setFlexGrow(1, userBaseDnField);
-    userBaseDnLayout.setAlignItems(Alignment.END);
 
-    // Group Base DN layout (field + browse button)
-    HorizontalLayout groupBaseDnLayout = new HorizontalLayout();
-    groupBaseDnLayout.setWidthFull();
-    groupBaseDnLayout.setSpacing(false);
-    groupBaseDnLayout.add(groupBaseDnField, groupBaseDnBrowseButton);
-    groupBaseDnLayout.setFlexGrow(1, groupBaseDnField);
-    groupBaseDnLayout.setAlignItems(Alignment.END);
-
-    // Base DN container layout
-    HorizontalLayout baseDnLayout = new HorizontalLayout();
-    baseDnLayout.setWidthFull();
-    baseDnLayout.setSpacing(true);
-    baseDnLayout.add(userBaseDnLayout, groupBaseDnLayout);
+    // Combined layout: Group DN, Operation, User Base DN on single row
+    HorizontalLayout topRowLayout = new HorizontalLayout();
+    topRowLayout.setWidthFull();
+    topRowLayout.setSpacing(true);
+    topRowLayout.setAlignItems(Alignment.END);
+    topRowLayout.add(groupDnLayout, operationComboBox, userBaseDnLayout);
+    topRowLayout.setFlexGrow(1, groupDnLayout);
+    topRowLayout.setFlexGrow(1, userBaseDnLayout);
 
     // Options layout
     HorizontalLayout optionsLayout = new HorizontalLayout();
@@ -238,8 +226,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     contentLayout.add(
         new H4("Bulk Group Membership Operations"),
         new Span("Add or remove users to/from a group. Users are validated to exist before modification."),
-        groupLayout,
-        baseDnLayout,
+        topRowLayout,
         userListArea,
         fileUpload,
         optionsLayout,
@@ -257,9 +244,9 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
       return;
     }
 
-    String groupName = groupNameField.getValue();
-    if (groupName == null || groupName.trim().isEmpty()) {
-      NotificationHelper.showError("Group name is required");
+    String groupDn = groupDnField.getValue();
+    if (groupDn == null || groupDn.trim().isEmpty()) {
+      NotificationHelper.showError("Group DN is required");
       return;
     }
 
@@ -286,7 +273,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
 
     loggingService.logInfo("BULK_GROUP_MEMBERSHIPS",
         "Starting bulk group membership operation - Mode: " + operationMode + ", Servers: " 
-            + serverConfigs.size() + ", Group: " + groupName + ", Operation: " + operation 
+            + serverConfigs.size() + ", Group: " + groupDn + ", Operation: " + operation 
             + ", Users: " + userIds.size());
 
     showProgress();
@@ -302,7 +289,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
       for (LdapServerConfig config : serverConfigs) {
         try {
           if ("Create LDIF".equals(operationMode)) {
-            String ldif = generateGroupMembershipLdif(config, groupName, userIds, isAddOperation);
+            String ldif = generateGroupMembershipLdif(config, groupDn, userIds, isAddOperation);
             if (ldif != null && !ldif.isEmpty()) {
               if (combinedLdif.length() > 0) {
                 combinedLdif.append("\n\n");
@@ -311,7 +298,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
               totalLdifEntries++;
             }
           } else {
-            int[] results = processBulkGroupMembership(config, groupName, userIds, isAddOperation);
+            int[] results = processBulkGroupMembership(config, groupDn, userIds, isAddOperation);
             totalSuccesses += results[0];
             totalErrors += results[1];
             if (results[2] > 0) { // errors collected
@@ -363,17 +350,13 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
    * Processes bulk group membership operation for a single server.
    * Returns array: [successCount, errorCount, errorListSize]
    */
-  private int[] processBulkGroupMembership(LdapServerConfig serverConfig, String groupName, 
+  private int[] processBulkGroupMembership(LdapServerConfig serverConfig, String groupDn, 
       List<String> userIds, boolean isAddOperation) throws LDAPException {
     String userBaseDn = userBaseDnField.getValue();
-    String groupBaseDn = groupBaseDnField.getValue();
 
     // Use server base DN if not specified
     if (userBaseDn == null || userBaseDn.trim().isEmpty()) {
       userBaseDn = serverConfig.getBaseDn();
-    }
-    if (groupBaseDn == null || groupBaseDn.trim().isEmpty()) {
-      groupBaseDn = serverConfig.getBaseDn();
     }
 
     List<String> errors = new ArrayList<>();
@@ -430,28 +413,23 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
         throw new RuntimeException("No valid users found");
       }
 
-      // Step 2: Find and validate the group
+      // Step 2: Retrieve the group entry using the provided DN
       getUI().ifPresent(ui -> ui.access(() -> progressContainer.getChildren().forEach(component -> {
         if (component instanceof Span) {
           Span span = (Span) component;
           if (span.getText().startsWith("Validating") || span.getText().startsWith("Processing")) {
-            span.setText("Validating group...");
+            span.setText("Retrieving group entry...");
           }
         }
       })));
 
-      String groupFilter = "(&(|(objectClass=posixGroup)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames)(objectClass=groupOfUrls))(cn="
-          + escapeFilterValue(groupName) + "))";
-      List<LdapEntry> groups = ldapService.search(serverConfig, groupBaseDn, groupFilter,
-          com.unboundid.ldap.sdk.SearchScope.SUB, "objectClass", "memberURL");
-
-      if (groups.isEmpty()) {
-        throw new RuntimeException("Group not found: " + groupName);
-      } else if (groups.size() > 1) {
-        throw new RuntimeException("Multiple groups found with name: " + groupName);
+      // Retrieve the group entry directly using the DN
+      LdapEntry group = ldapService.readEntry(serverConfig, groupDn, false);
+      
+      if (group == null) {
+        throw new RuntimeException("Group not found at DN: " + groupDn);
       }
 
-      LdapEntry group = groups.get(0);
       List<String> objectClasses = group.getAttributeValues("objectClass");
       GroupType groupType = determineGroupType(objectClasses);
 
@@ -467,13 +445,13 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
 
       switch (groupType) {
         case POSIX_GROUP:
-          successCount += processPosixGroup(serverConfig, group.getDn(), validUsers, isAddOperation, errors);
+          successCount += processPosixGroup(serverConfig, groupDn, validUsers, isAddOperation, errors);
           break;
         case GROUP_OF_NAMES:
-          successCount += processGroupOfNames(serverConfig, group.getDn(), validUsers, isAddOperation, errors);
+          successCount += processGroupOfNames(serverConfig, groupDn, validUsers, isAddOperation, errors);
           break;
         case GROUP_OF_UNIQUE_NAMES:
-          successCount += processGroupOfUniqueNames(serverConfig, group.getDn(), validUsers, isAddOperation, errors);
+          successCount += processGroupOfUniqueNames(serverConfig, groupDn, validUsers, isAddOperation, errors);
           break;
         case GROUP_OF_URLS:
           successCount += processGroupOfUrls(serverConfig, group, validUsers, isAddOperation, errors);
@@ -664,9 +642,24 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
               controls.add(new PermissiveModifyRequestControl());
             }
 
-            ldapService.modifyEntry(serverConfig, user.dn, modifications, 
-                controls.isEmpty() ? null : controls.toArray(new Control[0]));
-            successCount++;
+            try {
+              ldapService.modifyEntry(serverConfig, user.dn, modifications, 
+                  controls.isEmpty() ? null : controls.toArray(new Control[0]));
+              successCount++;
+            } catch (com.unboundid.ldap.sdk.LDAPException e) {
+              // Check if this is an "attribute value already exists" or "no such attribute" error
+              if (e.getResultCode() == com.unboundid.ldap.sdk.ResultCode.ATTRIBUTE_OR_VALUE_EXISTS
+                  || e.getResultCode() == com.unboundid.ldap.sdk.ResultCode.NO_SUCH_ATTRIBUTE) {
+                // User already has the attributes or doesn't have attributes to remove - log info but continue
+                loggingService.logInfo("BULK_GROUP_MEMBERSHIPS",
+                    "User " + user.uid + " skipped - " + (isAddOperation 
+                        ? "already has required attributes" 
+                        : "does not have attributes to remove"));
+                successCount++; // Count as success since permissive modify would have succeeded
+              } else {
+                throw e; // Re-throw other LDAP errors
+              }
+            }
           }
 
         } catch (Exception e) {
@@ -780,77 +773,128 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
         .open();
   }
 
-  private String generateGroupMembershipLdif(LdapServerConfig serverConfig, String groupName,
+  private String generateGroupMembershipLdif(LdapServerConfig serverConfig, String groupDn,
       List<String> userIds, boolean isAddOperation) throws LDAPException {
     String userBaseDn = userBaseDnField.getValue();
-    String groupBaseDn = groupBaseDnField.getValue();
 
     // Use server base DN if not specified
     if (userBaseDn == null || userBaseDn.trim().isEmpty()) {
       userBaseDn = serverConfig.getBaseDn();
     }
-    if (groupBaseDn == null || groupBaseDn.trim().isEmpty()) {
-      groupBaseDn = serverConfig.getBaseDn();
-    }
 
     try {
-      // Find and validate the group
-      String groupFilter = "(&(|(objectClass=posixGroup)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames)(objectClass=groupOfUrls))(cn="
-          + escapeFilterValue(groupName) + "))";
-      List<LdapEntry> groups = ldapService.search(serverConfig, groupBaseDn, groupFilter,
-          com.unboundid.ldap.sdk.SearchScope.SUB, "objectClass");
-
-      if (groups.isEmpty()) {
-        throw new RuntimeException("Group not found: " + groupName);
-      } else if (groups.size() > 1) {
-        throw new RuntimeException("Multiple groups found with name: " + groupName);
+      // Retrieve the group entry directly using the DN
+      LdapEntry group = ldapService.readEntry(serverConfig, groupDn, false);
+      
+      if (group == null) {
+        throw new RuntimeException("Group not found at DN: " + groupDn);
       }
 
-      LdapEntry group = groups.get(0);
       List<String> objectClasses = group.getAttributeValues("objectClass");
       GroupType groupType = determineGroupType(objectClasses);
-      String groupDn = group.getDn();
 
       // Generate LDIF based on group type
       StringBuilder ldif = new StringBuilder();
       ldif.append("# Generated group membership LDIF for server: ").append(serverConfig.getName()).append("\n");
-      ldif.append("# Group: ").append(groupName).append(" (").append(groupDn).append(")\n");
+      ldif.append("# Group DN: ").append(groupDn).append("\n");
       ldif.append("# Operation: ").append(isAddOperation ? "Add Members" : "Remove Members").append("\n\n");
 
-      ldif.append("dn: ").append(groupDn).append("\n");
-      ldif.append("changetype: modify\n");
-
       String changeType = isAddOperation ? "add" : "delete";
-      String attributeName;
 
-      switch (groupType) {
-        case POSIX_GROUP:
-          attributeName = "memberUid";
-          break;
-        case GROUP_OF_NAMES:
-          attributeName = "member";
-          break;
-        case GROUP_OF_UNIQUE_NAMES:
-          attributeName = "uniqueMember";
-          break;
-        default:
-          throw new RuntimeException("Unsupported group type for LDIF generation: " + groupType);
-      }
-
-      for (int i = 0; i < userIds.size(); i++) {
-        String userId = userIds.get(i);
-        if (i > 0) {
-          ldif.append("-\n");
+      // Handle dynamic groups (groupOfUrls) differently
+      if (groupType == GroupType.GROUP_OF_URLS) {
+        // Parse memberURL to extract attributes to modify
+        List<String> memberUrls = group.getAttributeValues("memberURL");
+        if (memberUrls.isEmpty()) {
+          throw new RuntimeException("groupOfUrls has no memberURL attribute");
         }
-        ldif.append(changeType).append(": ").append(attributeName).append("\n");
+        if (memberUrls.size() > 1) {
+          throw new RuntimeException("groupOfUrls has multiple memberURL values - only single memberURL is supported");
+        }
 
-        if (groupType == GroupType.POSIX_GROUP) {
-          ldif.append(attributeName).append(": ").append(userId).append("\n");
-        } else {
-          // For GROUP_OF_NAMES and GROUP_OF_UNIQUE_NAMES, we need DNs
-          // Generate DN based on user base DN
+        String memberUrlStr = memberUrls.get(0);
+        LDAPURL memberUrl = new LDAPURL(memberUrlStr);
+        String filter = memberUrl.getFilter().toString();
+
+        // Parse the filter to extract attribute-value pairs
+        List<AttributeValuePair> attributePairs = parseFilterForAttributes(filter);
+
+        if (attributePairs.isEmpty()) {
+          throw new RuntimeException("No modifiable attributes found in memberURL filter: " + filter);
+        }
+
+        // Validate constraints
+        for (AttributeValuePair pair : attributePairs) {
+          if ("uid".equalsIgnoreCase(pair.attribute) || "cn".equalsIgnoreCase(pair.attribute)) {
+            throw new RuntimeException("memberURL filter contains uid or cn attribute which is not allowed: " + pair.attribute);
+          }
+          if (pair.value.contains("*")) {
+            throw new RuntimeException("memberURL filter contains wildcard values which is not allowed: " + pair.value);
+          }
+        }
+
+        // Generate LDIF for each user entry modification
+        for (int i = 0; i < userIds.size(); i++) {
+          String userId = userIds.get(i);
           String userDn = "uid=" + userId + "," + userBaseDn;
-          ldif.append(attributeName).append(": ").append(userDn).append("\n");
+
+          if (i > 0) {
+            ldif.append("\n");
+          }
+
+          ldif.append("dn: ").append(userDn).append("\n");
+          ldif.append("changetype: modify\n");
+
+          for (int j = 0; j < attributePairs.size(); j++) {
+            AttributeValuePair pair = attributePairs.get(j);
+            // Skip objectClass modifications when removing
+            if (!isAddOperation && pair.attribute.equalsIgnoreCase("objectClass")) {
+              continue;
+            }
+
+            if (j > 0) {
+              ldif.append("-\n");
+            }
+            ldif.append(changeType).append(": ").append(pair.attribute).append("\n");
+            ldif.append(pair.attribute).append(": ").append(pair.value).append("\n");
+          }
+        }
+      } else {
+        // Handle static groups (posixGroup, groupOfNames, groupOfUniqueNames)
+        ldif.append("dn: ").append(groupDn).append("\n");
+        ldif.append("changetype: modify\n");
+
+        String attributeName;
+
+        switch (groupType) {
+          case POSIX_GROUP:
+            attributeName = "memberUid";
+            break;
+          case GROUP_OF_NAMES:
+            attributeName = "member";
+            break;
+          case GROUP_OF_UNIQUE_NAMES:
+            attributeName = "uniqueMember";
+            break;
+          default:
+            throw new RuntimeException("Unsupported group type for LDIF generation: " + groupType);
+        }
+
+        for (int i = 0; i < userIds.size(); i++) {
+          String userId = userIds.get(i);
+          if (i > 0) {
+            ldif.append("-\n");
+          }
+          ldif.append(changeType).append(": ").append(attributeName).append("\n");
+
+          if (groupType == GroupType.POSIX_GROUP) {
+            ldif.append(attributeName).append(": ").append(userId).append("\n");
+          } else {
+            // For GROUP_OF_NAMES and GROUP_OF_UNIQUE_NAMES, we need DNs
+            // Generate DN based on user base DN
+            String userDn = "uid=" + userId + "," + userBaseDn;
+            ldif.append(attributeName).append(": ").append(userDn).append("\n");
+          }
         }
       }
 
@@ -879,9 +923,8 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
   }
 
   public void clear() {
-    groupNameField.clear();
+    groupDnField.clear();
     userBaseDnField.clear();
-    groupBaseDnField.clear();
     userListArea.clear();
     operationComboBox.setValue("Add Members");
     operationModeCombo.setValue("Execute Change");
