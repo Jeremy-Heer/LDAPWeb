@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.views;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.GlobalAccessControlTab;
 import com.ldapbrowser.ui.components.EntryAccessControlTab;
@@ -36,8 +37,10 @@ public class AccessView extends VerticalLayout {
    *
    * @param ldapService LDAP service
    * @param configService configuration service
+   * @param truststoreService truststore service
    */
-  public AccessView(LdapService ldapService, ConfigurationService configService) {
+  public AccessView(LdapService ldapService, ConfigurationService configService,
+      TruststoreService truststoreService) {
     this.configService = configService;
     
     setSizeFull();
@@ -55,8 +58,8 @@ public class AccessView extends VerticalLayout {
 
     // Create tab content components
     globalAccessControlTab = new GlobalAccessControlTab(ldapService);
-    entryAccessControlTab = new EntryAccessControlTab(ldapService);
-    effectiveRightsTab = new EffectiveRightsTab(ldapService);
+    entryAccessControlTab = new EntryAccessControlTab(ldapService, truststoreService);
+    effectiveRightsTab = new EffectiveRightsTab(ldapService, truststoreService);
 
     // Content container
     contentContainer = new VerticalLayout();

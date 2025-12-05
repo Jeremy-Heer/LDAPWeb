@@ -5,6 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
@@ -54,6 +55,7 @@ public class BulkSearchTab extends VerticalLayout {
   private final LdapService ldapService;
   private final LoggingService loggingService;
   private final ConfigurationService configService;
+  private final TruststoreService truststoreService;
 
   // Server configurations (multi-server support)
   private List<LdapServerConfig> serverConfigs;
@@ -82,12 +84,15 @@ public class BulkSearchTab extends VerticalLayout {
    *
    * @param ldapService    the LDAP service
    * @param loggingService the logging service
+   * @param configService  the configuration service
+   * @param truststoreService the truststore service
    */
   public BulkSearchTab(LdapService ldapService, LoggingService loggingService,
-      ConfigurationService configService) {
+      ConfigurationService configService, TruststoreService truststoreService) {
     this.ldapService = ldapService;
     this.loggingService = loggingService;
     this.configService = configService;
+    this.truststoreService = truststoreService;
 
     initializeComponents();
     setupLayout();
@@ -667,7 +672,7 @@ public class BulkSearchTab extends VerticalLayout {
       return;
     }
 
-    new DnBrowserDialog(ldapService)
+    new DnBrowserDialog(ldapService, truststoreService)
         .withServerConfigs(serverConfigs)
         .onDnSelected(dn -> targetField.setValue(dn))
         .open();

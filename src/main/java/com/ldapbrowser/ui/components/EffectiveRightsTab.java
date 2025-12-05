@@ -2,6 +2,7 @@ package com.ldapbrowser.ui.components;
 
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
@@ -41,6 +42,7 @@ public class EffectiveRightsTab extends VerticalLayout {
   private static final Logger logger = LoggerFactory.getLogger(EffectiveRightsTab.class);
 
   private final LdapService ldapService;
+  private final TruststoreService truststoreService;
   private Set<LdapServerConfig> selectedServers;
   
   // Form fields
@@ -64,9 +66,11 @@ public class EffectiveRightsTab extends VerticalLayout {
    * Constructs a new EffectiveRightsTab.
    *
    * @param ldapService the LDAP service
+   * @param truststoreService the truststore service
    */
-  public EffectiveRightsTab(LdapService ldapService) {
+  public EffectiveRightsTab(LdapService ldapService, TruststoreService truststoreService) {
     this.ldapService = ldapService;
+    this.truststoreService = truststoreService;
     this.selectedServers = Collections.emptySet();
     initUI();
   }
@@ -271,7 +275,7 @@ public class EffectiveRightsTab extends VerticalLayout {
       return;
     }
 
-    new DnBrowserDialog(ldapService)
+    new DnBrowserDialog(ldapService, truststoreService)
         .withServerConfigs(new ArrayList<>(selectedServers))
         .onDnSelected(dn -> targetField.setValue(dn))
         .open();

@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
@@ -38,6 +39,7 @@ public class Create extends VerticalLayout {
 
   private final LdapService ldapService;
   private final ConfigurationService configService;
+  private final TruststoreService truststoreService;
 
   // UI Components
   private TextField rdnField;
@@ -58,10 +60,13 @@ public class Create extends VerticalLayout {
    *
    * @param ldapService LDAP service
    * @param configService configuration service
+   * @param truststoreService truststore service
    */
-  public Create(LdapService ldapService, ConfigurationService configService) {
+  public Create(LdapService ldapService, ConfigurationService configService,
+      TruststoreService truststoreService) {
     this.ldapService = ldapService;
     this.configService = configService;
+    this.truststoreService = truststoreService;
     this.attributeRows = new ArrayList<>();
 
     setSizeFull();
@@ -431,7 +436,7 @@ public class Create extends VerticalLayout {
       return;
     }
 
-    new DnBrowserDialog(ldapService, "Select Parent DN")
+    new DnBrowserDialog(ldapService, truststoreService, "Select Parent DN")
         .withServerConfigs(selectedConfigs)
         .withValidation(
             entry -> isValidDnForParent(entry),

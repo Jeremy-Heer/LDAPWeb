@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.EntryEditor;
 import com.ldapbrowser.ui.components.LdapTreeBrowser;
@@ -36,6 +37,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
   private final LdapService ldapService;
   private final ConfigurationService configService;
+  private final TruststoreService truststoreService;
 
   private LdapTreeBrowser treeBrowser;
   private EntryEditor entryEditor;
@@ -47,10 +49,13 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
    *
    * @param ldapService LDAP service
    * @param configService configuration service
+   * @param truststoreService truststore service
    */
-  public BrowseView(LdapService ldapService, ConfigurationService configService) {
+  public BrowseView(LdapService ldapService, ConfigurationService configService,
+      TruststoreService truststoreService) {
     this.ldapService = ldapService;
     this.configService = configService;
+    this.truststoreService = truststoreService;
 
     setSizeFull();
     setPadding(false);
@@ -100,7 +105,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
   private void initializeComponents() {
     // Create tree browser
-    treeBrowser = new LdapTreeBrowser(ldapService);
+    treeBrowser = new LdapTreeBrowser(ldapService, truststoreService);
     treeBrowser.addSelectionListener(event -> {
       LdapEntry selectedEntry = event.getSelectedEntry();
       onEntrySelected(selectedEntry);

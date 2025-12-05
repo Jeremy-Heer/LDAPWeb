@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.BulkGenerateTab;
 import com.ldapbrowser.ui.components.BulkSearchTab;
@@ -39,15 +40,16 @@ public class BulkView extends VerticalLayout implements BeforeEnterObserver {
    * @param configService the configuration service
    * @param ldapService the LDAP service
    * @param loggingService the logging service
+   * @param truststoreService the truststore service
    */
   public BulkView(ConfigurationService configService, LdapService ldapService, 
-      LoggingService loggingService) {
+      LoggingService loggingService, TruststoreService truststoreService) {
     this.configService = configService;
     this.importTab = new ImportTab(ldapService, loggingService, configService);
-    this.searchTab = new BulkSearchTab(ldapService, loggingService, configService);
+    this.searchTab = new BulkSearchTab(ldapService, loggingService, configService, truststoreService);
     this.generateTab = new BulkGenerateTab(ldapService, loggingService);
     this.groupMembershipsTab = 
-        new com.ldapbrowser.ui.components.BulkGroupMembershipsTab(ldapService, loggingService);
+        new com.ldapbrowser.ui.components.BulkGroupMembershipsTab(ldapService, loggingService, truststoreService);
 
     setSpacing(true);
     setPadding(true);

@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
@@ -50,6 +51,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
 
   private final LdapService ldapService;
   private final LoggingService loggingService;
+  private final TruststoreService truststoreService;
 
   // Server configurations (multi-server support)
   private List<LdapServerConfig> serverConfigs;
@@ -73,9 +75,11 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
   private VerticalLayout progressContainer;
   private Anchor downloadLink;
 
-  public BulkGroupMembershipsTab(LdapService ldapService, LoggingService loggingService) {
+  public BulkGroupMembershipsTab(LdapService ldapService, LoggingService loggingService,
+      TruststoreService truststoreService) {
     this.ldapService = ldapService;
     this.loggingService = loggingService;
+    this.truststoreService = truststoreService;
     this.serverConfigs = new ArrayList<>();
 
     initializeComponents();
@@ -767,7 +771,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
       return;
     }
 
-    new DnBrowserDialog(ldapService)
+    new DnBrowserDialog(ldapService, truststoreService)
         .withServerConfigs(serverConfigs)
         .onDnSelected(dn -> targetField.setValue(dn))
         .open();

@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.vaadin.flow.component.ComponentEvent;
 import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.button.Button;
@@ -50,6 +51,7 @@ public class LdapTreeBrowser extends VerticalLayout {
   }
 
   private final LdapService ldapService;
+  private final TruststoreService truststoreService;
 
   // Components
   private LdapTreeGrid treeGrid;
@@ -64,9 +66,11 @@ public class LdapTreeBrowser extends VerticalLayout {
    * Creates a new LDAP tree browser.
    *
    * @param ldapService the LDAP service
+   * @param truststoreService the truststore service
    */
-  public LdapTreeBrowser(LdapService ldapService) {
+  public LdapTreeBrowser(LdapService ldapService, TruststoreService truststoreService) {
     this.ldapService = ldapService;
+    this.truststoreService = truststoreService;
     initializeComponents();
     setupLayout();
     setupEventHandlers();
@@ -74,7 +78,7 @@ public class LdapTreeBrowser extends VerticalLayout {
 
   private void initializeComponents() {
     // Create tree grid
-    treeGrid = new LdapTreeGrid(ldapService);
+    treeGrid = new LdapTreeGrid(ldapService, truststoreService);
     treeGrid.addClassName("ldap-tree");
     treeGrid.getStyle().set("margin", "0px");
     treeGrid.getStyle().set("padding", "0px");

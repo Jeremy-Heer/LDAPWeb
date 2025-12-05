@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
@@ -50,6 +51,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
 
   private final ConfigurationService configService;
   private final LdapService ldapService;
+  private final TruststoreService truststoreService;
 
   private TextField searchBaseField;
   private TextField filterField;
@@ -66,10 +68,13 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
    *
    * @param configService configuration service
    * @param ldapService LDAP service
+   * @param truststoreService truststore service
    */
-  public SearchView(ConfigurationService configService, LdapService ldapService) {
+  public SearchView(ConfigurationService configService, LdapService ldapService,
+      TruststoreService truststoreService) {
     this.configService = configService;
     this.ldapService = ldapService;
+    this.truststoreService = truststoreService;
     this.currentResults = new ArrayList<>();
     this.columnFilters = new java.util.HashMap<>();
 
@@ -579,7 +584,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
       return;
     }
 
-    new DnBrowserDialog(ldapService)
+    new DnBrowserDialog(ldapService, truststoreService)
         .withServerConfigs(selectedConfigs)
         .withValidation(
             entry -> isValidDnForSearch(entry),

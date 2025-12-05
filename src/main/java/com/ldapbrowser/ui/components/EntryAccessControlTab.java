@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.util.AciParser;
@@ -43,6 +44,7 @@ public class EntryAccessControlTab extends VerticalLayout {
   private static final Logger logger = LoggerFactory.getLogger(EntryAccessControlTab.class);
 
   private final LdapService ldapService;
+  private final TruststoreService truststoreService;
   private Set<LdapServerConfig> selectedServers;
   private Grid<EntryAciInfo> aciGrid;
   private ProgressBar progressBar;
@@ -57,9 +59,11 @@ public class EntryAccessControlTab extends VerticalLayout {
    * Constructs a new EntryAccessControlTab.
    *
    * @param ldapService the LDAP service for executing searches
+   * @param truststoreService the truststore service
    */
-  public EntryAccessControlTab(LdapService ldapService) {
+  public EntryAccessControlTab(LdapService ldapService, TruststoreService truststoreService) {
     this.ldapService = ldapService;
+    this.truststoreService = truststoreService;
     this.selectedServers = Collections.emptySet();
     initUI();
   }
@@ -500,7 +504,8 @@ public class EntryAccessControlTab extends VerticalLayout {
       return;
     }
 
-    AddAciDialog dialog = new AddAciDialog(ldapService, selectedServers, this::handleAciAdded);
+    AddAciDialog dialog = new AddAciDialog(ldapService, truststoreService, selectedServers,
+        this::handleAciAdded);
     dialog.open();
   }
 
@@ -526,7 +531,7 @@ public class EntryAccessControlTab extends VerticalLayout {
     }
 
     // Create edit dialog with existing ACI data
-    AddAciDialog dialog = new AddAciDialog(ldapService, selectedServers, 
+    AddAciDialog dialog = new AddAciDialog(ldapService, truststoreService, selectedServers, 
         (targetDn, newAci) -> handleAciEdited(aciInfo, targetDn, newAci), 
         aciInfo);
     dialog.open();
@@ -715,6 +720,7 @@ public class EntryAccessControlTab extends VerticalLayout {
   private static class AddAciDialog extends Dialog {
     @SuppressWarnings("unused")
     private final LdapService ldapService;
+    private final TruststoreService truststoreService;
     private final Set<LdapServerConfig> selectedServers;
     private final java.util.function.BiConsumer<String, String> onAciAdded;
     private final EntryAciInfo editingAci; // null for add mode, populated for edit mode
@@ -727,16 +733,19 @@ public class EntryAccessControlTab extends VerticalLayout {
     private Button copyLdifButton;
 
     // Constructor for adding new ACI
-    public AddAciDialog(LdapService ldapService, Set<LdapServerConfig> selectedServers,
+    public AddAciDialog(LdapService ldapService, TruststoreService truststoreService,
+                       Set<LdapServerConfig> selectedServers,
                        java.util.function.BiConsumer<String, String> onAciAdded) {
-      this(ldapService, selectedServers, onAciAdded, null);
+      this(ldapService, truststoreService, selectedServers, onAciAdded, null);
     }
 
     // Constructor for editing existing ACI or adding new ACI
-    public AddAciDialog(LdapService ldapService, Set<LdapServerConfig> selectedServers,
+    public AddAciDialog(LdapService ldapService, TruststoreService truststoreService,
+                       Set<LdapServerConfig> selectedServers,
                        java.util.function.BiConsumer<String, String> onAciAdded,
                        EntryAciInfo editingAci) {
       this.ldapService = ldapService;
+      this.truststoreService = truststoreService;
       this.selectedServers = selectedServers;
       this.onAciAdded = onAciAdded;
       this.editingAci = editingAci;
@@ -859,6 +868,7 @@ public class EntryAccessControlTab extends VerticalLayout {
             updateAddButtonState();
           },
           ldapService,
+          truststoreService,
           firstServer.getName(),
           selectedServers
       );
@@ -875,7 +885,7 @@ public class EntryAccessControlTab extends VerticalLayout {
      * Shows a dialog with LDAP tree browser for DN selection.
      */
     private void showDnBrowserDialog() {
-      new DnBrowserDialog(ldapService)
+      new DnBrowserDialog(ldapService, truststoreService)
           .withServerConfigs(new ArrayList<>(selectedServers))
           .onDnSelected(dn -> targetDnField.setValue(dn))
           .open();

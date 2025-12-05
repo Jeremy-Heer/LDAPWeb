@@ -193,7 +193,7 @@ public class ServerView extends VerticalLayout {
     portField.setMax(65535);
     portField.setStepButtonsVisible(true);
 
-    TextField baseDnField = new TextField("Base DN");
+    TextField baseDnField = new TextField("Default Base");
     baseDnField.setPlaceholder("e.g., dc=example,dc=com");
 
     TextField bindDnField = new TextField("Bind DN");
@@ -231,8 +231,23 @@ public class ServerView extends VerticalLayout {
       updateValidateCertState.run();
     });
 
+    // Create browse button for base DN
+    Button baseDnBrowseButton = new Button(
+        com.vaadin.flow.component.icon.VaadinIcon.FOLDER_OPEN.create());
+    baseDnBrowseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    baseDnBrowseButton.setTooltipText("Select DN from Directory");
+
+    HorizontalLayout baseDnLayout = new HorizontalLayout();
+    baseDnLayout.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
+    baseDnLayout.setSpacing(false);
+    baseDnLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+    baseDnLayout.add(baseDnField, baseDnBrowseButton);
+    baseDnLayout.expand(baseDnField);
+
+    // Add fields to form
     formLayout.add(nameField, hostField);
-    formLayout.add(portField, baseDnField);
+    formLayout.add(portField);
+    formLayout.add(baseDnLayout, 2);
     formLayout.add(bindDnField, bindPasswordField);
     formLayout.add(useSslCheckbox, useStartTlsCheckbox);
     formLayout.add(validateCertificateCheckbox, 2);
@@ -264,6 +279,23 @@ public class ServerView extends VerticalLayout {
     
     // Update validate certificate checkbox state after loading config
     updateValidateCertState.run();
+
+    // Setup browse button click handler (now that all fields are in scope)
+    baseDnBrowseButton.addClickListener(e -> {
+      // Only show browse dialog if at least one field is filled to connect
+      if (hostField.getValue() != null && !hostField.getValue().trim().isEmpty()) {
+        String host = hostField.getValue();
+        int port = portField.getValue() != null ? portField.getValue() : 389;
+        String bindDn = bindDnField.getValue();
+        String bindPassword = bindPasswordField.getValue();
+        boolean useSsl = useSslCheckbox.getValue();
+        boolean useStartTls = useStartTlsCheckbox.getValue();
+        
+        showBaseDnBrowseDialog(baseDnField, host, port, bindDn, bindPassword, useSsl, useStartTls);
+      } else {
+        NotificationHelper.showError("Please enter a host before browsing for DN");
+      }
+    });
 
     // Create buttons
     Button saveButton = new Button("Save", event -> {
@@ -387,7 +419,8 @@ public class ServerView extends VerticalLayout {
     java.security.cert.X509Certificate serverCert = exception.getServerCertificate();
     
     if (serverCert == null) {
-      NotificationHelper.showError("Certificate validation failed, but certificate details are not available");
+      NotificationHelper.showError(
+          "Certificate validation failed, but certificate details are not available");
       return;
     }
 
@@ -406,6 +439,39 @@ public class ServerView extends VerticalLayout {
     );
 
     dialog.open();
+  }
+
+  /**
+   * Shows the DN browser dialog for selecting base DN.
+   *
+   * @param targetField the field to populate with selected DN
+   * @param host the LDAP server host
+   * @param port the LDAP server port
+   * @param bindDn the bind DN for authentication
+   * @param bindPassword the bind password
+   * @param useSsl whether to use SSL
+   * @param useStartTls whether to use StartTLS
+   */
+  private void showBaseDnBrowseDialog(TextField targetField, String host, int port,
+      String bindDn, String bindPassword, boolean useSsl, boolean useStartTls) {
+    // Create a temporary server config for browsing
+    LdapServerConfig tempConfig = new LdapServerConfig(
+        "Temporary",
+        host,
+        port,
+        "", // baseDn
+        bindDn != null ? bindDn : "",
+        bindPassword != null ? bindPassword : "",
+        useSsl,
+        useStartTls
+    );
+    // Don't validate certificate for temporary browse connection
+    tempConfig.setValidateCertificate(false);
+
+    new com.ldapbrowser.ui.dialogs.DnBrowserDialog(ldapService, truststoreService)
+        .withServerConfigs(java.util.Collections.singletonList(tempConfig))
+        .onDnSelected(dn -> targetField.setValue(dn))
+        .open();
   }
 
   /**

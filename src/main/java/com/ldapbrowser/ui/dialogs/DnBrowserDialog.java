@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.dialogs;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.components.LdapTreeBrowser;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
@@ -28,6 +29,7 @@ import java.util.function.Predicate;
 public class DnBrowserDialog extends Dialog {
 
   private final LdapTreeBrowser treeBrowser;
+  private final TruststoreService truststoreService;
   private Consumer<String> onDnSelected;
   private Predicate<LdapEntry> validationPredicate;
   private String validationErrorMessage = "Please select a valid entry";
@@ -36,18 +38,22 @@ public class DnBrowserDialog extends Dialog {
    * Creates a DN browser dialog with default title.
    *
    * @param ldapService the LDAP service
+   * @param truststoreService the truststore service
    */
-  public DnBrowserDialog(LdapService ldapService) {
-    this(ldapService, "Select DN from Directory");
+  public DnBrowserDialog(LdapService ldapService, TruststoreService truststoreService) {
+    this(ldapService, truststoreService, "Select DN from Directory");
   }
 
   /**
    * Creates a DN browser dialog with custom title.
    *
    * @param ldapService the LDAP service
+   * @param truststoreService the truststore service
    * @param title the dialog title
    */
-  public DnBrowserDialog(LdapService ldapService, String title) {
+  public DnBrowserDialog(LdapService ldapService, TruststoreService truststoreService,
+      String title) {
+    this.truststoreService = truststoreService;
     setHeaderTitle(title);
     setWidth("800px");
     setHeight("600px");
@@ -57,7 +63,7 @@ public class DnBrowserDialog extends Dialog {
     setResizable(true);
 
     // Create tree browser
-    treeBrowser = new LdapTreeBrowser(ldapService);
+    treeBrowser = new LdapTreeBrowser(ldapService, truststoreService);
     treeBrowser.setSizeFull();
 
     // Setup layout

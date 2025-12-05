@@ -2,6 +2,7 @@ package com.ldapbrowser.ui.components;
 
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.util.OidLookupTable;
@@ -47,6 +48,7 @@ public class AciBuilderDialog extends Dialog {
 
   private Consumer<String> onAciBuilt;
   private LdapService ldapService;
+  private TruststoreService truststoreService;
   private String serverId;
   private Set<LdapServerConfig> selectedServers;
   
@@ -77,10 +79,12 @@ public class AciBuilderDialog extends Dialog {
    *
    * @param onAciBuilt callback when ACI is successfully built
    * @param ldapService service for LDAP operations
+   * @param truststoreService truststore service
    * @param serverId the server ID for LDAP operations
    */
-  public AciBuilderDialog(Consumer<String> onAciBuilt, LdapService ldapService, String serverId) {
-    this(onAciBuilt, ldapService, serverId, null);
+  public AciBuilderDialog(Consumer<String> onAciBuilt, LdapService ldapService,
+      TruststoreService truststoreService, String serverId) {
+    this(onAciBuilt, ldapService, truststoreService, serverId, null);
   }
 
   /**
@@ -88,12 +92,15 @@ public class AciBuilderDialog extends Dialog {
    *
    * @param onAciBuilt callback when ACI is successfully built
    * @param ldapService service for LDAP operations
+   * @param truststoreService truststore service
    * @param serverId the server ID for LDAP operations
    * @param selectedServers the set of selected server configurations for LDAP operations
    */
-  public AciBuilderDialog(Consumer<String> onAciBuilt, LdapService ldapService, String serverId, Set<LdapServerConfig> selectedServers) {
+  public AciBuilderDialog(Consumer<String> onAciBuilt, LdapService ldapService,
+      TruststoreService truststoreService, String serverId, Set<LdapServerConfig> selectedServers) {
     this.onAciBuilt = onAciBuilt;
     this.ldapService = ldapService;
+    this.truststoreService = truststoreService;
     this.serverId = serverId;
     this.selectedServers = selectedServers;
     this.targets = new ArrayList<>();
@@ -368,7 +375,7 @@ public class AciBuilderDialog extends Dialog {
       return;
     }
 
-    new DnBrowserDialog(ldapService)
+    new DnBrowserDialog(ldapService, truststoreService)
         .withServerConfigs(new ArrayList<>(selectedServers))
         .onDnSelected(dn -> {
           targetField.setValue(dn);

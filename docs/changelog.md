@@ -1,5 +1,49 @@
 # LDAP Web Browser
 
+## v0.36 - Server Connection enhancements ✅ COMPLETED
+
+### Overview
+Enhanced the server configuration dialog and connection testing experience with improved DN selection and better certificate validation error handling.
+
+### Implemented Changes
+
+#### 1. **Certificate Validation Error Handling**
+- ✅ Certificate validation errors now open the "Server Certificate Validation Failed" dialog
+- ✅ Dialog allows users to review and import certificates directly
+- ✅ Already implemented in ServerView.testSelectedServer() method
+- ✅ Uses handleCertificateValidationFailure() to show TlsCertificateDialog
+
+#### 2. **Test Button Notifications**
+- ✅ Success messages displayed in lower right via NotificationHelper.showSuccess()
+- ✅ Error messages displayed in lower right via NotificationHelper.showError()
+- ✅ NotificationHelper configured with BOTTOM_END position
+- ✅ All notifications appear consistently in lower right corner
+
+#### 3. **Server Configuration Dialog Improvements**
+- ✅ Renamed "Base DN" to "Default Base" in Add/Edit server dialog
+- ✅ Added "Select DN from Directory" browse button with folder icon
+- ✅ Button positioned to right of Default Base field
+- ✅ Browse button opens DnBrowserDialog for DN selection
+- ✅ Creates temporary server config for browsing (no certificate validation)
+- ✅ Validates that host is entered before allowing browse
+- ✅ Selected DN automatically populates the Default Base field
+
+#### 4. **Technical Implementation**
+- Uses VaadinIcon.FOLDER_OPEN for browse button icon
+- Browse button styled with LUMO_TERTIARY theme variant
+- Horizontal layout with proper spacing and expansion
+- Temporary LdapServerConfig created with entered credentials
+- Certificate validation disabled for browse operations
+- Reuses existing DnBrowserDialog component
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/views/ServerView.java`
+  - Updated openServerDialog() to rename "Base DN" to "Default Base"
+  - Added browse button with HorizontalLayout for DN field
+  - Added showBaseDnBrowseDialog() method for DN selection
+  - Browse button validates host entry before opening dialog
+  - Creates temporary server config for directory browsing
+
 ## v0.35 - Icon Color Enhancement ✅ COMPLETED
 
 ### Overview

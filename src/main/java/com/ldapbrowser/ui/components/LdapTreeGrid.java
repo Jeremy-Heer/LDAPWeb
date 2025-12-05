@@ -1,10 +1,13 @@
 package com.ldapbrowser.ui.components;
 
+import com.ldapbrowser.exception.CertificateValidationException;
 import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
+import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.LDAPException;
@@ -33,6 +36,7 @@ import java.util.Map;
 public class LdapTreeGrid extends TreeGrid<LdapEntry> {
 
   private final LdapService ldapService;
+  private final TruststoreService truststoreService;
   private final Map<String, LdapServerConfig> serverConfigMap = new HashMap<>();
   private TreeData<LdapEntry> treeData;
   private TreeDataProvider<LdapEntry> dataProvider;
@@ -54,9 +58,11 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
    * Creates a new LDAP tree grid.
    *
    * @param ldapService the LDAP service
+   * @param truststoreService the truststore service
    */
-  public LdapTreeGrid(LdapService ldapService) {
+  public LdapTreeGrid(LdapService ldapService, TruststoreService truststoreService) {
     this.ldapService = ldapService;
+    this.truststoreService = truststoreService;
     initializeGrid();
   }
 
@@ -687,10 +693,9 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
         // Check if this is a certificate validation failure
         Throwable cause = ex;
         while (cause != null) {
-          if (cause instanceof com.ldapbrowser.exception.CertificateValidationException) {
-            showNotification("Certificate validation failed. Please use 'Test Connection' button"
-                + " in Server Management to review and import the certificate.",
-                NotificationVariant.LUMO_WARNING);
+          if (cause instanceof CertificateValidationException) {
+            handleCertificateValidationFailure(
+                serverConfig, (CertificateValidationException) cause);
             return;
           }
           cause = cause.getCause();
@@ -982,5 +987,39 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     }
 
     NotificationHelper.showSuccess("Filter removed successfully", 3000);
+  }
+
+  /**
+   * Handles certificate validation failure by opening the certificate dialog.
+   *
+   * @param config server configuration
+   * @param exception certificate validation exception
+   */
+  private void handleCertificateValidationFailure(LdapServerConfig config,
+      CertificateValidationException exception) {
+    
+    java.security.cert.X509Certificate serverCert = exception.getServerCertificate();
+    
+    if (serverCert == null) {
+      NotificationHelper.showError(
+          "Certificate validation failed, but certificate details are not available");
+      return;
+    }
+
+    // Create and show TLS certificate dialog
+    TlsCertificateDialog dialog = new TlsCertificateDialog(
+        serverCert,
+        config,
+        truststoreService,
+        imported -> {
+          if (imported) {
+            // Certificate was imported, clear the failure and retry connection
+            ldapService.clearCertificateFailure(config.getName());
+            NotificationHelper.showSuccess("Certificate imported. Try connecting again.");
+          }
+        }
+    );
+
+    dialog.open();
   }
 }
