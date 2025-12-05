@@ -579,7 +579,14 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     }
   }
 
-  private LdapServerConfig findServerConfigForEntry(LdapEntry entry) {
+  /**
+   * Finds the server configuration for a given entry.
+   * Walks up the tree to find which server this entry belongs to.
+   *
+   * @param entry the LDAP entry
+   * @return the server configuration, or null if not found
+   */
+  public LdapServerConfig findServerConfigForEntry(LdapEntry entry) {
     // Walk up the tree to find the server node
     LdapEntry current = entry;
     while (current != null) {

@@ -1,5 +1,54 @@
 # LDAP Web Browser
 
+## v0.37 - Multi-Server Connection Cross-Contamination Fix ✅ COMPLETED
+
+### Overview
+Fixed a critical bug where browsing entries from multiple LDAP servers (same host, different ports) caused cross-contamination of entry details data. The application was incorrectly connecting to the wrong server when displaying entry details.
+
+### Problem Description
+When managing two different LDAP instances:
+- Same host
+- Same LDAP structure
+- Listening on different ports
+- When connecting to both and browsing the data trees for both:
+  - Getting cross contamination of the grid and entry details data
+  - If I expand server A and look at an entry details on server A,
+    the app connects to server B and reads the same entry from server B
+  - This was confirmed by viewing the access logs on the LDAP server
+
+### Root Cause
+The `BrowseView.onEntrySelected()` method was iterating through all selected servers and trying to read the entry from each one sequentially until one succeeded. This caused it to read from the wrong server if the entry DN existed on multiple servers.
+
+### Solution
+1. **Made `findServerConfigForEntry()` public in `LdapTreeGrid`**
+   - This method walks up the tree to determine which server an entry belongs to
+   - Added proper Javadoc documentation
+
+2. **Added `getServerConfigForEntry()` method to `LdapTreeBrowser`**
+   - Exposes the server lookup functionality to consumers of the tree browser
+   - Delegates to the underlying tree grid
+
+3. **Fixed `BrowseView.onEntrySelected()` to use correct server**
+   - Now gets the server config directly from the tree browser for the selected entry
+   - Reads entry details only from the correct server
+   - Eliminated the loop that tried multiple servers
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/LdapTreeGrid.java`
+  - Made `findServerConfigForEntry()` method public with Javadoc
+  
+- `src/main/java/com/ldapbrowser/ui/components/LdapTreeBrowser.java`
+  - Added `getServerConfigForEntry()` method to expose server lookup
+
+- `src/main/java/com/ldapbrowser/ui/views/BrowseView.java`
+  - Replaced multi-server iteration logic with direct server lookup
+  - Simplified `onEntrySelected()` method to use correct server
+
+### Impact
+- Entry details now always load from the correct server
+- No more cross-contamination between servers with similar structures
+- Improved reliability when managing multiple LDAP instances simultaneously
+
 ## v0.36 - Server Connection enhancements ✅ COMPLETED
 
 ### Overview

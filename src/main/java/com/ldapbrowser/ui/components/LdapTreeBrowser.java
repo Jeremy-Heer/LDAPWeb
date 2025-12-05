@@ -267,4 +267,14 @@ public class LdapTreeBrowser extends VerticalLayout {
     LdapEntry selected = getSelectedEntry();
     return selected != null ? selected.getDn() : null;
   }
+
+  /**
+   * Gets the server configuration for a given entry.
+   *
+   * @param entry the LDAP entry
+   * @return the server configuration, or null if not found
+   */
+  public LdapServerConfig getServerConfigForEntry(LdapEntry entry) {
+    return treeGrid != null ? treeGrid.findServerConfigForEntry(entry) : null;
+  }
 }

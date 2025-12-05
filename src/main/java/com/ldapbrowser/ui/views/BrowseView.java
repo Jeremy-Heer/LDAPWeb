@@ -167,37 +167,20 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     try {
-      // Find which server this entry belongs to by checking the DN or walking the tree
-      Set<String> selectedServers = MainLayout.getSelectedServers();
-      List<LdapServerConfig> configs = configService.loadConfigurations();
+      // Get the server config for this specific entry from the tree
+      LdapServerConfig config = treeBrowser.getServerConfigForEntry(entry);
       
-      // Try each selected server config to read the entry
-      LdapEntry fullEntry = null;
-      for (String serverName : selectedServers) {
-        LdapServerConfig config = configs.stream()
-            .filter(c -> c.getName().equals(serverName))
-            .findFirst()
-            .orElse(null);
-        
-        if (config != null) {
-          try {
-            // Try to read the entry with this config
-            fullEntry = ldapService.readEntry(config, entry.getDn(), false);
-            if (fullEntry != null) {
-              entryEditor.setServerConfig(config);
-              entryEditor.editEntry(fullEntry);
-              return;
-            }
-          } catch (Exception ignored) {
-            // Try next server
-          }
-        }
-      }
-      
-      // If we couldn't read from any server, show basic entry info
-      if (fullEntry == null) {
+      if (config == null) {
+        // Fallback: show basic entry info if we can't determine the server
         entryEditor.editEntry(entry);
+        return;
       }
+      
+      // Read the full entry from the CORRECT server
+      LdapEntry fullEntry = ldapService.readEntry(config, entry.getDn(), false);
+      entryEditor.setServerConfig(config);
+      entryEditor.editEntry(fullEntry);
+      
     } catch (Exception e) {
       NotificationHelper.showError("Failed to load entry details: " + e.getMessage(), 3000);
       // Show basic entry info
