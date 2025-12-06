@@ -1,5 +1,31 @@
 # LDAP Web Browser
 
+## v0.39 - Export View Enhancements and Bug Fix - TODO
+- Export view / Search selection Mode
+  - Move these form elements into a single row:
+    - Search Base with
+    - Tree Browse DN selector icon (update to use the same style used elsewhere such as on the Search View)
+    - Search Filter (change to text field)
+    - Return Attributes
+  - Correct the NullPointerException when clicking the "Browse LDAP Tree..." icon:
+  `java.lang.NullPointerException: Cannot invoke "com.ldapbrowser.ui.components.LdapTreeBrowser.addSelectionListener(com.vaadin.flow.component.ComponentEventListener)" because "this.ldapTreeBrowser" is null`
+  - When Output Format = "CSV", Add checkboxes
+    - include header - checked by default and will include header row when checked
+    - include DN - checked by default and will include a first column for the DN
+    - Surround Values in Quotes - checked by default and will wrap values in double quotes
+- Export view / Input CSV selection Mode
+  - Correct the NullPointerException when clicking the "Browse LDAP Tree..." icon:
+  `java.lang.NullPointerException: Cannot invoke "com.ldapbrowser.ui.components.LdapTreeBrowser.addSelectionListener(com.vaadin.flow.component.ComponentEventListener)" because "this.ldapTreeBrowser" is null`
+  - Move these form elements into a single row:
+    - Search Base with
+    - Tree Browse DN selector icon (update to use the same style used elsewhere such as on the Search View)
+    - Search Filter (change to text field)
+    - Return Attributes
+  - When Output Format = "CSV", Add checkboxes
+    - include header - checked by default and will include header row when checked
+    - include DN - checked by default and will include a first column for the DN
+    - Surround Values in Quotes - checked by default and will wrap values in double quotes
+
 ## v0.38 - Entry Editor Enhancements ✅ COMPLETED
 
 ### Overview

@@ -5,6 +5,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
@@ -56,10 +57,14 @@ public class ExportTab extends VerticalLayout {
   private final LdapService ldapService;
   private final LoggingService loggingService;
   private final ConfigurationService configurationService;
+  private final TruststoreService truststoreService;
 
   // Server configuration
   private LdapServerConfig serverConfig;
   private Set<LdapServerConfig> groupServers;
+
+  // Track current export mode for CSV generation
+  private boolean isSearchMode = true;
 
   // UI Components
   private ComboBox<String> itemSelectionMode;
@@ -69,20 +74,26 @@ public class ExportTab extends VerticalLayout {
   private VerticalLayout searchModeLayout;
   private TextField searchBaseField;
   private Button searchBaseBrowseButton;
-  private TextArea searchFilterField;
+  private TextField searchFilterField;
   private TextField returnAttributesField;
   private ComboBox<String> outputFormatCombo;
+  private Checkbox searchIncludeHeaderCheckbox;
+  private Checkbox searchIncludeDnCheckbox;
+  private Checkbox searchSurroundValuesCheckbox;
   private Button exportButton;
 
   // Input CSV Mode Components
   private VerticalLayout csvModeLayout;
   private TextField csvSearchBaseField;
   private Button csvSearchBaseBrowseButton;
-  private TextArea csvSearchFilterField;
+  private TextField csvSearchFilterField;
   private TextField csvReturnAttributesField;
   private ComboBox<String> csvOutputFormatCombo;
   private Checkbox excludeHeaderCheckbox;
   private Checkbox quotedValuesCheckbox;
+  private Checkbox csvIncludeHeaderCheckbox;
+  private Checkbox csvIncludeDnCheckbox;
+  private Checkbox csvSurroundValuesCheckbox;
   private Upload csvUpload;
   private MemoryBuffer csvBuffer;
   private VerticalLayout csvPreviewContainer;
@@ -97,22 +108,20 @@ public class ExportTab extends VerticalLayout {
   private VerticalLayout progressContainer;
   private Anchor downloadLink;
 
-  // DN selection dialog
-  private Dialog dnSelectionDialog;
-  private LdapTreeBrowser ldapTreeBrowser;
-
   /**
    * Create a new ExportTab.
    *
    * @param ldapService          LDAP service used to run searches
    * @param loggingService       logging service for export events
    * @param configurationService configuration service
+   * @param truststoreService    truststore service for DN browser
    */
   public ExportTab(LdapService ldapService, LoggingService loggingService,
-      ConfigurationService configurationService) {
+      ConfigurationService configurationService, TruststoreService truststoreService) {
     this.ldapService = ldapService;
     this.loggingService = loggingService;
     this.configurationService = configurationService;
+    this.truststoreService = truststoreService;
     this.csvData = new ArrayList<>();
     this.csvColumnOrder = new ArrayList<>();
 
@@ -163,14 +172,13 @@ public class ExportTab extends VerticalLayout {
     searchBaseField.setPlaceholder("dc=example,dc=com");
 
     searchBaseBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
-    searchBaseBrowseButton.addThemeVariants(ButtonVariant.LUMO_ICON);
-    searchBaseBrowseButton.setTooltipText("Browse LDAP tree to select DN");
+    searchBaseBrowseButton.addThemeVariants(ButtonVariant.LUMO_ICON, ButtonVariant.LUMO_TERTIARY);
+    searchBaseBrowseButton.setTooltipText("Select DN from Directory");
     searchBaseBrowseButton.addClickListener(e -> showDnSelectionDialog(false));
 
     // Search filter field
-    searchFilterField = new TextArea("Search Filter");
+    searchFilterField = new TextField("Search Filter");
     searchFilterField.setWidthFull();
-    searchFilterField.setHeight("100px");
     searchFilterField.setPlaceholder("(objectClass=person)");
 
     // Return attributes field
@@ -178,22 +186,42 @@ public class ExportTab extends VerticalLayout {
     returnAttributesField.setWidthFull();
     returnAttributesField.setPlaceholder("cn,mail,telephoneNumber (leave empty for all)");
 
+    // Combine Search Base, Browse Button, Search Filter, and Return Attributes in one row
+    HorizontalLayout searchFieldsLayout = new HorizontalLayout();
+    searchFieldsLayout.setWidthFull();
+    searchFieldsLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    searchFieldsLayout.add(searchBaseField, searchBaseBrowseButton, searchFilterField, returnAttributesField);
+    searchFieldsLayout.setFlexGrow(1, searchBaseField);
+    searchFieldsLayout.setFlexGrow(1, searchFilterField);
+    searchFieldsLayout.setFlexGrow(1, returnAttributesField);
+
     // Output format selector
     outputFormatCombo = new ComboBox<>("Output Format");
     outputFormatCombo.setItems("CSV", "JSON", "LDIF", "DN List");
     outputFormatCombo.setValue("CSV");
+    outputFormatCombo.addValueChangeListener(e -> updateCsvCheckboxVisibility(false));
+
+    // CSV output options checkboxes
+    searchIncludeHeaderCheckbox = new Checkbox("Include Header");
+    searchIncludeHeaderCheckbox.setValue(true);
+    searchIncludeHeaderCheckbox.setVisible(true);
+
+    searchIncludeDnCheckbox = new Checkbox("Include DN");
+    searchIncludeDnCheckbox.setValue(true);
+    searchIncludeDnCheckbox.setVisible(true);
+
+    searchSurroundValuesCheckbox = new Checkbox("Surround Values in Quotes");
+    searchSurroundValuesCheckbox.setValue(true);
+    searchSurroundValuesCheckbox.setVisible(true);
+
+    HorizontalLayout csvOptionsLayout = new HorizontalLayout();
+    csvOptionsLayout.setSpacing(true);
+    csvOptionsLayout.add(searchIncludeHeaderCheckbox, searchIncludeDnCheckbox, searchSurroundValuesCheckbox);
 
     // Export button
     exportButton = new Button("Export", new Icon(VaadinIcon.DOWNLOAD));
     exportButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     exportButton.addClickListener(e -> performSearchExport());
-
-    // Search base with browse button
-    HorizontalLayout searchBaseLayout = new HorizontalLayout();
-    searchBaseLayout.setWidthFull();
-    searchBaseLayout.setDefaultVerticalComponentAlignment(Alignment.END);
-    searchBaseLayout.add(searchBaseField, searchBaseBrowseButton);
-    searchBaseLayout.setFlexGrow(1, searchBaseField);
 
     // Format and export button layout
     HorizontalLayout formatLayout = new HorizontalLayout();
@@ -202,9 +230,8 @@ public class ExportTab extends VerticalLayout {
 
     searchModeLayout.add(
         new H4("Search Export"),
-        searchBaseLayout,
-        searchFilterField,
-        returnAttributesField,
+        searchFieldsLayout,
+        csvOptionsLayout,
         formatLayout);
   }
 
@@ -236,15 +263,13 @@ public class ExportTab extends VerticalLayout {
     csvSearchBaseField.setPlaceholder("dc=example,dc=com");
 
     csvSearchBaseBrowseButton = new Button(new Icon(VaadinIcon.FOLDER_OPEN));
-    csvSearchBaseBrowseButton.addThemeVariants(ButtonVariant.LUMO_ICON);
-    csvSearchBaseBrowseButton.setTooltipText("Browse LDAP tree to select DN");
+    csvSearchBaseBrowseButton.addThemeVariants(ButtonVariant.LUMO_ICON, ButtonVariant.LUMO_TERTIARY);
+    csvSearchBaseBrowseButton.setTooltipText("Select DN from Directory");
     csvSearchBaseBrowseButton.addClickListener(e -> showDnSelectionDialog(true));
 
-    csvSearchFilterField = new TextArea("Search Filter");
+    csvSearchFilterField = new TextField("Search Filter (Use {C1}, {C2}, ... to reference CSV columns)");
     csvSearchFilterField.setWidthFull();
-    csvSearchFilterField.setHeight("100px");
     csvSearchFilterField.setPlaceholder("(&(objectClass=person)(uid={C1})(sn={C2}))");
-    csvSearchFilterField.setHelperText("Use {C1}, {C2}, ... to reference CSV columns");
 
     csvReturnAttributesField = new TextField("Return Attributes");
     csvReturnAttributesField.setWidthFull();
@@ -253,6 +278,7 @@ public class ExportTab extends VerticalLayout {
     csvOutputFormatCombo = new ComboBox<>("Output Format");
     csvOutputFormatCombo.setItems("CSV", "JSON", "LDIF", "DN List");
     csvOutputFormatCombo.setValue("CSV");
+    csvOutputFormatCombo.addValueChangeListener(e -> updateCsvCheckboxVisibility(true));
 
     excludeHeaderCheckbox = new Checkbox("Exclude first row (header row)");
     excludeHeaderCheckbox.setValue(false);
@@ -300,12 +326,31 @@ public class ExportTab extends VerticalLayout {
         new H4("File Preview"),
         csvPreviewGrid);
 
-    // CSV Search base with browse button
-    HorizontalLayout csvSearchBaseLayout = new HorizontalLayout();
-    csvSearchBaseLayout.setWidthFull();
-    csvSearchBaseLayout.setDefaultVerticalComponentAlignment(Alignment.END);
-    csvSearchBaseLayout.add(csvSearchBaseField, csvSearchBaseBrowseButton);
-    csvSearchBaseLayout.setFlexGrow(1, csvSearchBaseField);
+    // Combine Search Base, Browse Button, Search Filter, and Return Attributes in one row
+    HorizontalLayout csvSearchFieldsLayout = new HorizontalLayout();
+    csvSearchFieldsLayout.setWidthFull();
+    csvSearchFieldsLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    csvSearchFieldsLayout.add(csvSearchBaseField, csvSearchBaseBrowseButton, csvSearchFilterField, csvReturnAttributesField);
+    csvSearchFieldsLayout.setFlexGrow(1, csvSearchBaseField);
+    csvSearchFieldsLayout.setFlexGrow(1, csvSearchFilterField);
+    csvSearchFieldsLayout.setFlexGrow(1, csvReturnAttributesField);
+
+    // CSV output options checkboxes
+    csvIncludeHeaderCheckbox = new Checkbox("Include Header");
+    csvIncludeHeaderCheckbox.setValue(true);
+    csvIncludeHeaderCheckbox.setVisible(true);
+
+    csvIncludeDnCheckbox = new Checkbox("Include DN");
+    csvIncludeDnCheckbox.setValue(true);
+    csvIncludeDnCheckbox.setVisible(true);
+
+    csvSurroundValuesCheckbox = new Checkbox("Surround Values in Quotes");
+    csvSurroundValuesCheckbox.setValue(true);
+    csvSurroundValuesCheckbox.setVisible(true);
+
+    HorizontalLayout csvOutputOptionsLayout = new HorizontalLayout();
+    csvOutputOptionsLayout.setSpacing(true);
+    csvOutputOptionsLayout.add(csvIncludeHeaderCheckbox, csvIncludeDnCheckbox, csvSurroundValuesCheckbox);
 
     // Format and export button layout
     HorizontalLayout formatAndExportLayout = new HorizontalLayout();
@@ -319,9 +364,8 @@ public class ExportTab extends VerticalLayout {
         excludeHeaderCheckbox,
         quotedValuesCheckbox,
         csvPreviewContainer,
-        csvSearchBaseLayout,
-        csvSearchFilterField,
-        csvReturnAttributesField,
+        csvSearchFieldsLayout,
+        csvOutputOptionsLayout,
         formatAndExportLayout);
   }
 
@@ -335,28 +379,41 @@ public class ExportTab extends VerticalLayout {
       return;
     }
 
-    // Update listener to set correct field based on mode
-    ldapTreeBrowser.addSelectionListener(event -> {
-      String selectedDn = event.getSelectedDn();
-      if (selectedDn != null) {
-        if (forCsvMode) {
-          csvSearchBaseField.setValue(selectedDn);
-        } else {
-          searchBaseField.setValue(selectedDn);
-        }
-        dnSelectionDialog.close();
+    // Create and configure DnBrowserDialog
+    DnBrowserDialog dialog = new DnBrowserDialog(ldapService, truststoreService);
+
+    // Set the server configs
+    if (serverConfig != null) {
+      dialog.withServerConfig(serverConfig);
+    } else if (groupServers != null && !groupServers.isEmpty()) {
+      dialog.withServerConfigs(new java.util.ArrayList<>(groupServers));
+    }
+
+    // Set callback to update correct field based on mode
+    dialog.onDnSelected(dn -> {
+      if (forCsvMode) {
+        csvSearchBaseField.setValue(dn);
+      } else {
+        searchBaseField.setValue(dn);
       }
     });
 
-    // Set the server config for the tree browser
-    if (serverConfig != null) {
-      ldapTreeBrowser.setServerConfig(serverConfig);
-    } else if (groupServers != null && !groupServers.isEmpty()) {
-      // Use the first server for browsing
-      ldapTreeBrowser.setServerConfig(groupServers.iterator().next());
-    }
+    dialog.open();
+  }
 
-    dnSelectionDialog.open();
+  private void updateCsvCheckboxVisibility(boolean csvMode) {
+    String format = csvMode ? csvOutputFormatCombo.getValue() : outputFormatCombo.getValue();
+    boolean isCsv = "CSV".equals(format);
+
+    if (csvMode) {
+      csvIncludeHeaderCheckbox.setVisible(isCsv);
+      csvIncludeDnCheckbox.setVisible(isCsv);
+      csvSurroundValuesCheckbox.setVisible(isCsv);
+    } else {
+      searchIncludeHeaderCheckbox.setVisible(isCsv);
+      searchIncludeDnCheckbox.setVisible(isCsv);
+      searchSurroundValuesCheckbox.setVisible(isCsv);
+    }
   }
 
   private void setupLayout() {
@@ -547,6 +604,8 @@ public class ExportTab extends VerticalLayout {
   }
 
   private void performCsvExport() {
+    isSearchMode = false;
+
     Set<LdapServerConfig> effectiveServers = getEffectiveServers();
     if (effectiveServers.isEmpty()) {
       NotificationHelper.showError("Please select an LDAP server first");
@@ -642,6 +701,8 @@ public class ExportTab extends VerticalLayout {
   }
 
   private void performSearchExport() {
+    isSearchMode = true;
+
     Set<LdapServerConfig> effectiveServers = getEffectiveServers();
     if (effectiveServers.isEmpty()) {
       NotificationHelper.showError("Please select an LDAP server first");
@@ -761,9 +822,16 @@ public class ExportTab extends VerticalLayout {
       return sb.toString();
     }
 
+    // Get checkbox values based on current mode
+    boolean includeHeader = isSearchMode ? searchIncludeHeaderCheckbox.getValue() : csvIncludeHeaderCheckbox.getValue();
+    boolean includeDn = isSearchMode ? searchIncludeDnCheckbox.getValue() : csvIncludeDnCheckbox.getValue();
+    boolean surroundValues = isSearchMode ? searchSurroundValuesCheckbox.getValue() : csvSurroundValuesCheckbox.getValue();
+
     // Determine attributes to export
     Set<String> attributesToExport = new LinkedHashSet<>();
-    attributesToExport.add("dn");
+    if (includeDn) {
+      attributesToExport.add("dn");
+    }
 
     if (requestedAttrs.isEmpty()) {
       // Collect all unique attributes
@@ -774,22 +842,37 @@ public class ExportTab extends VerticalLayout {
       attributesToExport.addAll(requestedAttrs);
     }
 
-    // Write header
-    sb.append(String.join(",", attributesToExport)).append("\n");
+    // Write header if requested
+    if (includeHeader) {
+      sb.append(String.join(",", attributesToExport)).append("\n");
+    }
 
     // Write data
     for (LdapEntry entry : entries) {
       List<String> values = new ArrayList<>();
       for (String attrName : attributesToExport) {
         if ("dn".equals(attrName)) {
-          values.add("\"" + escapeQuotes(entry.getDn()) + "\"");
+          String dnValue = entry.getDn();
+          if (surroundValues) {
+            values.add("\"" + escapeQuotes(dnValue) + "\"");
+          } else {
+            values.add(dnValue);
+          }
         } else {
           List<String> attrValues = entry.getAttributes().get(attrName);
           if (attrValues != null && !attrValues.isEmpty()) {
             String value = String.join("; ", attrValues);
-            values.add("\"" + escapeQuotes(value) + "\"");
+            if (surroundValues) {
+              values.add("\"" + escapeQuotes(value) + "\"");
+            } else {
+              values.add(value);
+            }
           } else {
-            values.add("\"\"");
+            if (surroundValues) {
+              values.add("\"\"");
+            } else {
+              values.add("");
+            }
           }
         }
       }

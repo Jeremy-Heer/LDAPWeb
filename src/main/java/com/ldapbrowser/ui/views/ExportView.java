@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.ExportTab;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -30,11 +31,13 @@ public class ExportView extends VerticalLayout {
    * @param ldapService LDAP service
    * @param loggingService logging service
    * @param configurationService configuration service
+   * @param truststoreService truststore service
    */
   public ExportView(
       LdapService ldapService,
       LoggingService loggingService,
-      ConfigurationService configurationService
+      ConfigurationService configurationService,
+      TruststoreService truststoreService
   ) {
     this.configurationService = configurationService;
 
@@ -43,7 +46,7 @@ public class ExportView extends VerticalLayout {
     setSpacing(false);
 
     // Create export tab with services
-    exportTab = new ExportTab(ldapService, loggingService, configurationService);
+    exportTab = new ExportTab(ldapService, loggingService, configurationService, truststoreService);
     exportTab.setSizeFull();
 
     // Update selected servers from MainLayout
