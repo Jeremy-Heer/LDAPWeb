@@ -21,6 +21,8 @@ import com.vaadin.flow.component.contextmenu.SubMenu;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.contextmenu.GridContextMenu;
+import com.vaadin.flow.component.grid.contextmenu.GridMenuItem;
+import com.vaadin.flow.component.grid.contextmenu.GridSubMenu;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -185,6 +187,13 @@ public class EntryEditor extends VerticalLayout {
       if (row == null) {
         return false;
       }
+      
+      // Add Copy submenu at the top
+      GridMenuItem<AttributeRow> copyMenuItem = contextMenu.addItem("Copy");
+      GridSubMenu<AttributeRow> copySubMenu = copyMenuItem.getSubMenu();
+      copySubMenu.addItem("Value", event -> copyAttributeValue(row));
+      copySubMenu.addItem("LDIF Name Value", event -> copyAttributeLdifFormat(row));
+      copySubMenu.addItem("Search Filter", event -> copyAttributeSearchFilter(row));
       
       contextMenu.addItem("Edit Value", event -> openEditValueDialog(row));
       contextMenu.addItem("Add Value", event -> openAddValueDialog(row));
@@ -1151,6 +1160,63 @@ public class EntryEditor extends VerticalLayout {
       NotificationHelper.showError("Failed to copy entry: " + e.getMessage());
       logger.error("Failed to copy entry", e);
     }
+  }
+
+  /**
+   * Copies the attribute value to clipboard.
+   *
+   * @param row the attribute row
+   */
+  private void copyAttributeValue(AttributeRow row) {
+    if (row == null || row.getValue() == null) {
+      NotificationHelper.showInfo("No value to copy.");
+      return;
+    }
+
+    String value = row.getValue();
+    getUI().ifPresent(ui -> {
+      ui.getPage().executeJs("navigator.clipboard.writeText($0)", value);
+    });
+
+    NotificationHelper.showSuccess("Value copied to clipboard");
+  }
+
+  /**
+   * Copies the attribute in LDIF format (name: value) to clipboard.
+   *
+   * @param row the attribute row
+   */
+  private void copyAttributeLdifFormat(AttributeRow row) {
+    if (row == null || row.getName() == null || row.getValue() == null) {
+      NotificationHelper.showInfo("No attribute to copy.");
+      return;
+    }
+
+    String ldifText = row.getName() + ": " + row.getValue();
+    getUI().ifPresent(ui -> {
+      ui.getPage().executeJs("navigator.clipboard.writeText($0)", ldifText);
+    });
+
+    NotificationHelper.showSuccess("LDIF format copied to clipboard");
+  }
+
+  /**
+   * Copies the attribute as a search filter (name=value) to clipboard.
+   *
+   * @param row the attribute row
+   */
+  private void copyAttributeSearchFilter(AttributeRow row) {
+    if (row == null || row.getName() == null || row.getValue() == null) {
+      NotificationHelper.showInfo("No attribute to copy.");
+      return;
+    }
+
+    String searchFilter = "(" + row.getName() + "=" + row.getValue() + ")";
+    getUI().ifPresent(ui -> {
+      ui.getPage().executeJs("navigator.clipboard.writeText($0)", searchFilter);
+    });
+
+    NotificationHelper.showSuccess("Search filter copied to clipboard");
   }
 
   private void searchFromCurrentEntry() {

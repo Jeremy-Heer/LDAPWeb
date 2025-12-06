@@ -1,5 +1,48 @@
 # LDAP Web Browser
 
+## v0.38 - Entry Editor Enhancements ✅ COMPLETED
+
+### Overview
+Enhanced the entry attribute grid context menu with new copy options for easier attribute value manipulation and usage in searches.
+
+### Implemented Changes
+
+#### 1. **Context Menu Copy Options**
+- ✅ Added "Copy" menu item at the top of the attribute grid right-click context menu
+- ✅ Copy menu contains three submenu options:
+  - **Value** - Copies just the attribute value to clipboard
+  - **LDIF Name Value** - Copies the attribute in LDIF format (name: value)
+  - **Search Filter** - Copies the attribute as a search filter (name=value) with parentheses
+
+#### 2. **Technical Implementation**
+- Added three new methods to EntryEditor:
+  - `copyAttributeValue()` - Copies the raw attribute value
+  - `copyAttributeLdifFormat()` - Formats and copies as LDIF (name: value)
+  - `copyAttributeSearchFilter()` - Formats and copies as LDAP search filter ((name=value))
+- Uses JavaScript clipboard API for copying
+- Provides user feedback via success notifications
+- Null-safe implementation with validation checks
+
+#### 3. **User Experience**
+- Copy options appear above existing Edit/Add/Delete options
+- Consistent notification feedback for each copy operation
+- All three formats useful for different workflows:
+  - Value: For pasting raw data
+  - LDIF: For importing/exporting attributes
+  - Search Filter: For constructing LDAP searches
+
+### Files Modified
+- `src/main/java/com/ldapbrowser/ui/components/EntryEditor.java`
+  - Updated `initializeAttributeContextMenu()` to add Copy submenu
+  - Added `copyAttributeValue()` method
+  - Added `copyAttributeLdifFormat()` method
+  - Added `copyAttributeSearchFilter()` method
+
+### Impact
+- Improved workflow efficiency for copying attribute data
+- Easier to construct LDAP search filters from existing attribute values
+- Better support for LDIF-based workflows
+
 ## v0.37 - Multi-Server Connection Cross-Contamination Fix ✅ COMPLETED
 
 ### Overview
