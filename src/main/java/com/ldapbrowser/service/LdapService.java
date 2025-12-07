@@ -277,15 +277,15 @@ public class LdapService {
 
   /**
    * Retrieves the server certificate by connecting to the server.
-   * Uses a trust-all approach to ensure the certificate can be retrieved
-   * even if it's not yet trusted.
+   * Uses a trust-all approach to ensure the certificate chain can be retrieved
+   * even if it's not yet trusted. The full chain is needed for proper PKI validation.
    *
    * @param config server configuration
-   * @return the server's X.509 certificate
-   * @throws Exception if certificate cannot be retrieved
+   * @return the server's X.509 certificate chain
+   * @throws Exception if certificate chain cannot be retrieved
    */
-  public X509Certificate retrieveServerCertificate(LdapServerConfig config) throws Exception {
-    // Create a custom trust manager that captures the certificate
+  public X509Certificate[] retrieveServerCertificateChain(LdapServerConfig config) throws Exception {
+    // Create a custom trust manager that captures the certificate chain
     CertificateCapturingTrustManager capturingTrustManager = 
         new CertificateCapturingTrustManager();
     SSLUtil sslUtil = new SSLUtil(capturingTrustManager);
@@ -308,18 +308,34 @@ public class LdapService {
             "Server must use SSL or StartTLS to retrieve certificate");
       }
       
-      // Return the captured certificate
-      X509Certificate cert = capturingTrustManager.getCapturedCertificate();
-      if (cert != null) {
-        return cert;
+      // Return the captured certificate chain
+      X509Certificate[] chain = capturingTrustManager.getCapturedChain();
+      if (chain != null && chain.length > 0) {
+        return chain;
       } else {
-        throw new Exception("Failed to capture server certificate");
+        throw new Exception("Failed to capture server certificate chain");
       }
     } finally {
       if (connection != null) {
         connection.close();
       }
     }
+  }
+
+  /**
+   * Retrieves the SSL/TLS certificate from an LDAP server (first in chain).
+   * Uses a trust-all approach to ensure the certificate can be retrieved
+   * even if it's not yet trusted.
+   *
+   * @param config server configuration
+   * @return the server's X.509 certificate
+   * @throws Exception if certificate cannot be retrieved
+   * @deprecated Use {@link #retrieveServerCertificateChain(LdapServerConfig)} for proper PKI validation
+   */
+  @Deprecated
+  public X509Certificate retrieveServerCertificate(LdapServerConfig config) throws Exception {
+    X509Certificate[] chain = retrieveServerCertificateChain(config);
+    return (chain != null && chain.length > 0) ? chain[0] : null;
   }
 
   /**

@@ -1,6 +1,8 @@
 # LDAP Web Browser
 
-## v0.40 - Certificates
+## v0.40.1 - cert chain trust issues - Completed
+
+## v0.40 - Certificates - Completed
 - Settings view - Truststore tab - Add import button
   - will prompt for file upload excepting a text file with PEM encoded public certificates
   - detect multiple PEM certificates in the uploaded file and import all into the truststore

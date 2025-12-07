@@ -99,7 +99,7 @@ public class TlsCertificateDialog extends Dialog {
       statusText.setReadOnly(true);
       statusText.setValue(
           "The server '" + serverConfig.getName() + "' presented a certificate that is trusted.\n\n"
-          + "This certificate is already in your truststore."
+          + "This certificate or its issuing certificate authority is already trusted by your system."
       );
       statusText.getStyle()
           .set("background", "var(--lumo-success-color-10pct)")

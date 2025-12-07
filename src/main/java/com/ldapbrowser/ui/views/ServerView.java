@@ -35,6 +35,9 @@ import java.util.List;
 @PageTitle("Server | LDAP Browser")
 public class ServerView extends VerticalLayout {
 
+  private static final org.slf4j.Logger logger = 
+      org.slf4j.LoggerFactory.getLogger(ServerView.class);
+
   private final ConfigurationService configService;
   private final LdapService ldapService;
   private final TruststoreService truststoreService;
@@ -522,20 +525,21 @@ public class ServerView extends VerticalLayout {
    */
   private void viewServerCertificate(LdapServerConfig config) {
     try {
-      // Retrieve the server certificate
-      java.security.cert.X509Certificate cert = ldapService.retrieveServerCertificate(config);
+      // Retrieve the server certificate chain
+      java.security.cert.X509Certificate[] chain = 
+          ldapService.retrieveServerCertificateChain(config);
       
-      if (cert == null) {
+      if (chain == null || chain.length == 0) {
         NotificationHelper.showError("Failed to retrieve server certificate");
         return;
       }
       
-      // Determine if certificate is trusted
-      boolean isTrusted = isCertificateTrusted(cert);
+      // Determine if certificate chain is trusted
+      boolean isTrusted = isCertificateTrusted(config, chain);
       
-      // Show the certificate dialog
+      // Show the certificate dialog (displaying the server certificate - first in chain)
       TlsCertificateDialog certDialog = new TlsCertificateDialog(
-          cert,
+          chain[0],
           config,
           truststoreService,
           isTrusted,
@@ -552,25 +556,41 @@ public class ServerView extends VerticalLayout {
   }
 
   /**
-   * Checks if a certificate is already trusted in the truststore.
+   * Checks if a certificate chain is trusted by attempting an actual LDAP connection.
+   * This is the most reliable way to determine trust status since it matches exactly
+   * what happens during real LDAP operations.
    *
-   * @param cert the certificate to check
-   * @return true if the certificate is in the truststore
+   * @param config the server configuration
+   * @param chain the certificate chain to validate
+   * @return true if the certificate is trusted (connection succeeds), false otherwise
    */
-  private boolean isCertificateTrusted(java.security.cert.X509Certificate cert) {
-    try {
-      List<String> aliases = truststoreService.listCertificates();
-      for (String alias : aliases) {
-        java.security.cert.Certificate trustedCert = truststoreService.getCertificate(alias);
-        if (trustedCert != null && trustedCert.equals(cert)) {
-          return true;
-        }
-      }
-    } catch (Exception e) {
-      // If we can't check, assume untrusted
+  private boolean isCertificateTrusted(LdapServerConfig config, 
+      java.security.cert.X509Certificate[] chain) {
+    if (chain == null || chain.length == 0) {
       return false;
     }
-    return false;
+
+    try {
+      // Attempt a minimal LDAP connection using the truststore
+      // If the certificate is trusted, connection will succeed and return true
+      // If not, testConnection will throw an exception
+      return ldapService.testConnection(config);
+    } catch (Exception e) {
+      // Check if this is a certificate/SSL error
+      Throwable cause = e;
+      while (cause != null) {
+        if (cause instanceof javax.net.ssl.SSLException
+            || cause instanceof java.security.cert.CertificateException) {
+          // Certificate is not trusted
+          return false;
+        }
+        cause = cause.getCause();
+      }
+      // Other error (connection refused, bind failure, etc.) - assume cert is OK
+      // since we're only checking certificate trust, not full connectivity
+      logger.debug("Non-certificate error during trust check: {}", e.getMessage());
+      return true;
+    }
   }
 
   /**
