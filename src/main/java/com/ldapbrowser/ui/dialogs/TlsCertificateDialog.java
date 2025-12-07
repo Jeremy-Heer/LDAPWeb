@@ -26,8 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Dialog for displaying TLS/SSL certificate details when certificate validation fails.
- * Provides option to import and trust the certificate.
+ * Dialog for displaying TLS/SSL certificate details.
+ * Can show certificates as trusted or untrusted, and provides option to import
+ * untrusted certificates.
  */
 public class TlsCertificateDialog extends Dialog {
 
@@ -36,6 +37,7 @@ public class TlsCertificateDialog extends Dialog {
   private final TruststoreService truststoreService;
   private final X509Certificate certificate;
   private final LdapServerConfig serverConfig;
+  private final boolean isTrusted;
   private final Consumer<Boolean> onComplete;
 
   /**
@@ -45,12 +47,29 @@ public class TlsCertificateDialog extends Dialog {
    * @param serverConfig the LDAP server configuration
    * @param truststoreService service for managing truststore
    * @param onComplete callback when dialog is closed (true if certificate was imported)
+   * @deprecated Use the constructor with isTrusted parameter
    */
+  @Deprecated
   public TlsCertificateDialog(X509Certificate certificate, LdapServerConfig serverConfig,
       TruststoreService truststoreService, Consumer<Boolean> onComplete) {
+    this(certificate, serverConfig, truststoreService, false, onComplete);
+  }
+
+  /**
+   * Creates a TLS certificate dialog.
+   *
+   * @param certificate the server certificate to display
+   * @param serverConfig the LDAP server configuration
+   * @param truststoreService service for managing truststore
+   * @param isTrusted whether the certificate is already trusted
+   * @param onComplete callback when dialog is closed (true if certificate was imported)
+   */
+  public TlsCertificateDialog(X509Certificate certificate, LdapServerConfig serverConfig,
+      TruststoreService truststoreService, boolean isTrusted, Consumer<Boolean> onComplete) {
     this.certificate = certificate;
     this.serverConfig = serverConfig;
     this.truststoreService = truststoreService;
+    this.isTrusted = isTrusted;
     this.onComplete = onComplete;
 
     initDialog();
@@ -60,7 +79,7 @@ public class TlsCertificateDialog extends Dialog {
    * Initializes the dialog UI.
    */
   private void initDialog() {
-    setHeaderTitle("Server Certificate Validation Failed");
+    setHeaderTitle("Server Certificate");
     setWidth("700px");
     setCloseOnOutsideClick(false);
     setCloseOnEsc(false);
@@ -69,23 +88,41 @@ public class TlsCertificateDialog extends Dialog {
     layout.setPadding(false);
     layout.setSpacing(true);
 
-    // Warning message
-    H3 warningTitle = new H3("⚠️ Untrusted Certificate");
-    warningTitle.getStyle().set("color", "var(--lumo-error-color)");
-    layout.add(warningTitle);
+    // Trust status header
+    if (isTrusted) {
+      H3 statusTitle = new H3("✓ Trusted Certificate");
+      statusTitle.getStyle().set("color", "var(--lumo-success-color)");
+      layout.add(statusTitle);
 
-    TextArea warningText = new TextArea();
-    warningText.setWidthFull();
-    warningText.setReadOnly(true);
-    warningText.setValue(
-        "The server '" + serverConfig.getName() + "' presented a certificate that is not trusted.\n\n"
-        + "This may be expected for self-signed certificates or internal CAs. Review the "
-        + "certificate details below and import it if you trust this server."
-    );
-    warningText.getStyle()
-        .set("background", "var(--lumo-error-color-10pct)")
-        .set("border", "1px solid var(--lumo-error-color-50pct)");
-    layout.add(warningText);
+      TextArea statusText = new TextArea();
+      statusText.setWidthFull();
+      statusText.setReadOnly(true);
+      statusText.setValue(
+          "The server '" + serverConfig.getName() + "' presented a certificate that is trusted.\n\n"
+          + "This certificate is already in your truststore."
+      );
+      statusText.getStyle()
+          .set("background", "var(--lumo-success-color-10pct)")
+          .set("border", "1px solid var(--lumo-success-color-50pct)");
+      layout.add(statusText);
+    } else {
+      H3 warningTitle = new H3("⚠️ Untrusted Certificate");
+      warningTitle.getStyle().set("color", "var(--lumo-error-color)");
+      layout.add(warningTitle);
+
+      TextArea warningText = new TextArea();
+      warningText.setWidthFull();
+      warningText.setReadOnly(true);
+      warningText.setValue(
+          "The server '" + serverConfig.getName() + "' presented a certificate that is not trusted.\n\n"
+          + "This may be expected for self-signed certificates or internal CAs. Review the "
+          + "certificate details below and import it if you trust this server."
+      );
+      warningText.getStyle()
+          .set("background", "var(--lumo-error-color-10pct)")
+          .set("border", "1px solid var(--lumo-error-color-50pct)");
+      layout.add(warningText);
+    }
 
     layout.add(new Hr());
 
@@ -106,15 +143,21 @@ public class TlsCertificateDialog extends Dialog {
     buttonLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
     buttonLayout.setSpacing(true);
 
-    Button cancelButton = new Button("Cancel", e -> {
+    Button closeButton = new Button("Close", e -> {
       onComplete.accept(false);
       close();
     });
 
-    Button importButton = new Button("Import and Trust", e -> importCertificate());
-    importButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-    buttonLayout.add(cancelButton, importButton);
+    if (isTrusted) {
+      // For trusted certificates, only show close button
+      closeButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+      buttonLayout.add(closeButton);
+    } else {
+      // For untrusted certificates, show cancel and import buttons
+      Button importButton = new Button("Import and Trust", e -> importCertificate());
+      importButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+      buttonLayout.add(closeButton, importButton);
+    }
 
     layout.add(buttonLayout);
     add(layout);

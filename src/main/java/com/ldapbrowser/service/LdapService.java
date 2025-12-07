@@ -276,6 +276,53 @@ public class LdapService {
   }
 
   /**
+   * Retrieves the server certificate by connecting to the server.
+   * Uses a trust-all approach to ensure the certificate can be retrieved
+   * even if it's not yet trusted.
+   *
+   * @param config server configuration
+   * @return the server's X.509 certificate
+   * @throws Exception if certificate cannot be retrieved
+   */
+  public X509Certificate retrieveServerCertificate(LdapServerConfig config) throws Exception {
+    // Create a custom trust manager that captures the certificate
+    CertificateCapturingTrustManager capturingTrustManager = 
+        new CertificateCapturingTrustManager();
+    SSLUtil sslUtil = new SSLUtil(capturingTrustManager);
+    SSLContext sslContext = sslUtil.createSSLContext();
+    
+    LDAPConnection connection = null;
+    try {
+      if (config.isUseSsl()) {
+        // Direct SSL connection
+        SocketFactory socketFactory = sslContext.getSocketFactory();
+        connection = new LDAPConnection(socketFactory, config.getHost(), config.getPort());
+      } else if (config.isUseStartTls()) {
+        // StartTLS connection
+        connection = new LDAPConnection(config.getHost(), config.getPort());
+        connection.processExtendedOperation(
+            new com.unboundid.ldap.sdk.extensions.StartTLSExtendedRequest(sslContext)
+        );
+      } else {
+        throw new IllegalArgumentException(
+            "Server must use SSL or StartTLS to retrieve certificate");
+      }
+      
+      // Return the captured certificate
+      X509Certificate cert = capturingTrustManager.getCapturedCertificate();
+      if (cert != null) {
+        return cert;
+      } else {
+        throw new Exception("Failed to capture server certificate");
+      }
+    } finally {
+      if (connection != null) {
+        connection.close();
+      }
+    }
+  }
+
+  /**
    * Gets or creates a connection pool for the server.
    * When a new connection pool is created, the schema is automatically fetched and cached.
    * Includes health check validation to detect and recover from stale connections.

@@ -1,6 +1,26 @@
 # LDAP Web Browser
 
-## v0.39 - Export View Enhancements and Bug Fix - TODO
+## v0.40 - Certificates
+- Settings view - Truststore tab - Add import button
+  - will prompt for file upload excepting a text file with PEM encoded public certificates
+  - detect multiple PEM certificates in the uploaded file and import all into the truststore
+- Server view - Add Server / Edit Server dialog
+  - Add a View Certificate button
+    - If Use SSL checkbox is selected, will connect to host and port and
+       retreive and display server certificate with the common Tls Certificate Dialog.
+- Common Tls Certificate Dialog
+  - Update the "Server Certificate Validation Failed" dialog to "Server Certificate" dialog
+    - add a trusted status with possible values of trusted or untrusted.
+  - when viewing a entry in the truststore this same dialog is used and trusted status is trusted
+    - not trusted error is not displayed
+  - when attempting to connect to a server and an untrusted certificate error is generated
+    present this dialog with trust state of untrusted.
+    - not trusted error is displayed
+  - when View Certificate button is selected from Add/Edit server dialog
+    - a connection is attempted, if no ssl errors, trust status is trusted  
+
+
+## v0.39 - Export View Enhancements and Bug Fix
 - Export view / Search selection Mode
   - Move these form elements into a single row:
     - Search Base with

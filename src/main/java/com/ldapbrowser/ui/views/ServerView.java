@@ -231,6 +231,46 @@ public class ServerView extends VerticalLayout {
       updateValidateCertState.run();
     });
 
+    // Create View Certificate button
+    Button viewCertButton = new Button("View Certificate");
+    viewCertButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    viewCertButton.setEnabled(false);
+    
+    // Enable view cert button when SSL/StartTLS is selected
+    Runnable updateViewCertState = () -> {
+      boolean hasSecure = useSslCheckbox.getValue() || useStartTlsCheckbox.getValue();
+      viewCertButton.setEnabled(hasSecure);
+    };
+    
+    useSslCheckbox.addValueChangeListener(event -> updateViewCertState.run());
+    useStartTlsCheckbox.addValueChangeListener(event -> updateViewCertState.run());
+    
+    viewCertButton.addClickListener(event -> {
+      if (hostField.getValue() == null || hostField.getValue().trim().isEmpty()) {
+        NotificationHelper.showError("Please enter a host before viewing certificate");
+        return;
+      }
+      if (portField.getValue() == null) {
+        NotificationHelper.showError("Please enter a port before viewing certificate");
+        return;
+      }
+      
+      // Create temporary config for certificate retrieval
+      LdapServerConfig tempConfig = new LdapServerConfig();
+      // Use server name if available, otherwise use "Temporary"
+      String serverName = nameField.getValue();
+      tempConfig.setName(
+          (serverName != null && !serverName.trim().isEmpty()) ? serverName : "Temporary"
+      );
+      tempConfig.setHost(hostField.getValue());
+      tempConfig.setPort(portField.getValue());
+      tempConfig.setUseSsl(useSslCheckbox.getValue());
+      tempConfig.setUseStartTls(useStartTlsCheckbox.getValue());
+      
+      // Retrieve and display certificate
+      viewServerCertificate(tempConfig);
+    });
+
     // Create browse button for base DN
     Button baseDnBrowseButton = new Button(
         com.vaadin.flow.component.icon.VaadinIcon.FOLDER_OPEN.create());
@@ -250,7 +290,7 @@ public class ServerView extends VerticalLayout {
     formLayout.add(baseDnLayout, 2);
     formLayout.add(bindDnField, bindPasswordField);
     formLayout.add(useSslCheckbox, useStartTlsCheckbox);
-    formLayout.add(validateCertificateCheckbox, 2);
+    formLayout.add(validateCertificateCheckbox, viewCertButton);
 
     // Create binder
     Binder<LdapServerConfig> binder = new Binder<>(LdapServerConfig.class);
@@ -429,6 +469,7 @@ public class ServerView extends VerticalLayout {
         serverCert,
         config,
         truststoreService,
+        false, // Certificate is not trusted (validation failed)
         imported -> {
           if (imported) {
             // Certificate was imported, clear the failure and retry connection
@@ -472,6 +513,64 @@ public class ServerView extends VerticalLayout {
         .withServerConfigs(java.util.Collections.singletonList(tempConfig))
         .onDnSelected(dn -> targetField.setValue(dn))
         .open();
+  }
+
+  /**
+   * Views the server certificate for a given configuration.
+   *
+   * @param config the server configuration
+   */
+  private void viewServerCertificate(LdapServerConfig config) {
+    try {
+      // Retrieve the server certificate
+      java.security.cert.X509Certificate cert = ldapService.retrieveServerCertificate(config);
+      
+      if (cert == null) {
+        NotificationHelper.showError("Failed to retrieve server certificate");
+        return;
+      }
+      
+      // Determine if certificate is trusted
+      boolean isTrusted = isCertificateTrusted(cert);
+      
+      // Show the certificate dialog
+      TlsCertificateDialog certDialog = new TlsCertificateDialog(
+          cert,
+          config,
+          truststoreService,
+          isTrusted,
+          imported -> {
+            if (imported) {
+              NotificationHelper.showSuccess("Certificate imported successfully");
+            }
+          }
+      );
+      certDialog.open();
+    } catch (Exception e) {
+      NotificationHelper.showError("Error retrieving certificate: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Checks if a certificate is already trusted in the truststore.
+   *
+   * @param cert the certificate to check
+   * @return true if the certificate is in the truststore
+   */
+  private boolean isCertificateTrusted(java.security.cert.X509Certificate cert) {
+    try {
+      List<String> aliases = truststoreService.listCertificates();
+      for (String alias : aliases) {
+        java.security.cert.Certificate trustedCert = truststoreService.getCertificate(alias);
+        if (trustedCert != null && trustedCert.equals(cert)) {
+          return true;
+        }
+      }
+    } catch (Exception e) {
+      // If we can't check, assume untrusted
+      return false;
+    }
+    return false;
   }
 
   /**

@@ -1,10 +1,12 @@
 package com.ldapbrowser.ui.views;
 
+import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.EncryptionService;
 import com.ldapbrowser.service.KeystoreService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -107,6 +109,9 @@ public class SettingsView extends VerticalLayout {
     Button addButton = new Button("Add Certificate", event -> openAddCertificateDialog(statsLabel));
     addButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
+    Button importButton = new Button("Import", event -> openImportCertificatesDialog(statsLabel));
+    importButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
     Button viewButton = new Button("View Details", event -> viewSelectedCertificate());
     viewButton.setEnabled(false);
 
@@ -120,7 +125,7 @@ public class SettingsView extends VerticalLayout {
     });
 
     HorizontalLayout buttonLayout = new HorizontalLayout(
-        addButton, viewButton, deleteButton, refreshButton
+        addButton, importButton, viewButton, deleteButton, refreshButton
     );
     buttonLayout.setSpacing(true);
     buttonLayout.setAlignItems(FlexComponent.Alignment.CENTER);
@@ -298,29 +303,128 @@ public class SettingsView extends VerticalLayout {
   }
 
   /**
+   * Opens dialog to import multiple PEM certificates from a text file.
+   *
+   * @param statsLabel stats label to update after importing
+   */
+  private void openImportCertificatesDialog(Span statsLabel) {
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Import Certificates");
+    dialog.setWidth("600px");
+
+    VerticalLayout dialogLayout = new VerticalLayout();
+    dialogLayout.setSpacing(true);
+    dialogLayout.setPadding(false);
+
+    // Info text
+    Span infoText = new Span(
+        "Upload a text file containing one or more PEM-encoded certificates. "
+        + "All certificates found in the file will be imported into the truststore.");
+    infoText.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+    // Base alias field
+    TextField baseAliasField = new TextField("Base Alias");
+    baseAliasField.setWidthFull();
+    baseAliasField.setPlaceholder("e.g., imported-cert");
+    baseAliasField.setRequired(true);
+    baseAliasField.setHelperText("Multiple certificates will be numbered (e.g., cert_1, cert_2)");
+
+    // Upload component
+    MemoryBuffer buffer = new MemoryBuffer();
+    Upload upload = new Upload(buffer);
+    upload.setAcceptedFileTypes(".pem", ".crt", ".cer", ".txt");
+    upload.setMaxFiles(1);
+    upload.setDropLabel(new Span("Drop certificate file here or click to browse"));
+
+    Span uploadInfo = new Span("Supported formats: PEM, CRT, CER, TXT");
+    uploadInfo.getStyle().set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+
+    dialogLayout.add(infoText, baseAliasField, upload, uploadInfo);
+
+    // Dialog buttons
+    Button importButton = new Button("Import Certificates", event -> {
+      String baseAlias = baseAliasField.getValue();
+      if (baseAlias == null || baseAlias.trim().isEmpty()) {
+        NotificationHelper.showError("Please enter a base alias", 3000);
+        return;
+      }
+
+      if (buffer.getFileData() == null) {
+        NotificationHelper.showError("Please upload a certificate file", 3000);
+        return;
+      }
+
+      try {
+        // Read the uploaded file
+        InputStream inputStream = buffer.getInputStream();
+        String pemText = new String(inputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+
+        // Import all certificates
+        int count = truststoreService.importPemCertificates(pemText, baseAlias);
+        
+        refreshCertificateGrid();
+        updateStatsLabel(statsLabel);
+        dialog.close();
+        NotificationHelper.showSuccess(
+            "Successfully imported " + count + " certificate(s)", 3000);
+      } catch (Exception e) {
+        NotificationHelper.showError("Error importing certificates: " + e.getMessage(), 5000);
+      }
+    });
+    importButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button cancelButton = new Button("Cancel", event -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, importButton);
+    dialog.add(dialogLayout);
+    dialog.open();
+  }
+
+  /**
    * Views details of the selected certificate.
    */
   private void viewSelectedCertificate() {
     certificateGrid.getSelectedItems().stream().findFirst().ifPresent(alias -> {
       try {
-        String details = truststoreService.getCertificateDetails(alias);
+        Certificate cert = truststoreService.getCertificate(alias);
+        
+        if (cert instanceof java.security.cert.X509Certificate x509Cert) {
+          // Use the common TLS certificate dialog for X509 certificates
+          LdapServerConfig dummyConfig = new LdapServerConfig();
+          dummyConfig.setName(alias);
+          
+          TlsCertificateDialog certDialog = new TlsCertificateDialog(
+              x509Cert,
+              dummyConfig,
+              truststoreService,
+              true, // Certificate is trusted since it's in the truststore
+              imported -> {
+                // No action needed for viewing
+              }
+          );
+          certDialog.open();
+        } else {
+          // Fallback to old display method for non-X509 certificates
+          String details = truststoreService.getCertificateDetails(alias);
 
-        Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("Certificate Details: " + alias);
-        dialog.setWidth("700px");
+          Dialog dialog = new Dialog();
+          dialog.setHeaderTitle("Certificate Details: " + alias);
+          dialog.setWidth("700px");
 
-        TextArea detailsArea = new TextArea();
-        detailsArea.setValue(details);
-        detailsArea.setWidthFull();
-        detailsArea.setHeight("400px");
-        detailsArea.setReadOnly(true);
+          TextArea detailsArea = new TextArea();
+          detailsArea.setValue(details);
+          detailsArea.setWidthFull();
+          detailsArea.setHeight("400px");
+          detailsArea.setReadOnly(true);
 
-        Button closeButton = new Button("Close", event -> dialog.close());
-        closeButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+          Button closeButton = new Button("Close", event -> dialog.close());
+          closeButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        dialog.add(detailsArea);
-        dialog.getFooter().add(closeButton);
-        dialog.open();
+          dialog.add(detailsArea);
+          dialog.getFooter().add(closeButton);
+          dialog.open();
+        }
       } catch (Exception e) {
         NotificationHelper.showError("Error loading certificate details: " + e.getMessage(), 3000);
       }

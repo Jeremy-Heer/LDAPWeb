@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -24,6 +26,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class TruststoreService {
 
+  private static final Logger logger = LoggerFactory.getLogger(TruststoreService.class);
   private static final String SETTINGS_DIR = ".ldapbrowser";
   private static final String TRUSTSTORE_FILENAME = "truststore.pfx";
   private static final String PIN_FILENAME = "truststore.pin";
@@ -187,6 +190,78 @@ public class TruststoreService {
 
     keyStore.setCertificateEntry(alias, certificate);
     saveKeyStore(keyStore);
+  }
+
+  /**
+   * Imports multiple PEM certificates from a single text file.
+   * Detects and imports all PEM-encoded certificates found in the text.
+   *
+   * @param pemText text containing one or more PEM certificates
+   * @param baseAlias base alias for certificates (will append numbers if multiple)
+   * @return number of certificates imported
+   * @throws Exception if import fails
+   */
+  public int importPemCertificates(String pemText, String baseAlias) throws Exception {
+    initializeTruststoreIfNeeded();
+    
+    // Split by BEGIN CERTIFICATE markers to find all certificates
+    String[] parts = pemText.split("-----BEGIN CERTIFICATE-----");
+    List<Certificate> certificates = new ArrayList<>();
+    
+    for (int i = 1; i < parts.length; i++) { // Skip first empty part
+      String certPart = parts[i];
+      int endIndex = certPart.indexOf("-----END CERTIFICATE-----");
+      if (endIndex > 0) {
+        String pemCert = "-----BEGIN CERTIFICATE-----" 
+            + certPart.substring(0, endIndex + "-----END CERTIFICATE-----".length());
+        
+        try {
+          // Parse the certificate
+          String certContent = pemCert
+              .replace("-----BEGIN CERTIFICATE-----", "")
+              .replace("-----END CERTIFICATE-----", "")
+              .replaceAll("\\s", "");
+          
+          byte[] decoded = Base64.getDecoder().decode(certContent);
+          
+          java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(decoded);
+          java.security.cert.CertificateFactory cf = 
+              java.security.cert.CertificateFactory.getInstance("X.509");
+          Certificate cert = cf.generateCertificate(bais);
+          
+          certificates.add(cert);
+        } catch (Exception e) {
+          logger.warn("Failed to parse certificate {}: {}", i, e.getMessage());
+        }
+      }
+    }
+    
+    if (certificates.isEmpty()) {
+      throw new IllegalArgumentException("No valid PEM certificates found in the provided text");
+    }
+    
+    // Import all certificates
+    KeyStore keyStore = loadKeyStore();
+    int imported = 0;
+    
+    for (int i = 0; i < certificates.size(); i++) {
+      String alias = certificates.size() == 1 ? baseAlias : baseAlias + "_" + (i + 1);
+      
+      // Ensure alias is unique
+      int counter = 1;
+      String uniqueAlias = alias;
+      while (keyStore.containsAlias(uniqueAlias)) {
+        uniqueAlias = alias + "_dup" + counter;
+        counter++;
+      }
+      
+      keyStore.setCertificateEntry(uniqueAlias, certificates.get(i));
+      imported++;
+      logger.info("Imported certificate with alias: {}", uniqueAlias);
+    }
+    
+    saveKeyStore(keyStore);
+    return imported;
   }
 
   /**
