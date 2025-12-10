@@ -16,6 +16,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
@@ -881,12 +882,18 @@ public class ImportTab extends VerticalLayout {
 
     hideProgress();
     
+    // Show notification dialog with results
+    String message = String.format("LDIF import completed with %d successes and %d errors across %d server(s).",
+        totalSuccessCount, totalErrorCount, serverConfigs.size());
+    
     if (totalErrorCount > 0) {
-      NotificationHelper.showInfo("LDIF import completed with " + totalSuccessCount + " successes and " + totalErrorCount 
-          + " errors across " + serverConfigs.size() + " server(s). " + errorDetails.toString());
+      String details = errorDetails.toString();
+      if (!details.isEmpty()) {
+        message += "\n\n" + details;
+      }
+      showCompletionDialog("LDIF Import Results", message, totalErrorCount > 0);
     } else {
-      NotificationHelper.showSuccess("LDIF import completed successfully. " + totalSuccessCount 
-          + " entries processed across " + serverConfigs.size() + " server(s)");
+      showCompletionDialog("LDIF Import Results", message, false);
     }
   }
 
@@ -1132,12 +1139,18 @@ public class ImportTab extends VerticalLayout {
 
     hideProgress();
 
+    // Show notification dialog with results
+    String message = String.format("LDIF import completed with %d successes and %d errors across %d server(s).",
+        totalSuccessCount, totalErrorCount, serverConfigs.size());
+    
     if (totalErrorCount > 0) {
-      NotificationHelper.showInfo("CSV import completed with " + totalSuccessCount + " successes and " + totalErrorCount 
-          + " errors across " + serverConfigs.size() + " server(s). " + errorDetails.toString());
+      String details = errorDetails.toString();
+      if (!details.isEmpty()) {
+        message += "\n\n" + details;
+      }
+      showCompletionDialog("CSV Import Results", message, totalErrorCount > 0);
     } else {
-      NotificationHelper.showSuccess("CSV import completed successfully. " + totalSuccessCount 
-          + " entries processed across " + serverConfigs.size() + " server(s)");
+      showCompletionDialog("CSV Import Results", message, false);
     }
   }
 
@@ -1213,5 +1226,37 @@ public class ImportTab extends VerticalLayout {
     ldifTemplateArea.setValue("dn: {DN}\nchangetype: modify\nreplace: userpassword\nuserpassword: {C2}");
     searchFilterField.setValue("(&(objectClass=person)(uid={C1}))");
     hideProgress();
+  }
+
+  /**
+   * Shows a completion dialog with import results.
+   *
+   * @param title the dialog title
+   * @param message the message to display
+   * @param hasErrors whether there were errors
+   */
+  private void showCompletionDialog(String title, String message, boolean hasErrors) {
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle(title);
+    dialog.setWidth("600px");
+
+    TextArea messageArea = new TextArea();
+    messageArea.setValue(message);
+    messageArea.setWidthFull();
+    messageArea.setHeight("200px");
+    messageArea.setReadOnly(true);
+
+    Button closeButton = new Button("Close", e -> dialog.close());
+    if (hasErrors) {
+      closeButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+    } else {
+      closeButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    }
+
+    VerticalLayout layout = new VerticalLayout(messageArea);
+    layout.setPadding(false);
+    dialog.add(layout);
+    dialog.getFooter().add(closeButton);
+    dialog.open();
   }
 }

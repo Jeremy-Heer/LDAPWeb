@@ -146,12 +146,14 @@ public class EntryEditor extends VerticalLayout {
     attributeGrid.addColumn(new ComponentRenderer<>(this::createAttributeNameComponent))
         .setHeader("Attribute")
         .setFlexGrow(1)
+        .setResizable(true)
         .setSortable(true)
         .setComparator(AttributeRow::getName);
 
     attributeGrid.addColumn(new ComponentRenderer<>(this::createValueComponent))
         .setHeader("Value")
-        .setFlexGrow(2);
+        .setFlexGrow(2)
+        .setResizable(true);
 
     // Initialize context menu for attribute actions
     initializeAttributeContextMenu();
@@ -195,10 +197,13 @@ public class EntryEditor extends VerticalLayout {
       copySubMenu.addItem("LDIF Name Value", event -> copyAttributeLdifFormat(row));
       copySubMenu.addItem("Search Filter", event -> copyAttributeSearchFilter(row));
       
-      contextMenu.addItem("Edit Value", event -> openEditValueDialog(row));
-      contextMenu.addItem("Add Value", event -> openAddValueDialog(row));
-      contextMenu.addItem("Delete Value", event -> deleteValue(row));
-      contextMenu.addItem("Delete All Values", event -> deleteAllValues(row));
+      // Add Edit submenu with edit operations
+      GridMenuItem<AttributeRow> editMenuItem = contextMenu.addItem("Edit");
+      GridSubMenu<AttributeRow> editSubMenu = editMenuItem.getSubMenu();
+      editSubMenu.addItem("Edit Value", event -> openEditValueDialog(row));
+      editSubMenu.addItem("Add Value", event -> openAddValueDialog(row));
+      editSubMenu.addItem("Delete Value", event -> deleteValue(row));
+      editSubMenu.addItem("Delete All Values", event -> deleteAllValues(row));
       
       // Add schema detail menu items
       String attributeName = row.getName();

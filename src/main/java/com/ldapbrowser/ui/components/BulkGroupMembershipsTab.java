@@ -177,7 +177,6 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     downloadLink = new Anchor();
     downloadLink.getElement().setAttribute("download", true);
     downloadLink.setVisible(false);
-    downloadLink.add(new Button("Download LDIF", new Icon(VaadinIcon.DOWNLOAD)));
   }
 
   private void setupLayout() {
@@ -923,6 +922,7 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
         });
 
     downloadLink.setHref(resource);
+    downloadLink.setText("Download " + fileName);
     downloadLink.setVisible(true);
   }
 

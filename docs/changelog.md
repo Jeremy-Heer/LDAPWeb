@@ -1,5 +1,18 @@
 # LDAP Web Browser
 
+## v0.40.2 - 2025-12-10 ✅ COMPLETED
+- Bulk view - Group Memberships tab, replaced Download LDIF button
+  with file name link using same style as the Export view
+- Bulk view - Import tab, after an import operation, displays
+  a notification dialog with "LDIF import completed with # successes and # errors.." results
+- Entry Editor - Attribute / Value grid columns are now resizable
+- Entry Editor - Right Click context menu
+  - Moved these items under a new "Edit" parent menu item
+    - Edit Value
+    - Add Value
+    - Delete Value
+    - Delete All Values
+
 ## v0.40.1 - cert chain trust issues - Completed
 
 ## v0.40 - Certificates - Completed
