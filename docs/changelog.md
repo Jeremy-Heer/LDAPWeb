@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.41.1 - correct build number
+
 ## v0.41 - Entry Editor and Server View Enhancements - COMPLETED
 - Server View - Add a Search field above the grid to filter items in server grid
 - Entry Editor - existing Right Click context menu
