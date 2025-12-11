@@ -1,5 +1,23 @@
 # LDAP Web Browser
 
+## v0.41 - Entry Editor and Server View Enhancements - COMPLETED
+- Server View - Add a Search field above the grid to filter items in server grid
+- Entry Editor - existing Right Click context menu
+  - add a sub menu item "Attribute Name" under the parent Copy menu
+    - when selected will copy the attribute name to the clipboard
+  - Remove the copy icon next to the DN
+    - move these items from the copy icon to a new right click context menu
+      that appears when right clicking on the DN: name / value
+      - Copy DN
+      - Copy Entry
+      - Copy Entry with Operational Attributes
+  - Remove the "search from here" icon
+    - move the "search from here" link to the new context menu that
+      appears when right clicking on the DN: name / value described above
+  - Add a Search Field to the right of the "Expand in dialog" link
+    - text entered in the search field will filter items in the Entry Editor grid
+     (attribute names and values)
+
 ## v0.40.2 - 2025-12-10 ✅ COMPLETED
 - Bulk view - Group Memberships tab, replaced Download LDIF button
   with file name link using same style as the Export view

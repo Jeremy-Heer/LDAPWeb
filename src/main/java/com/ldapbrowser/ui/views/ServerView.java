@@ -22,6 +22,8 @@ import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.Binder;
+import com.vaadin.flow.data.provider.ListDataProvider;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import java.io.IOException;
@@ -43,6 +45,8 @@ public class ServerView extends VerticalLayout {
   private final TruststoreService truststoreService;
 
   private Grid<LdapServerConfig> serverGrid;
+  private TextField searchField;
+  private ListDataProvider<LdapServerConfig> dataProvider;
   private Button addServerButton;
   private Button editButton;
   private Button copyButton;
@@ -70,6 +74,7 @@ public class ServerView extends VerticalLayout {
     add(title);
 
     createActionButtons();
+    createSearchField();
     createServerGrid();
     refreshServerGrid();
   }
@@ -101,6 +106,39 @@ public class ServerView extends VerticalLayout {
     buttonLayout.setAlignItems(FlexComponent.Alignment.CENTER);
 
     add(buttonLayout);
+  }
+
+  /**
+   * Creates the search field for filtering servers.
+   */
+  private void createSearchField() {
+    searchField = new TextField();
+    searchField.setPlaceholder("Filter servers...");
+    searchField.setClearButtonVisible(true);
+    searchField.setWidthFull();
+    searchField.setValueChangeMode(ValueChangeMode.EAGER);
+    searchField.addValueChangeListener(e -> applyFilter());
+    
+    add(searchField);
+  }
+
+  /**
+   * Applies the search filter to the server grid.
+   */
+  private void applyFilter() {
+    String filterText = searchField.getValue();
+    if (filterText == null || filterText.trim().isEmpty()) {
+      dataProvider.clearFilters();
+    } else {
+      String lowerCaseFilter = filterText.toLowerCase().trim();
+      dataProvider.setFilter(config -> 
+          (config.getName() != null && config.getName().toLowerCase().contains(lowerCaseFilter))
+          || (config.getHost() != null && config.getHost().toLowerCase().contains(lowerCaseFilter))
+          || String.valueOf(config.getPort()).contains(lowerCaseFilter)
+          || (config.getBindDn() != null && config.getBindDn().toLowerCase().contains(lowerCaseFilter))
+          || getSecurityLabel(config).toLowerCase().contains(lowerCaseFilter)
+      );
+    }
   }
 
   /**
@@ -163,7 +201,9 @@ public class ServerView extends VerticalLayout {
    */
   private void refreshServerGrid() {
     List<LdapServerConfig> configs = configService.loadConfigurations();
-    serverGrid.setItems(configs);
+    dataProvider = new ListDataProvider<>(configs);
+    serverGrid.setDataProvider(dataProvider);
+    applyFilter();
   }
 
   /**

@@ -16,6 +16,7 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
+import com.vaadin.flow.component.contextmenu.ContextMenu;
 import com.vaadin.flow.component.contextmenu.MenuItem;
 import com.vaadin.flow.component.contextmenu.SubMenu;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -32,7 +33,9 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.provider.ListDataProvider;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -67,6 +70,7 @@ public class EntryEditor extends VerticalLayout {
   private MenuBar copyMenuBar;
   private Button expandButton;
   private Button searchFromHereButton;
+  private TextField searchField;
   private Button addAttributeButton;
   private Button saveButton;
   private Button testLoginButton;
@@ -74,6 +78,7 @@ public class EntryEditor extends VerticalLayout {
   private Button deleteEntryButton;
   private Checkbox showOperationalAttributesCheckbox;
   private Grid<AttributeRow> attributeGrid;
+  private ListDataProvider<AttributeRow> attributeDataProvider;
   
   // Listener for expand action
   private Runnable expandListener;
@@ -193,6 +198,7 @@ public class EntryEditor extends VerticalLayout {
       // Add Copy submenu at the top
       GridMenuItem<AttributeRow> copyMenuItem = contextMenu.addItem("Copy");
       GridSubMenu<AttributeRow> copySubMenu = copyMenuItem.getSubMenu();
+      copySubMenu.addItem("Attribute Name", event -> copyAttributeName(row));
       copySubMenu.addItem("Value", event -> copyAttributeValue(row));
       copySubMenu.addItem("LDIF Name Value", event -> copyAttributeLdifFormat(row));
       copySubMenu.addItem("Search Filter", event -> copyAttributeSearchFilter(row));
@@ -226,17 +232,56 @@ public class EntryEditor extends VerticalLayout {
     });
   }
 
+  /**
+   * Initializes the context menu for DN label operations.
+   */
+  private void initializeDnContextMenu() {
+    ContextMenu dnContextMenu = new ContextMenu();
+    dnContextMenu.setTarget(dnLabel);
+    dnContextMenu.setOpenOnClick(false);
+    
+    // Add Copy submenu
+    MenuItem copyMenuItem = dnContextMenu.addItem("Copy");
+    SubMenu copySubMenu = copyMenuItem.getSubMenu();
+    copySubMenu.addItem("Copy DN", e -> copyDnToClipboard());
+    copySubMenu.addItem("Copy Entry", e -> copyEntryToClipboard(false));
+    copySubMenu.addItem("Copy Entry with Operational Attributes", 
+        e -> copyEntryToClipboard(true));
+    
+    // Add Search from here option
+    dnContextMenu.addItem("Search from here", e -> searchFromCurrentEntry());
+  }
+
   private void setupLayout() {
     setSizeFull();
     setPadding(false);
     setSpacing(true);
 
-    // Header with DN, copy button, expand button, and search button
+    // Add context menu to DN label for DN-specific operations
+    initializeDnContextMenu();
+
+    // Header with DN label, DN value, expand button, and search field all on one row
     HorizontalLayout dnRow = new HorizontalLayout();
     dnRow.setDefaultVerticalComponentAlignment(Alignment.CENTER);
     dnRow.setPadding(false);
     dnRow.setSpacing(true);
-    dnRow.add(dnLabel, copyMenuBar, expandButton, searchFromHereButton);
+    dnRow.setWidthFull();
+    
+    // "DN:" label prefix
+    Span dnPrefix = new Span("DN:");
+    dnPrefix.getStyle()
+        .set("font-weight", "bold")
+        .set("white-space", "nowrap");
+    
+    // Search field for filtering attributes
+    searchField = new TextField();
+    searchField.setPlaceholder("Filter attributes...");
+    searchField.setClearButtonVisible(true);
+    searchField.setWidth("300px");
+    searchField.setValueChangeMode(ValueChangeMode.EAGER);
+    searchField.addValueChangeListener(e -> applyAttributeFilter());
+    
+    dnRow.add(dnPrefix, dnLabel, expandButton, searchField);
     dnRow.setFlexGrow(1, dnLabel);
 
     // Action buttons with operational attributes checkbox on the right
@@ -308,7 +353,7 @@ public class EntryEditor extends VerticalLayout {
     clearPendingChanges();
 
     if (entry != null) {
-      dnLabel.setText("DN: " + entry.getDn());
+      dnLabel.setText(entry.getDn());
       
       // If operational attributes checkbox is already checked, fetch entry with operational attributes
       if (showOperationalAttributesCheckbox.getValue() && serverConfig != null) {
@@ -330,9 +375,7 @@ public class EntryEditor extends VerticalLayout {
       
       refreshAttributeDisplay();
       setButtonsEnabled(true);
-      copyMenuBar.setEnabled(true);
       expandButton.setEnabled(true);
-      searchFromHereButton.setEnabled(true);
       showOperationalAttributesCheckbox.setEnabled(true);
     } else {
       clear();
@@ -347,13 +390,17 @@ public class EntryEditor extends VerticalLayout {
     fullEntry = null;
     clearPendingChanges();
     dnLabel.setText("No entry selected");
-    attributeGrid.setItems(Collections.emptyList());
+    if (attributeDataProvider != null) {
+      attributeDataProvider.getItems().clear();
+      attributeDataProvider.refreshAll();
+    } else {
+      attributeGrid.setItems(Collections.emptyList());
+    }
     setButtonsEnabled(false);
-    copyMenuBar.setEnabled(false);
     expandButton.setEnabled(false);
-    searchFromHereButton.setEnabled(false);
     showOperationalAttributesCheckbox.setEnabled(false);
     showOperationalAttributesCheckbox.setValue(false);
+    searchField.clear();
   }
 
   private void refreshAttributeDisplay() {
@@ -424,7 +471,9 @@ public class EntryEditor extends VerticalLayout {
       }
     }
 
-    attributeGrid.setItems(rows);
+    attributeDataProvider = new ListDataProvider<>(rows);
+    attributeGrid.setDataProvider(attributeDataProvider);
+    applyAttributeFilter();
   }
 
   /**
@@ -1187,6 +1236,25 @@ public class EntryEditor extends VerticalLayout {
   }
 
   /**
+   * Copies the attribute name to clipboard.
+   *
+   * @param row the attribute row
+   */
+  private void copyAttributeName(AttributeRow row) {
+    if (row == null || row.getName() == null) {
+      NotificationHelper.showInfo("No attribute name to copy.");
+      return;
+    }
+
+    String name = row.getName();
+    getUI().ifPresent(ui -> {
+      ui.getPage().executeJs("navigator.clipboard.writeText($0)", name);
+    });
+
+    NotificationHelper.showSuccess("Attribute name copied to clipboard");
+  }
+
+  /**
    * Copies the attribute in LDIF format (name: value) to clipboard.
    *
    * @param row the attribute row
@@ -1238,6 +1306,26 @@ public class EntryEditor extends VerticalLayout {
           )
       );
     });
+  }
+
+  /**
+   * Applies the search filter to the attribute grid.
+   */
+  private void applyAttributeFilter() {
+    if (attributeDataProvider == null) {
+      return;
+    }
+    
+    String filterText = searchField.getValue();
+    if (filterText == null || filterText.trim().isEmpty()) {
+      attributeDataProvider.clearFilters();
+    } else {
+      String lowerCaseFilter = filterText.toLowerCase().trim();
+      attributeDataProvider.setFilter(row -> 
+          (row.getName() != null && row.getName().toLowerCase().contains(lowerCaseFilter))
+          || (row.getValue() != null && row.getValue().toLowerCase().contains(lowerCaseFilter))
+      );
+    }
   }
 
   private void setButtonsEnabled(boolean enabled) {
