@@ -1,6 +1,21 @@
 # LDAP Web Browser
 
-## v0.41.1 - correct build number
+## v0.42 - Entry Editor Fixes - COMPLETED
+- Removed error: "Cannot delete the last value. Use 'Delete All Values' to remove the entire attribute."
+  Now automatically handles removing the last value by removing the entire attribute.
+- When the right click menu is used to update attributes in the entry editor:
+  - Added a "Pending Changes" icon column (far left, no header) in the entry editor grid
+  - For values removed (single delete or delete all), values remain visible in the grid with:
+    - Red minus "-" icon in the pending changes column
+    - Red background highlighting with strikethrough text
+    - Values stay visible until "Save Changes" is clicked
+  - For values added, new values appear in the grid with:
+    - Green plus "+" icon in the pending changes column
+    - Green background highlighting
+- Fixed bug where updates made via right-click menu were not displayed when
+  "Show operational attributes" was selected until "Save Changes" was clicked
+
+## v0.41.1 - correct build number - COMPLETED
 
 ## v0.41 - Entry Editor and Server View Enhancements - COMPLETED
 - Server View - Add a Search field above the grid to filter items in server grid

@@ -39,6 +39,7 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +65,17 @@ public class EntryEditor extends VerticalLayout {
   
   // Track which attributes have been modified by the user
   private final java.util.Set<String> modifiedAttributes = new java.util.HashSet<>();
+  
+  // Track pending changes for visual indication
+  private final Map<String, PendingChangeType> pendingChanges = new java.util.HashMap<>();
+  
+  /**
+   * Types of pending changes for visual indication.
+   */
+  private enum PendingChangeType {
+    ADDED,    // Value was added
+    DELETED   // Value was deleted
+  }
 
   // UI Components
   private Span dnLabel;
@@ -147,6 +159,13 @@ public class EntryEditor extends VerticalLayout {
     // Attribute grid
     attributeGrid = new Grid<>(AttributeRow.class, false);
     attributeGrid.setSizeFull();
+
+    // Pending changes icon column (far left, no header)
+    attributeGrid.addColumn(new ComponentRenderer<>(this::createPendingChangeIcon))
+        .setHeader("")
+        .setFlexGrow(0)
+        .setWidth("50px")
+        .setResizable(false);
 
     attributeGrid.addColumn(new ComponentRenderer<>(this::createAttributeNameComponent))
         .setHeader("Attribute")
@@ -355,8 +374,10 @@ public class EntryEditor extends VerticalLayout {
     if (entry != null) {
       dnLabel.setText(entry.getDn());
       
-      // If operational attributes checkbox is already checked, fetch entry with operational attributes
-      if (showOperationalAttributesCheckbox.getValue() && serverConfig != null) {
+      // If operational attributes checkbox is already checked,
+      // fetch entry with operational attributes
+      if (showOperationalAttributesCheckbox.getValue()
+          && serverConfig != null) {
         try {
           LdapEntry entryWithOperational = ldapService.readEntry(
               serverConfig,
@@ -404,7 +425,7 @@ public class EntryEditor extends VerticalLayout {
   }
 
   private void refreshAttributeDisplay() {
-    if (fullEntry == null) {
+    if (currentEntry == null) {
       attributeGrid.setItems(Collections.emptyList());
       return;
     }
@@ -415,8 +436,8 @@ public class EntryEditor extends VerticalLayout {
     // Collect attributes with their values in sorted order
     List<Map.Entry<String, List<String>>> sortedAttrs = new ArrayList<>();
     
-    // Add regular attributes
-    for (Map.Entry<String, List<String>> attr : fullEntry.getAttributes().entrySet()) {
+    // Add regular attributes from currentEntry (which includes pending changes)
+    for (Map.Entry<String, List<String>> attr : currentEntry.getAttributes().entrySet()) {
       String attrName = attr.getKey();
       
       // Filter operational attributes if checkbox is unchecked
@@ -428,7 +449,9 @@ public class EntryEditor extends VerticalLayout {
     }
     
     // Add operational attributes if checkbox is checked
-    if (showOperational && fullEntry.getOperationalAttributes() != null) {
+    // Use fullEntry for operational attributes since they are read-only
+    if (showOperational && fullEntry != null
+        && fullEntry.getOperationalAttributes() != null) {
       for (Map.Entry<String, List<String>> attr : fullEntry.getOperationalAttributes().entrySet()) {
         sortedAttrs.add(attr);
       }
@@ -500,10 +523,12 @@ public class EntryEditor extends VerticalLayout {
         return false;
       }
       
-      // Check usage - operational attributes have usage other than "userApplications"
+      // Check usage - operational attributes have usage
+      // other than "userApplications"
       if (attrDef.getUsage() != null) {
         String usage = attrDef.getUsage().getName();
-        // Operational attributes have usage: directoryOperation, dSAOperation, or distributedOperation
+        // Operational attributes have usage: directoryOperation,
+        // dSAOperation, or distributedOperation
         return !usage.equalsIgnoreCase("userApplications");
       }
       
@@ -515,6 +540,37 @@ public class EntryEditor extends VerticalLayout {
     }
   }
 
+  /**
+   * Creates a pending change icon for the attribute row.
+   *
+   * @param row the attribute row
+   * @return the icon component showing pending changes
+   */
+  private Span createPendingChangeIcon(AttributeRow row) {
+    String changeKey = row.getName() + ":" + row.getValueIndex();
+    PendingChangeType changeType = pendingChanges.get(changeKey);
+    
+    if (changeType == null) {
+      return new Span();
+    }
+    
+    Span iconSpan = new Span();
+    Icon icon;
+    
+    if (changeType == PendingChangeType.ADDED) {
+      icon = new Icon(VaadinIcon.PLUS_CIRCLE);
+      icon.setColor("green");
+      icon.getElement().setAttribute("title", "Value will be added");
+    } else { // DELETED
+      icon = new Icon(VaadinIcon.MINUS_CIRCLE);
+      icon.setColor("red");
+      icon.getElement().setAttribute("title", "Value will be deleted");
+    }
+    
+    iconSpan.add(icon);
+    return iconSpan;
+  }
+  
   private Span createAttributeNameComponent(AttributeRow row) {
     // Only show attribute name for the first value of each attribute
     if (!row.isFirstValueOfAttribute()) {
@@ -644,6 +700,27 @@ public class EntryEditor extends VerticalLayout {
       valueSpan.getStyle().set("font-size", "smaller");
     }
 
+    // Apply visual highlighting for pending changes
+    String changeKey = row.getName() + ":" + row.getValueIndex();
+    PendingChangeType changeType = pendingChanges.get(changeKey);
+    
+    if (changeType == PendingChangeType.DELETED) {
+      // Red background for deleted values
+      valueSpan.getStyle()
+          .set("background-color", "#ffebee")
+          .set("color", "#c62828")
+          .set("padding", "4px 8px")
+          .set("border-radius", "4px")
+          .set("text-decoration", "line-through");
+    } else if (changeType == PendingChangeType.ADDED) {
+      // Green background for added values
+      valueSpan.getStyle()
+          .set("background-color", "#e8f5e9")
+          .set("color", "#2e7d32")
+          .set("padding", "4px 8px")
+          .set("border-radius", "4px");
+    }
+
     return valueSpan;
   }
 
@@ -690,10 +767,20 @@ public class EntryEditor extends VerticalLayout {
 
       // Update or add the attribute
       currentEntry.getAttributes().put(name.trim(), new ArrayList<>(values));
+      
+      // Track all values as pending additions
+      for (int i = 0; i < values.size(); i++) {
+        String changeKey = name.trim() + ":" + i;
+        pendingChanges.put(changeKey,
+            PendingChangeType.ADDED);
+      }
+      
       modifiedAttributes.add(name.trim());
       markPendingChanges();
       refreshAttributeDisplay();
-      NotificationHelper.showSuccess("Added attribute '" + name.trim() + "' with " + values.size() + " value(s).");
+      NotificationHelper.showSuccess(
+          "Added attribute '" + name.trim() + "' with " + values.size()
+              + " value(s).");
       dialog.close();
     });
     saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -836,6 +923,11 @@ public class EntryEditor extends VerticalLayout {
       
       allValues.add(newValue.trim());
       currentEntry.getAttributes().put(row.getName(), allValues);
+      
+      // Track this as a pending addition
+      String changeKey = row.getName() + ":" + (allValues.size() - 1);
+      pendingChanges.put(changeKey, PendingChangeType.ADDED);
+      
       modifiedAttributes.add(row.getName());
       markPendingChanges();
       refreshAttributeDisplay();
@@ -861,23 +953,24 @@ public class EntryEditor extends VerticalLayout {
       return;
     }
 
-    if (allValues.size() == 1) {
-      NotificationHelper.showWarning("Cannot delete the last value. Use 'Delete All Values' to remove the entire attribute.");
-      return;
-    }
-
     ConfirmDialog dialog = new ConfirmDialog();
     dialog.setHeader("Delete Value");
-    dialog.setText("Are you sure you want to delete this value from '" + row.getName() + "'?\n\nValue: " + row.getValue());
+    dialog.setText("Are you sure you want to delete this value from '"
+        + row.getName() + "'?\n\nValue: " + row.getValue());
     dialog.setCancelable(true);
     dialog.setConfirmText("Delete");
     dialog.addConfirmListener(e -> {
-      allValues.remove(row.getValueIndex());
-      currentEntry.getAttributes().put(row.getName(), new ArrayList<>(allValues));
+      // Track this as a pending deletion (keep value visible in grid)
+      String changeKey = row.getName() + ":" + row.getValueIndex();
+      pendingChanges.put(changeKey, PendingChangeType.DELETED);
+      
+      // Mark as modified but don't remove from currentEntry yet
+      // (values marked as DELETED will be filtered during save)
       modifiedAttributes.add(row.getName());
       markPendingChanges();
       refreshAttributeDisplay();
-      NotificationHelper.showSuccess("Deleted value from '" + row.getName() + "'.");
+      NotificationHelper.showSuccess(
+          "Deleted value from '" + row.getName() + "'.");
     });
     dialog.open();
   }
@@ -885,11 +978,19 @@ public class EntryEditor extends VerticalLayout {
   private void deleteAllValues(AttributeRow row) {
     ConfirmDialog dialog = new ConfirmDialog();
     dialog.setHeader("Delete All Values");
-    dialog.setText("Are you sure you want to delete all values for the attribute '" + row.getName() + "'?");
+    dialog.setText("Are you sure you want to delete all values for the attribute '"
+        + row.getName() + "'?");
     dialog.setCancelable(true);
     dialog.setConfirmText("Delete");
     dialog.addConfirmListener(e -> {
-      currentEntry.getAttributes().remove(row.getName());
+      // Mark all values as deleted (keep them visible in grid)
+      List<String> allValues = currentEntry.getAttributes().get(row.getName());
+      if (allValues != null) {
+        for (int i = 0; i < allValues.size(); i++) {
+          String changeKey = row.getName() + ":" + i;
+          pendingChanges.put(changeKey, PendingChangeType.DELETED);
+        }
+      }
       modifiedAttributes.add(row.getName());
       markPendingChanges();
       refreshAttributeDisplay();
@@ -953,7 +1054,15 @@ public class EntryEditor extends VerticalLayout {
     // Only create modifications for attributes that were explicitly changed by the user
     for (String attrName : modifiedAttributes) {
       List<String> originalValues = original.getAttributeValues(attrName);
-      List<String> modifiedValues = modified.getAttributeValues(attrName);
+      List<String> modifiedValues = new ArrayList<>(modified.getAttributeValues(attrName));
+      
+      // Filter out values marked as DELETED from modifiedValues
+      for (int i = modifiedValues.size() - 1; i >= 0; i--) {
+        String changeKey = attrName + ":" + i;
+        if (pendingChanges.get(changeKey) == PendingChangeType.DELETED) {
+          modifiedValues.remove(i);
+        }
+      }
 
       if (modifiedValues.isEmpty()) {
         // Attribute was deleted
@@ -1345,6 +1454,7 @@ public class EntryEditor extends VerticalLayout {
   private void clearPendingChanges() {
     hasPendingChanges = false;
     modifiedAttributes.clear();
+    pendingChanges.clear();
     saveButton.setText("Save Changes");
     saveButton.getStyle().remove("font-weight");
   }
@@ -1429,9 +1539,10 @@ public class EntryEditor extends VerticalLayout {
      * @param name attribute name
      * @param value single attribute value
      * @param valueIndex index of this value (0-based)
-     * @param isFirstValueOfAttribute true if this is the first value for this attribute
+     * @param isFirstValueOfAttribute true if first value for this attribute
      */
-    public AttributeRow(String name, String value, int valueIndex, boolean isFirstValueOfAttribute) {
+    public AttributeRow(String name, String value, int valueIndex,
+        boolean isFirstValueOfAttribute) {
       this.name = name;
       this.value = value;
       this.valueIndex = valueIndex;
