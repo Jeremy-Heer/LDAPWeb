@@ -228,10 +228,13 @@ public class LdapTreeBrowser extends VerticalLayout {
 
   /**
    * Refreshes the tree data.
+   * Clears all browse caches to ensure fresh data from LDAP server.
    */
   public void refreshTree() {
     if (treeGrid != null) {
       try {
+        // Clear browse caches to force fresh data retrieval
+        ldapService.clearAllBrowseCaches();
         treeGrid.collapseAll();
         treeGrid.loadServers();
       } catch (Exception e) {

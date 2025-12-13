@@ -58,12 +58,27 @@ public class LdapService {
 
   private final Map<String, LDAPConnectionPool> connectionPools = new ConcurrentHashMap<>();
   
+  // Store server configs alongside connection pools for cache lookups
+  private final Map<String, LdapServerConfig> serverConfigs = new ConcurrentHashMap<>();
+  
   // Schema cache management - stores schema per server for performance
   private final Map<String, Schema> schemaCache = new ConcurrentHashMap<>();
   
   // Paging state management for LDAP paged search control (thread-safe for multi-server usage)
   private final Map<String, byte[]> pagingCookies = new ConcurrentHashMap<>();
   private final Map<String, Integer> currentPages = new ConcurrentHashMap<>();
+  
+  // Root DSE and naming context caching to reduce redundant LDAP searches
+  private final Map<String, RootDSE> rootDseCache = new ConcurrentHashMap<>();
+  private final Map<String, List<String>> namingContextsCache = new ConcurrentHashMap<>();
+  private final Map<String, List<String>> privateNamingContextsCache = new ConcurrentHashMap<>();
+  private final Map<String, LdapEntry> entryMinimalCache = new ConcurrentHashMap<>();
+  
+  // Lock objects for thread-safe cache population (prevent cache stampede)
+  private final Map<String, Object> rootDseLocks = new ConcurrentHashMap<>();
+  private final Map<String, Object> namingContextsLocks = new ConcurrentHashMap<>();
+  private final Map<String, Object> privateNamingContextsLocks = new ConcurrentHashMap<>();
+  private final Map<String, Object> entryMinimalLocks = new ConcurrentHashMap<>();
   
   private final TruststoreService truststoreService;
   private final LoggingService loggingService;
@@ -353,6 +368,9 @@ public class LdapService {
     String key = config.getName();
     boolean isNewConnection = !connectionPools.containsKey(key);
 
+    // Store the config for later cache lookups
+    serverConfigs.put(key, config);
+
     LDAPConnectionPool pool;
     try {
       pool = connectionPools.computeIfAbsent(key, k -> {
@@ -598,6 +616,16 @@ public class LdapService {
   }
   
   /**
+   * Finds server config by name.
+   *
+   * @param serverName server name
+   * @return server config or null if not found
+   */
+  private LdapServerConfig findConfigByName(String serverName) {
+    return serverConfigs.get(serverName);
+  }
+
+  /**
    * Closes connection pool for a server.
    *
    * @param serverName server name
@@ -608,8 +636,10 @@ public class LdapService {
       pool.close();
       logger.info("Closed connection pool for {}", serverName);
     }
-    // Also clear the schema cache for this server
+    // Clear all caches for this server
+    serverConfigs.remove(serverName);
     clearSchemaCache(serverName);
+    clearBrowseCache(serverName);
   }
 
   /**
@@ -621,8 +651,9 @@ public class LdapService {
       logger.info("Closed connection pool for {}", name);
     });
     connectionPools.clear();
-    // Also clear all schema caches
+    // Clear all caches
     clearAllSchemaCaches();
+    clearAllBrowseCaches();
   }
 
   /**
@@ -1254,83 +1285,119 @@ public class LdapService {
   /**
    * Gets naming contexts from Root DSE.
    * Uses automatic retry logic to recover from stale connections.
+   * Results are cached to reduce redundant LDAP searches.
    *
    * @param config server configuration
    * @return list of naming contexts
    * @throws LDAPException if operation fails
    */
   public List<String> getNamingContexts(LdapServerConfig config) throws LDAPException {
-    try {
-      return executeWithRetry(config, pool -> {
-        SearchRequest searchRequest = new SearchRequest(
-            "",
-            SearchScope.BASE,
-            "(objectClass=*)",
-            "namingContexts"
+    String cacheKey = config.getName();
+    
+    // First check without locking (fast path for cache hits)
+    List<String> contexts = namingContextsCache.get(cacheKey);
+    if (contexts != null) {
+      logger.debug("Using cached naming contexts for {}", config.getName());
+      return contexts;
+    }
+    
+    // Get or create a lock object for this server
+    Object lock = namingContextsLocks.computeIfAbsent(cacheKey, k -> new Object());
+    
+    // Synchronize on the dedicated lock object
+    synchronized (lock) {
+      // Double-check after acquiring lock
+      contexts = namingContextsCache.get(cacheKey);
+      if (contexts != null) {
+        logger.debug("Using cached naming contexts for {} (after sync)", config.getName());
+        return contexts;
+      }
+      
+      try {
+        // Use cached getRootDSE instead of direct LDAP search
+        RootDSE rootDse = getRootDSE(config);
+        contexts = new ArrayList<>();
+        
+        if (rootDse != null) {
+          String[] namingContexts = rootDse.getAttributeValues("namingContexts");
+          if (namingContexts != null) {
+            contexts = List.of(namingContexts);
+          }
+        }
+        
+        // Cache the result
+        namingContextsCache.put(cacheKey, contexts);
+        logger.debug("Cached naming contexts for {}: {} contexts", config.getName(), contexts.size());
+        return contexts;
+      } catch (GeneralSecurityException e) {
+        throw new LDAPException(
+            com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+            "SSL/TLS error: " + e.getMessage()
         );
-        
-        SearchResult searchResult = pool.search(searchRequest);
-        if (searchResult.getEntryCount() == 0) {
-          return new ArrayList<>();
-        }
-        
-        SearchResultEntry rootDse = searchResult.getSearchEntries().get(0);
-        Attribute namingContextsAttr = rootDse.getAttribute("namingContexts");
-        
-        if (namingContextsAttr != null) {
-          return List.of(namingContextsAttr.getValues());
-        }
-        
-        return new ArrayList<>();
-      });
-    } catch (GeneralSecurityException e) {
-      throw new LDAPException(
-          com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
-          "SSL/TLS error: " + e.getMessage()
-      );
+      }
     }
   }
 
   /**
    * Gets private naming contexts from Root DSE.
+   * Results are cached to reduce redundant LDAP searches.
    *
    * @param config server configuration
    * @return list of private naming contexts
    * @throws LDAPException if operation fails
    */
   public List<String> getPrivateNamingContexts(LdapServerConfig config) throws LDAPException {
-    try {
-      LDAPConnectionPool pool = getConnectionPool(config);
-      SearchRequest searchRequest = new SearchRequest(
-          "",
-          SearchScope.BASE,
-          "(objectClass=*)",
-          "ds-private-naming-contexts"
-      );
-      
-      SearchResult searchResult = pool.search(searchRequest);
-      if (searchResult.getEntryCount() == 0) {
-        return new ArrayList<>();
+    String cacheKey = config.getName();
+    
+    // First check without locking (fast path for cache hits)
+    List<String> contexts = privateNamingContextsCache.get(cacheKey);
+    if (contexts != null) {
+      logger.debug("Using cached private naming contexts for {}", config.getName());
+      return contexts;
+    }
+    
+    // Get or create a lock object for this server
+    Object lock = privateNamingContextsLocks.computeIfAbsent(cacheKey, k -> new Object());
+    
+    // Synchronize on the dedicated lock object
+    synchronized (lock) {
+      // Double-check after acquiring lock
+      contexts = privateNamingContextsCache.get(cacheKey);
+      if (contexts != null) {
+        logger.debug("Using cached private naming contexts for {} (after sync)", 
+            config.getName());
+        return contexts;
       }
       
-      SearchResultEntry rootDse = searchResult.getSearchEntries().get(0);
-      Attribute privateContextsAttr = rootDse.getAttribute("ds-private-naming-contexts");
-      
-      if (privateContextsAttr != null) {
-        return List.of(privateContextsAttr.getValues());
+      try {
+        // Use cached getRootDSE instead of direct LDAP search
+        RootDSE rootDse = getRootDSE(config);
+        contexts = new ArrayList<>();
+        
+        if (rootDse != null) {
+          String[] privateContexts = rootDse.getAttributeValues("ds-private-naming-contexts");
+          if (privateContexts != null) {
+            contexts = List.of(privateContexts);
+          }
+        }
+        
+        // Cache the result
+        privateNamingContextsCache.put(cacheKey, contexts);
+        logger.debug("Cached private naming contexts for {}: {} contexts", 
+            config.getName(), contexts.size());
+        return contexts;
+      } catch (GeneralSecurityException e) {
+        throw new LDAPException(
+            com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+            "SSL/TLS error: " + e.getMessage()
+        );
       }
-      
-      return new ArrayList<>();
-    } catch (GeneralSecurityException e) {
-      throw new LDAPException(
-          com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
-          "SSL/TLS error: " + e.getMessage()
-      );
     }
   }
   
   /**
    * Gets entry with minimal attributes.
+   * Results are cached to reduce redundant LDAP searches.
    *
    * @param config server configuration
    * @param dn distinguished name
@@ -1338,36 +1405,63 @@ public class LdapService {
    * @throws LDAPException if operation fails
    */
   public LdapEntry getEntryMinimal(LdapServerConfig config, String dn) throws LDAPException {
-    try {
-      LDAPConnectionPool pool = getConnectionPool(config);
-      SearchRequest searchRequest = new SearchRequest(
-          dn,
-          SearchScope.BASE,
-          "(objectClass=*)",
-          "objectClass", "cn", "ou", "dc"
-      );
-      
-      SearchResult searchResult = pool.search(searchRequest);
-      if (searchResult.getEntryCount() == 0) {
-        return null;
-      }
-      
-      SearchResultEntry entry = searchResult.getSearchEntries().get(0);
-      LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
-      
-      for (Attribute attr : entry.getAttributes()) {
-        for (String value : attr.getValues()) {
-          ldapEntry.addAttribute(attr.getName(), value);
-        }
-      }
-      
-      ldapEntry.setHasChildren(shouldShowExpanderForEntry(ldapEntry));
+    String cacheKey = config.getName() + ":" + dn;
+    
+    // First check without locking (fast path for cache hits)
+    LdapEntry ldapEntry = entryMinimalCache.get(cacheKey);
+    if (ldapEntry != null) {
+      logger.debug("Using cached minimal entry for {}: {}", config.getName(), dn);
       return ldapEntry;
-    } catch (GeneralSecurityException e) {
-      throw new LDAPException(
-          com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
-          "SSL/TLS error: " + e.getMessage()
-      );
+    }
+    
+    // Get or create a lock object for this entry
+    Object lock = entryMinimalLocks.computeIfAbsent(cacheKey, k -> new Object());
+    
+    // Synchronize on the dedicated lock object
+    synchronized (lock) {
+      // Double-check after acquiring lock
+      ldapEntry = entryMinimalCache.get(cacheKey);
+      if (ldapEntry != null) {
+        logger.debug("Using cached minimal entry for {}: {} (after sync)", config.getName(), dn);
+        return ldapEntry;
+      }
+      
+      try {
+        LDAPConnectionPool pool = getConnectionPool(config);
+        SearchRequest searchRequest = new SearchRequest(
+            dn,
+            SearchScope.BASE,
+            "(objectClass=*)",
+            "objectClass", "cn", "ou", "dc"
+        );
+        
+        SearchResult searchResult = pool.search(searchRequest);
+        if (searchResult.getEntryCount() == 0) {
+          return null;
+        }
+        
+        SearchResultEntry entry = searchResult.getSearchEntries().get(0);
+        ldapEntry = new LdapEntry(entry.getDN(), config.getName());
+        
+        for (Attribute attr : entry.getAttributes()) {
+          for (String value : attr.getValues()) {
+            ldapEntry.addAttribute(attr.getName(), value);
+          }
+        }
+        
+        ldapEntry.setHasChildren(shouldShowExpanderForEntry(ldapEntry));
+        
+        // Cache the result
+        entryMinimalCache.put(cacheKey, ldapEntry);
+        logger.debug("Cached minimal entry for {}: {}", config.getName(), dn);
+        
+        return ldapEntry;
+      } catch (GeneralSecurityException e) {
+        throw new LDAPException(
+            com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+            "SSL/TLS error: " + e.getMessage()
+        );
+      }
     }
   }
   
@@ -1532,6 +1626,33 @@ public class LdapService {
     schemaCache.clear();
     logger.debug("Cleared all schema caches");
   }
+  
+  /**
+   * Clears browse-related caches (Root DSE, naming contexts, minimal entries) for a server.
+   *
+   * @param serverName server name
+   */
+  public void clearBrowseCache(String serverName) {
+    rootDseCache.remove(serverName);
+    namingContextsCache.remove(serverName);
+    privateNamingContextsCache.remove(serverName);
+    
+    // Clear minimal entry cache entries for this server
+    entryMinimalCache.entrySet().removeIf(entry -> entry.getKey().startsWith(serverName + ":"));
+    
+    logger.debug("Cleared browse caches for {}", serverName);
+  }
+  
+  /**
+   * Clears all browse-related caches for all servers.
+   */
+  public void clearAllBrowseCaches() {
+    rootDseCache.clear();
+    namingContextsCache.clear();
+    privateNamingContextsCache.clear();
+    entryMinimalCache.clear();
+    logger.debug("Cleared all browse caches");
+  }
 
   /**
    * Gets a list of all attribute names from the schemas of the specified servers.
@@ -1570,8 +1691,10 @@ public class LdapService {
    * @param useExtendedControl whether to use the Extended Schema Info control
    * @return schema object
    * @throws LDAPException if schema retrieval fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
    */
-  public Schema getSchema(String serverId, boolean useExtendedControl) throws LDAPException {
+  public Schema getSchema(String serverId, boolean useExtendedControl) 
+      throws LDAPException, GeneralSecurityException {
     LDAPConnectionPool pool = connectionPools.get(serverId);
     if (pool == null) {
       throw new LDAPException(ResultCode.CONNECT_ERROR, "Not connected to server: " + serverId);
@@ -1579,8 +1702,9 @@ public class LdapService {
 
     if (useExtendedControl) {
       try {
-        // Get root DSE to find schema DN
-        RootDSE rootDSE = pool.getRootDSE();
+        // Get root DSE to find schema DN (uses cache)
+        LdapServerConfig config = findConfigByName(serverId);
+        RootDSE rootDSE = config != null ? getRootDSE(config) : pool.getRootDSE();
         String schemaDN = rootDSE != null 
             ? rootDSE.getAttributeValue("subschemaSubentry") 
             : "cn=schema";
@@ -1651,6 +1775,7 @@ public class LdapService {
    * The Root DSE contains server-specific information like supported controls,
    * naming contexts, schema location, etc.
    * Uses automatic retry logic to recover from stale connections.
+   * Results are cached to reduce redundant LDAP searches.
    *
    * @param config server configuration
    * @return RootDSE object or null if not available
@@ -1659,7 +1784,39 @@ public class LdapService {
    */
   public RootDSE getRootDSE(LdapServerConfig config) 
       throws LDAPException, GeneralSecurityException {
-    return executeWithRetry(config, LDAPConnectionPool::getRootDSE);
+    String cacheKey = config.getName();
+    
+    // First check without locking (fast path for cache hits)
+    RootDSE rootDse = rootDseCache.get(cacheKey);
+    if (rootDse != null) {
+      logger.debug("Using cached Root DSE for {}", config.getName());
+      return rootDse;
+    }
+    
+    // Get or create a lock object for this server using computeIfAbsent (atomic operation)
+    Object lock = rootDseLocks.computeIfAbsent(cacheKey, k -> new Object());
+    
+    // Synchronize on the dedicated lock object to prevent concurrent fetches
+    synchronized (lock) {
+      // Double-check after acquiring lock
+      rootDse = rootDseCache.get(cacheKey);
+      if (rootDse != null) {
+        logger.debug("Using cached Root DSE for {} (after sync)", config.getName());
+        return rootDse;
+      }
+      
+      // Fetch from LDAP server
+      logger.debug("Fetching Root DSE for {}", config.getName());
+      rootDse = executeWithRetry(config, LDAPConnectionPool::getRootDSE);
+      
+      // Cache the result
+      if (rootDse != null) {
+        rootDseCache.put(cacheKey, rootDse);
+        logger.debug("Cached Root DSE for {}", config.getName());
+      }
+      
+      return rootDse;
+    }
   }
 
   /**
@@ -1677,7 +1834,9 @@ public class LdapService {
         return false;
       }
       
-      RootDSE rootDSE = pool.getRootDSE();
+      // Use cached getRootDSE() method
+      LdapServerConfig config = findConfigByName(serverId);
+      RootDSE rootDSE = config != null ? getRootDSE(config) : pool.getRootDSE();
       if (rootDSE != null) {
         String[] supportedControls = rootDSE.getAttributeValues("supportedControl");
         if (supportedControls != null) {
@@ -1717,7 +1876,8 @@ public class LdapService {
   public boolean supportsSchemaModification(LdapServerConfig config) {
     try {
       LDAPConnectionPool pool = getConnectionPool(config);
-      RootDSE rootDSE = pool.getRootDSE();
+      // Use cached getRootDSE() method
+      RootDSE rootDSE = getRootDSE(config);
       
       if (rootDSE != null) {
         // Check for schema modification support indicators
@@ -1758,7 +1918,8 @@ public class LdapService {
   private String getSchemaSubentryDN(LdapServerConfig config) {
     try {
       LDAPConnectionPool pool = getConnectionPool(config);
-      RootDSE rootDSE = pool.getRootDSE();
+      // Use cached getRootDSE() method
+      RootDSE rootDSE = getRootDSE(config);
       
       if (rootDSE != null) {
         // Try different attributes in order of preference

@@ -232,7 +232,7 @@ public class SchemaCompareTab extends VerticalLayout {
         Schema schema = ldapService.getSchema(cfg.getName(), allSupportExtended);
         schemas.put(serverName, schema);
         loggingService.logDebug("SCHEMA", "Successfully loaded schema from " + serverName);
-      } catch (LDAPException e) {
+      } catch (LDAPException | java.security.GeneralSecurityException e) {
         errors++;
         schemas.put(serverName, null);
         loggingService.logError("SCHEMA", "Failed to load schema from " + serverName, 
@@ -578,7 +578,7 @@ public class SchemaCompareTab extends VerticalLayout {
       try {
         Schema schema = ldapService.getSchema(cfg.getName(), false);
         schemas.put(displayName(cfg), schema);
-      } catch (LDAPException e) {
+      } catch (LDAPException | java.security.GeneralSecurityException e) {
         schemas.put(displayName(cfg), null);
       }
     }

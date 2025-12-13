@@ -14,7 +14,7 @@
 
   <groupId>com.ldapbrowser</groupId>
   <artifactId>ldap-browser</artifactId>
-  <version>0.42</version>
+  <version>0.43</version>
   <name>LDAP Browser</name>
   <description>Comprehensive Java web application for browsing, searching, and managing LDAP directories</description>
 
