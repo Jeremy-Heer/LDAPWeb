@@ -62,12 +62,14 @@ public final class NotificationHelper {
   /**
    * Displays a success notification with green theme.
    * Duration: 3 seconds.
-   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the success message to display
    */
   public static void showSuccess(String message) {
-    // Suppress UI notification - only log to activity log
+    Notification notification = Notification.show(message, 3000, POSITION);
+    notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+    
+    // Log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logInfo("UI", message);
@@ -94,12 +96,14 @@ public final class NotificationHelper {
   /**
    * Displays an informational notification with blue theme.
    * Duration: 4 seconds.
-   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the informational message to display
    */
   public static void showInfo(String message) {
-    // Suppress UI notification - only log to activity log
+    Notification notification = Notification.show(message, 4000, POSITION);
+    notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
+    
+    // Log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logInfo("UI", message);
@@ -109,12 +113,14 @@ public final class NotificationHelper {
   /**
    * Displays a warning notification with contrast theme.
    * Duration: 4 seconds.
-   * Note: UI notification suppressed to reduce noise. Message is logged only.
    *
    * @param message the warning message to display
    */
   public static void showWarning(String message) {
-    // Suppress UI notification - only log to activity log
+    Notification notification = Notification.show(message, 4000, POSITION);
+    notification.addThemeVariants(NotificationVariant.LUMO_CONTRAST);
+    
+    // Log to activity log
     LoggingService loggingService = getLoggingService();
     if (loggingService != null) {
       loggingService.logWarning("UI", message);

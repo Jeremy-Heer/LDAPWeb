@@ -1,5 +1,27 @@
 # LDAP Web Browser
 
+## v0.44 - UI enhancements and bug fixes
+1. added visual notification on success server connection test - COMPLETE
+
+### Bulk View Search Tab
+1. BUG. Search operations do not honor the search base in the UI - FIXED
+   - Root cause: refreshServerConfigs() called at start of performBulkOperation() calls setServerConfigs()
+   - setServerConfigs() was overwriting searchBaseField with first server's baseDn
+   - Fix: Save user's search base before refreshing configs, then restore it after
+   - Modified performBulkOperation() to preserve user's search base value
+2. add a visual notification to indicate the number of entries processed - FIXED
+   - Root cause: NotificationHelper.showSuccess() was suppressing UI notifications (only logging to activity log)
+   - Fix: Re-enabled visual notifications in NotificationHelper for showSuccess, showInfo, and showWarning methods
+   - Now properly displays "LDIF generated successfully for X entries across Y server(s)" notification on screen
+3. Search Base is cleared after clicking Run. This should not be cleared. - FIXED
+   - Same root cause as #1: setServerConfigs() was overwriting searchBaseField value  
+   - Fix: Modified setServerConfigs() to only set default value if field is currently empty
+   - Now preserves user's entered search base value
+
+### Search View
+1. add a visual notification to indicate the number of entries returned from the search - COMPLETE
+   - Shows "Search complete: X entries found" notification after each search (line 559-561)
+
 ## v0.43 - Performance Enhancement - COMPLETED
 
 ### Overview

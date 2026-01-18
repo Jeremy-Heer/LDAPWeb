@@ -477,7 +477,8 @@ public class ServerView extends VerticalLayout {
       try {
         boolean success = ldapService.testConnection(selected);
         if (success) {
-          NotificationHelper.showSuccess("Connection successful to: " + selected.getName());
+          // Show visual notification for successful test
+          NotificationHelper.showModifySuccess("Connection successful to: " + selected.getName());
         } else {
           NotificationHelper.showError("Connection failed to: " + selected.getName());
         }

@@ -301,8 +301,16 @@ public class BulkSearchTab extends VerticalLayout {
   }
 
   private void performBulkOperation() {
+    // Save the user's search base before refreshing configs
+    String userSearchBase = searchBaseField.getValue();
+    
     // Refresh server configs to get the latest selection
     refreshServerConfigs();
+    
+    // Restore the user's search base after refresh
+    if (userSearchBase != null && !userSearchBase.trim().isEmpty()) {
+      searchBaseField.setValue(userSearchBase);
+    }
     
     if (serverConfigs == null || serverConfigs.isEmpty()) {
       NotificationHelper.showError("Please select at least one LDAP server");
@@ -619,11 +627,14 @@ public class BulkSearchTab extends VerticalLayout {
   public void setServerConfigs(List<LdapServerConfig> serverConfigs) {
     this.serverConfigs = serverConfigs;
     
-    // Set default search base from first server if available
+    // Set default search base from first server if available and field is empty
     if (searchBaseField != null && serverConfigs != null && !serverConfigs.isEmpty()) {
-      LdapServerConfig firstServer = serverConfigs.get(0);
-      if (firstServer.getBaseDn() != null && !firstServer.getBaseDn().isEmpty()) {
-        searchBaseField.setValue(firstServer.getBaseDn());
+      String currentValue = searchBaseField.getValue();
+      if (currentValue == null || currentValue.trim().isEmpty()) {
+        LdapServerConfig firstServer = serverConfigs.get(0);
+        if (firstServer.getBaseDn() != null && !firstServer.getBaseDn().isEmpty()) {
+          searchBaseField.setValue(firstServer.getBaseDn());
+        }
       }
     }
   }
