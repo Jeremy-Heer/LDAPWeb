@@ -1274,6 +1274,55 @@ public class SchemaManageTab extends VerticalLayout {
         filterWritableExtensions(oc.getExtensions())
     ));
 
+    // LDIF representation field with copy button
+    VerticalLayout ldifContainer = new VerticalLayout();
+    ldifContainer.setPadding(false);
+    ldifContainer.setSpacing(false);
+    
+    HorizontalLayout ldifHeader = new HorizontalLayout();
+    ldifHeader.setWidthFull();
+    ldifHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    ldifHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span ldifLabel = new Span("LDIF Representation");
+    ldifLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button copyLdifButton = new Button(new Icon(VaadinIcon.COPY));
+    copyLdifButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    copyLdifButton.setTooltipText("Copy LDIF to clipboard");
+    
+    ldifHeader.add(ldifLabel, copyLdifButton);
+    ldifHeader.setFlexGrow(1, ldifLabel);
+    
+    TextArea ldifField = new TextArea();
+    ldifField.setWidthFull();
+    ldifField.setHeight("150px");
+    ldifField.getStyle().set("font-family", "monospace");
+    ldifField.setReadOnly(true);
+    
+    // Initialize LDIF field
+    String initialLdif = schemaDefinitionToLdif(
+        rawSchemaField.getValue(),
+        schemaFileField.getValue(),
+        "objectClasses");
+    ldifField.setValue(initialLdif);
+    
+    // Add copy functionality
+    copyLdifButton.addClickListener(e -> {
+      ldifField.getElement().executeJs(
+          "navigator.clipboard.writeText(this.value).then(() => {" +
+          "  const event = new CustomEvent('ldif-copied');" +
+          "  window.dispatchEvent(event);" +
+          "});"
+      );
+      NotificationHelper.showSuccess("LDIF copied to clipboard");
+    });
+    
+    ldifContainer.add(ldifHeader, ldifField);
+
     // Track if we're updating from raw schema to prevent circular updates
     final boolean[] updatingFromRaw = {false};
 
@@ -1305,6 +1354,11 @@ public class SchemaManageTab extends VerticalLayout {
         if (!rawSchemaField.getValue().equals(newRaw)) {
           rawSchemaField.setValue(newRaw);
         }
+        
+        // Update LDIF field
+        String ldif = schemaDefinitionToLdif(newRaw, schemaFileField.getValue(),
+            "objectClasses");
+        ldifField.setValue(ldif);
       }
     };
 
@@ -1332,10 +1386,15 @@ public class SchemaManageTab extends VerticalLayout {
           updatingFromRaw[0] = false;
         }
       }
+      
+      // Update LDIF field when raw schema changes
+      String ldif = schemaDefinitionToLdif(event.getValue(), schemaFileField.getValue(),
+          "objectClasses");
+      ldifField.setValue(ldif);
     });
 
     form.add(oidField, namesField, descField, typeField, superiorField,
-        requiredField, optionalField, schemaFileField, rawSchemaContainer);
+        requiredField, optionalField, schemaFileField, rawSchemaContainer, ldifContainer);
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
     
@@ -1555,6 +1614,55 @@ public class SchemaManageTab extends VerticalLayout {
         filterWritableExtensions(at.getExtensions())
     ));
 
+    // LDIF representation field with copy button
+    VerticalLayout ldifContainer = new VerticalLayout();
+    ldifContainer.setPadding(false);
+    ldifContainer.setSpacing(false);
+    
+    HorizontalLayout ldifHeader = new HorizontalLayout();
+    ldifHeader.setWidthFull();
+    ldifHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    ldifHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span ldifLabel = new Span("LDIF Representation");
+    ldifLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button copyLdifButton = new Button(new Icon(VaadinIcon.COPY));
+    copyLdifButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    copyLdifButton.setTooltipText("Copy LDIF to clipboard");
+    
+    ldifHeader.add(ldifLabel, copyLdifButton);
+    ldifHeader.setFlexGrow(1, ldifLabel);
+    
+    TextArea ldifField = new TextArea();
+    ldifField.setWidthFull();
+    ldifField.setHeight("150px");
+    ldifField.getStyle().set("font-family", "monospace");
+    ldifField.setReadOnly(true);
+    
+    // Initialize LDIF field
+    String initialLdif = schemaDefinitionToLdif(
+        rawSchemaField.getValue(),
+        schemaFileField.getValue(),
+        "attributeTypes");
+    ldifField.setValue(initialLdif);
+    
+    // Add copy functionality
+    copyLdifButton.addClickListener(e -> {
+      ldifField.getElement().executeJs(
+          "navigator.clipboard.writeText(this.value).then(() => {" +
+          "  const event = new CustomEvent('ldif-copied');" +
+          "  window.dispatchEvent(event);" +
+          "});"
+      );
+      NotificationHelper.showSuccess("LDIF copied to clipboard");
+    });
+    
+    ldifContainer.add(ldifHeader, ldifField);
+
     // Track if we're updating from raw schema to prevent circular updates
     final boolean[] updatingFromRaw = {false};
 
@@ -1578,6 +1686,11 @@ public class SchemaManageTab extends VerticalLayout {
         if (!rawSchemaField.getValue().equals(newRaw)) {
           rawSchemaField.setValue(newRaw);
         }
+        
+        // Update LDIF field
+        String ldif = schemaDefinitionToLdif(newRaw, schemaFileField.getValue(),
+            "attributeTypes");
+        ldifField.setValue(ldif);
       }
     };
 
@@ -1608,11 +1721,16 @@ public class SchemaManageTab extends VerticalLayout {
           updatingFromRaw[0] = false;
         }
       }
+      
+      // Update LDIF field when raw schema changes
+      String ldif = schemaDefinitionToLdif(event.getValue(), schemaFileField.getValue(),
+          "attributeTypes");
+      ldifField.setValue(ldif);
     });
 
     form.add(oidField, namesField, descField, syntaxField, superiorField,
         equalityField, orderingField, substringField, usageField, schemaFileField,
-        rawSchemaContainer);
+        rawSchemaContainer, ldifContainer);
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
     
@@ -2006,6 +2124,30 @@ public class SchemaManageTab extends VerticalLayout {
   }
 
   /**
+   * Converts an object class definition to LDIF format.
+   *
+   * @param schemaDefinition the schema definition string
+   * @param schemaFile the schema file name (from X-SCHEMA-FILE extension)
+   * @return LDIF formatted string
+   */
+  private String schemaDefinitionToLdif(String schemaDefinition, String schemaFile,
+      String schemaType) {
+    if (schemaDefinition == null || schemaDefinition.trim().isEmpty()) {
+      return "";
+    }
+
+    StringBuilder ldif = new StringBuilder();
+    
+    // Use fixed DN for schema modifications
+    ldif.append("dn: cn=schema\n");
+    ldif.append("changetype: modify\n");
+    ldif.append("add: ").append(schemaType).append("\n");
+    ldif.append(schemaType).append(": ").append(schemaDefinition).append("\n");
+    
+    return ldif.toString();
+  }
+
+  /**
    * Refreshes the schema display.
    */
   private void refreshSchema() {
@@ -2337,6 +2479,49 @@ public class SchemaManageTab extends VerticalLayout {
     
     rawSchemaContainer.add(rawSchemaHeader, rawSchemaField);
 
+    // LDIF representation field with copy button
+    VerticalLayout ldifContainer = new VerticalLayout();
+    ldifContainer.setPadding(false);
+    ldifContainer.setSpacing(false);
+    
+    HorizontalLayout ldifHeader = new HorizontalLayout();
+    ldifHeader.setWidthFull();
+    ldifHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    ldifHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span ldifLabel = new Span("LDIF Representation");
+    ldifLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button copyLdifButton = new Button(new Icon(VaadinIcon.COPY));
+    copyLdifButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    copyLdifButton.setTooltipText("Copy LDIF to clipboard");
+    
+    ldifHeader.add(ldifLabel, copyLdifButton);
+    ldifHeader.setFlexGrow(1, ldifLabel);
+    
+    TextArea ldifField = new TextArea();
+    ldifField.setWidthFull();
+    ldifField.setHeight("150px");
+    ldifField.getStyle().set("font-family", "monospace");
+    ldifField.setReadOnly(true);
+    ldifField.setValue("");
+    
+    // Add copy functionality
+    copyLdifButton.addClickListener(e -> {
+      ldifField.getElement().executeJs(
+          "navigator.clipboard.writeText(this.value).then(() => {" +
+          "  const event = new CustomEvent('ldif-copied');" +
+          "  window.dispatchEvent(event);" +
+          "});"
+      );
+      NotificationHelper.showSuccess("LDIF copied to clipboard");
+    });
+    
+    ldifContainer.add(ldifHeader, ldifField);
+
     // Track if we're updating from raw schema to prevent circular updates
     final boolean[] updatingFromRaw = {false};
 
@@ -2375,6 +2560,11 @@ public class SchemaManageTab extends VerticalLayout {
         if (!rawSchemaField.getValue().equals(newRaw)) {
           rawSchemaField.setValue(newRaw);
         }
+        
+        // Update LDIF field
+        String ldif = schemaDefinitionToLdif(newRaw, schemaFileField.getValue(),
+            "objectClasses");
+        ldifField.setValue(ldif);
       }
     };
 
@@ -2406,11 +2596,16 @@ public class SchemaManageTab extends VerticalLayout {
           updatingFromRaw[0] = false;
         }
       }
+      
+      // Update LDIF field when raw schema changes
+      String ldif = schemaDefinitionToLdif(event.getValue(), schemaFileField.getValue(),
+          "objectClasses");
+      ldifField.setValue(ldif);
     });
 
     formLayout.add(nameField, oidField, descriptionField, typeComboBox, obsoleteCheckbox,
         superiorClassesSelector, requiredAttributesSelector, optionalAttributesSelector,
-        schemaFileField, rawSchemaContainer);
+        schemaFileField, rawSchemaContainer, ldifContainer);
 
     // Buttons
     Button saveButton = new Button("Add Object Class", e -> {
@@ -2544,6 +2739,49 @@ public class SchemaManageTab extends VerticalLayout {
     
     rawSchemaContainer.add(rawSchemaHeader, rawSchemaField);
 
+    // LDIF representation field with copy button
+    VerticalLayout ldifContainer = new VerticalLayout();
+    ldifContainer.setPadding(false);
+    ldifContainer.setSpacing(false);
+    
+    HorizontalLayout ldifHeader = new HorizontalLayout();
+    ldifHeader.setWidthFull();
+    ldifHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    ldifHeader.getStyle().set("margin-bottom", "4px");
+    
+    Span ldifLabel = new Span("LDIF Representation");
+    ldifLabel.getStyle()
+        .set("font-weight", "500")
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+    
+    Button copyLdifButton = new Button(new Icon(VaadinIcon.COPY));
+    copyLdifButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+    copyLdifButton.setTooltipText("Copy LDIF to clipboard");
+    
+    ldifHeader.add(ldifLabel, copyLdifButton);
+    ldifHeader.setFlexGrow(1, ldifLabel);
+    
+    TextArea ldifField = new TextArea();
+    ldifField.setWidthFull();
+    ldifField.setHeight("150px");
+    ldifField.getStyle().set("font-family", "monospace");
+    ldifField.setReadOnly(true);
+    ldifField.setValue("");
+    
+    // Add copy functionality
+    copyLdifButton.addClickListener(e -> {
+      ldifField.getElement().executeJs(
+          "navigator.clipboard.writeText(this.value).then(() => {" +
+          "  const event = new CustomEvent('ldif-copied');" +
+          "  window.dispatchEvent(event);" +
+          "});"
+      );
+      NotificationHelper.showSuccess("LDIF copied to clipboard");
+    });
+    
+    ldifContainer.add(ldifHeader, ldifField);
+
     // Track if we're updating from raw schema to prevent circular updates
     final boolean[] updatingFromRaw = {false};
 
@@ -2578,6 +2816,11 @@ public class SchemaManageTab extends VerticalLayout {
         if (!rawSchemaField.getValue().equals(newRaw)) {
           rawSchemaField.setValue(newRaw);
         }
+        
+        // Update LDIF field
+        String ldif = schemaDefinitionToLdif(newRaw, schemaFileField.getValue(),
+            "attributeTypes");
+        ldifField.setValue(ldif);
       }
     };
 
@@ -2611,11 +2854,17 @@ public class SchemaManageTab extends VerticalLayout {
           updatingFromRaw[0] = false;
         }
       }
+      
+      // Update LDIF field when raw schema changes
+      String ldif = schemaDefinitionToLdif(event.getValue(), schemaFileField.getValue(),
+          "attributeTypes");
+      ldifField.setValue(ldif);
     });
 
     formLayout.add(nameField, oidField, descriptionField, syntaxOidSelector,
         superiorTypeSelector, usageComboBox, singleValuedCheckbox, obsoleteCheckbox,
-        collectiveCheckbox, noUserModificationCheckbox, schemaFileField, rawSchemaContainer);
+        collectiveCheckbox, noUserModificationCheckbox, schemaFileField, rawSchemaContainer,
+        ldifContainer);
 
     // Buttons
     Button saveButton = new Button("Add Attribute Type", e -> {

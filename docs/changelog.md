@@ -1,5 +1,12 @@
 # LDAP Web Browser
 
+## v0.45 - SCHEMA Enhancements
+1. For the Add / Edit Object Class and Add / Edit Attribute Types dialogs,
+    add an LDIF text area under the Raw Schema Definitiln with a copy icon
+    - This is a read only text area that is auto updated with the object class / Attribute type
+      and any changes made to reflect a valid LDIF that could also be used manually
+      by the user to perform the same operation as the UI
+
 ## v0.44 - UI enhancements and bug fixes
 1. added visual notification on success server connection test - COMPLETE
 
