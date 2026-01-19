@@ -4,9 +4,11 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.SchemaComparisonService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.SchemaCompareTab;
 import com.ldapbrowser.ui.components.SchemaManageTab;
+import com.ldapbrowser.ui.components.SchemaMigrationTab;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
@@ -25,6 +27,7 @@ public class SchemaView extends VerticalLayout {
 
   private final SchemaManageTab manageTab;
   private final SchemaCompareTab compareTab;
+  private final SchemaMigrationTab migrationTab;
   private final Tabs topLevelTabs;
   private final VerticalLayout contentContainer;
   private final ConfigurationService configService;
@@ -35,9 +38,10 @@ public class SchemaView extends VerticalLayout {
    * @param ldapService LDAP service
    * @param configService configuration service
    * @param loggingService logging service
+   * @param schemaComparisonService schema comparison service
    */
   public SchemaView(LdapService ldapService, ConfigurationService configService,
-      LoggingService loggingService) {
+      LoggingService loggingService, SchemaComparisonService schemaComparisonService) {
     this.configService = configService;
     
     setSizeFull();
@@ -48,11 +52,13 @@ public class SchemaView extends VerticalLayout {
     topLevelTabs = new Tabs();
     Tab manageTabItem = new Tab("Manage");
     Tab compareTabItem = new Tab("Compare");
-    topLevelTabs.add(manageTabItem, compareTabItem);
+    Tab migrationTabItem = new Tab("Migration");
+    topLevelTabs.add(manageTabItem, compareTabItem, migrationTabItem);
 
     // Create tab content components
     manageTab = new SchemaManageTab(ldapService, configService);
-    compareTab = new SchemaCompareTab(ldapService, loggingService);
+    compareTab = new SchemaCompareTab(ldapService, loggingService, schemaComparisonService);
+    migrationTab = new SchemaMigrationTab(ldapService, loggingService, schemaComparisonService);
 
     // Content container
     contentContainer = new VerticalLayout();
@@ -76,6 +82,10 @@ public class SchemaView extends VerticalLayout {
         contentContainer.add(compareTab);
         // Update compare tab with selected servers
         updateCompareTabServers();
+      } else if (selectedTab == migrationTabItem) {
+        contentContainer.add(migrationTab);
+        // Update migration tab with selected servers
+        updateMigrationTabServers();
       }
     });
 
@@ -92,6 +102,14 @@ public class SchemaView extends VerticalLayout {
   private void updateCompareTabServers() {
     Set<LdapServerConfig> selectedServers = getSelectedServers();
     compareTab.setEnvironments(selectedServers);
+  }
+
+  /**
+   * Updates the migration tab with currently selected servers from main layout.
+   */
+  private void updateMigrationTabServers() {
+    Set<LdapServerConfig> selectedServers = getSelectedServers();
+    migrationTab.setEnvironments(selectedServers);
   }
 
   /**

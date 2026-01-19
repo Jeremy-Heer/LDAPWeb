@@ -1853,7 +1853,8 @@ public class SchemaManageTab extends VerticalLayout {
 
   /**
    * Filters out read-only extensions that should not be included when
-   * modifying or adding schema elements.
+   * modifying or adding schema elements. This filters out both X-READ-ONLY entries
+   * and X-READ-ONLY 'false' entries (since 'false' is the default and inferred).
    *
    * @param extensions original extension map
    * @return filtered extension map without read-only extensions
@@ -1866,10 +1867,19 @@ public class SchemaManageTab extends VerticalLayout {
     Map<String, String[]> filtered = new HashMap<>();
     for (Map.Entry<String, String[]> entry : extensions.entrySet()) {
       String key = entry.getKey();
-      // Skip read-only extensions that are set by the LDAP server
+      String[] values = entry.getValue();
+      
+      // Skip X-READ-ONLY extensions entirely
       if ("X-READ-ONLY".equals(key)) {
         continue;
       }
+      
+      // Skip X-READ-ONLY with 'false' value (it's inferred, no need to specify)
+      if ("X-READ-ONLY".equals(key) && values != null && values.length > 0
+          && "false".equalsIgnoreCase(values[0])) {
+        continue;
+      }
+      
       filtered.put(key, entry.getValue());
     }
     return filtered;

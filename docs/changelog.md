@@ -1,5 +1,26 @@
 # LDAP Web Browser
 
+## v0.46 - SCHEMA Migration - TODO
+### Scheam View new tab 'Migration' next to 'Compare'
+1. drop down - "Schema Source"
+   Chooses one of the ldap servers selected in the "Select servers..." dropdown at top of every page
+   for example, if "server a" and "server b" are "selected servers", Then one of "serve a" or "server b" would be avaliable to be
+   selected as the "Schema Source"
+2. For each of the selected servers that are not selected as the "schema source", they would each have their own sub tab under the
+   "schema source" dropdown
+
+#### Example sub tab "server b":
+This tab will show:
+1. A selectable list of attributes that are different from the source server
+    default checked
+    When unchecked, removes attribute from ldif text area (removes from attribute diffiniiton and any objectclassses that may have this attribute as a must/may)
+2. A selectable list of object class that are different from the source server
+    default checked
+    When unchecked, removes object class from ldif text area
+3. An LDIF text area with copy icon
+    read only auto updated based on selected attributes, object classes
+    is an ldif to make the changes on "server b" to apply schema from "scheam source" server
+
 ## v0.45 - SCHEMA Enhancements
 1. For the Add / Edit Object Class and Add / Edit Attribute Types dialogs,
     add an LDIF text area under the Raw Schema Definitiln with a copy icon

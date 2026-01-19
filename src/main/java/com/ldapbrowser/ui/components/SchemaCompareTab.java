@@ -3,6 +3,7 @@ package com.ldapbrowser.ui.components;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.SchemaComparisonService;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.util.SchemaCompareUtil;
 import com.unboundid.ldap.sdk.LDAPException;
@@ -49,6 +50,7 @@ public class SchemaCompareTab extends VerticalLayout {
 
   private final LdapService ldapService;
   private final LoggingService loggingService;
+  private final SchemaComparisonService schemaComparisonService;
   private final TabSheet tabSheet = new TabSheet();
   private final Button refreshButton = new Button("Refresh", new Icon(VaadinIcon.REFRESH));
   private final Span statusLabel = new Span();
@@ -81,10 +83,13 @@ public class SchemaCompareTab extends VerticalLayout {
    *
    * @param ldapService the service used to retrieve LDAP schema information
    * @param loggingService the service used for logging schema comparison debug information
+   * @param schemaComparisonService the service used for schema comparison operations
    */
-  public SchemaCompareTab(LdapService ldapService, LoggingService loggingService) {
+  public SchemaCompareTab(LdapService ldapService, LoggingService loggingService,
+      SchemaComparisonService schemaComparisonService) {
     this.ldapService = ldapService;
     this.loggingService = loggingService;
+    this.schemaComparisonService = schemaComparisonService;
 
     setSizeFull();
     setPadding(true);
@@ -201,61 +206,35 @@ public class SchemaCompareTab extends VerticalLayout {
     loggingService.logDebug("SCHEMA", "Starting schema comparison for " 
         + sortedServers.size() + " servers");
 
-    Map<String, Schema> schemas = new LinkedHashMap<>();
-    int errors = 0;
-
-    // Determine if all servers support extended schema info
-    final String extendedSchemaInfoOid = "1.3.6.1.4.1.30221.2.5.12";
-    boolean allSupportExtended = true;
+    // Load schemas using the comparison service
+    Map<String, Schema> schemas = schemaComparisonService.loadSchemas(sortedServers);
     
-    for (LdapServerConfig cfg : sortedServers) {
-      try {
-        if (!ldapService.isConnected(cfg.getName())) {
-          ldapService.connect(cfg);
-        }
-        boolean supported = ldapService.isControlSupported(cfg.getName(), extendedSchemaInfoOid);
-        if (!supported) {
-          allSupportExtended = false;
-        }
-      } catch (LDAPException e) {
-        allSupportExtended = false;
-      }
-    }
-
-    loggingService.logDebug("SCHEMA", "Extended schema info control " 
-        + (allSupportExtended ? "enabled" : "disabled") + " for all servers");
-
-    // Fetch schemas
+    // Convert server names for display
+    Map<String, Schema> displaySchemas = new LinkedHashMap<>();
+    int errors = 0;
     for (LdapServerConfig cfg : sortedServers) {
       String serverName = displayName(cfg);
-      try {
-        Schema schema = ldapService.getSchema(cfg.getName(), allSupportExtended);
-        schemas.put(serverName, schema);
-        loggingService.logDebug("SCHEMA", "Successfully loaded schema from " + serverName);
-      } catch (LDAPException | java.security.GeneralSecurityException e) {
+      Schema schema = schemas.get(cfg.getName());
+      displaySchemas.put(serverName, schema);
+      if (schema == null) {
         errors++;
-        schemas.put(serverName, null);
-        loggingService.logError("SCHEMA", "Failed to load schema from " + serverName, 
-            e.getMessage());
       }
     }
 
     // Build data for each component
     loggingService.logDebug("SCHEMA", "Processing schema elements for comparison");
-    renderObjectClasses(schemas);
-    renderAttributeTypes(schemas);
-    renderMatchingRules(schemas);
-    renderMatchingRuleUse(schemas);
-    renderSyntaxes(schemas);
+    renderObjectClasses(displaySchemas);
+    renderAttributeTypes(displaySchemas);
+    renderMatchingRules(displaySchemas);
+    renderMatchingRuleUse(displaySchemas);
+    renderSyntaxes(displaySchemas);
 
     if (errors > 0) {
-      statusLabel.setText("Loaded with " + errors + " error(s). Extended schema info control " 
-          + (allSupportExtended ? "used" : "disabled") + ".");
+      statusLabel.setText("Loaded with " + errors + " error(s).");
       NotificationHelper.showError("Some servers failed to load schema.");
       loggingService.logError("SCHEMA", "Schema comparison completed with " + errors + " errors");
     } else {
-      statusLabel.setText("Schema loaded. Extended schema info control " 
-          + (allSupportExtended ? "used" : "disabled") + ".");
+      statusLabel.setText("Schema loaded successfully.");
       loggingService.logInfo("SCHEMA", "Schema comparison completed successfully for " 
           + sortedServers.size() + " servers");
     }
