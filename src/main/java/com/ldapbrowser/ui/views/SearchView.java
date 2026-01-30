@@ -445,8 +445,21 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
         .filter(c -> c.getName().equals(entry.getServerName()))
         .findFirst()
         .ifPresent(config -> {
-          entryEditor.setServerConfig(config);
-          entryEditor.editEntry(entry);
+          try {
+            // Fetch the full entry with all user attributes (not just the ones from the search)
+            LdapEntry fullEntry = ldapService.readEntry(config, entry.getDn(), false);
+            entryEditor.setServerConfig(config);
+            entryEditor.editEntry(fullEntry);
+          } catch (Exception e) {
+            logger.error("Failed to read full entry details for {}: {}", entry.getDn(), e.getMessage());
+            // Fallback to showing the partial entry from search results
+            entryEditor.setServerConfig(config);
+            entryEditor.editEntry(entry);
+            NotificationHelper.showError(
+                "Could not load full entry details: " + e.getMessage(), 
+                5000
+            );
+          }
         });
   }
 
