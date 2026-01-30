@@ -701,7 +701,8 @@ public class EntryEditor extends VerticalLayout {
     }
 
     // Apply visual highlighting for pending changes
-    String changeKey = row.getName() + ":" + row.getValueIndex();
+    // Use value in key to handle sorted attributes (e.g., objectClass)
+    String changeKey = row.getName() + ":" + row.getValue();
     PendingChangeType changeType = pendingChanges.get(changeKey);
     
     if (changeType == PendingChangeType.DELETED) {
@@ -769,10 +770,9 @@ public class EntryEditor extends VerticalLayout {
       currentEntry.getAttributes().put(name.trim(), new ArrayList<>(values));
       
       // Track all values as pending additions
-      for (int i = 0; i < values.size(); i++) {
-        String changeKey = name.trim() + ":" + i;
-        pendingChanges.put(changeKey,
-            PendingChangeType.ADDED);
+      for (String value : values) {
+        String changeKey = name.trim() + ":" + value;
+        pendingChanges.put(changeKey, PendingChangeType.ADDED);
       }
       
       modifiedAttributes.add(name.trim());
@@ -924,8 +924,8 @@ public class EntryEditor extends VerticalLayout {
       allValues.add(newValue.trim());
       currentEntry.getAttributes().put(row.getName(), allValues);
       
-      // Track this as a pending addition
-      String changeKey = row.getName() + ":" + (allValues.size() - 1);
+      // Track this as a pending addition using the value itself
+      String changeKey = row.getName() + ":" + newValue.trim();
       pendingChanges.put(changeKey, PendingChangeType.ADDED);
       
       modifiedAttributes.add(row.getName());
@@ -961,7 +961,7 @@ public class EntryEditor extends VerticalLayout {
     dialog.setConfirmText("Delete");
     dialog.addConfirmListener(e -> {
       // Track this as a pending deletion (keep value visible in grid)
-      String changeKey = row.getName() + ":" + row.getValueIndex();
+      String changeKey = row.getName() + ":" + row.getValue();
       pendingChanges.put(changeKey, PendingChangeType.DELETED);
       
       // Mark as modified but don't remove from currentEntry yet
@@ -986,8 +986,8 @@ public class EntryEditor extends VerticalLayout {
       // Mark all values as deleted (keep them visible in grid)
       List<String> allValues = currentEntry.getAttributes().get(row.getName());
       if (allValues != null) {
-        for (int i = 0; i < allValues.size(); i++) {
-          String changeKey = row.getName() + ":" + i;
+        for (String value : allValues) {
+          String changeKey = row.getName() + ":" + value;
           pendingChanges.put(changeKey, PendingChangeType.DELETED);
         }
       }
@@ -1057,12 +1057,10 @@ public class EntryEditor extends VerticalLayout {
       List<String> modifiedValues = new ArrayList<>(modified.getAttributeValues(attrName));
       
       // Filter out values marked as DELETED from modifiedValues
-      for (int i = modifiedValues.size() - 1; i >= 0; i--) {
-        String changeKey = attrName + ":" + i;
-        if (pendingChanges.get(changeKey) == PendingChangeType.DELETED) {
-          modifiedValues.remove(i);
-        }
-      }
+      modifiedValues.removeIf(value -> {
+        String changeKey = attrName + ":" + value;
+        return pendingChanges.get(changeKey) == PendingChangeType.DELETED;
+      });
 
       if (modifiedValues.isEmpty()) {
         // Attribute was deleted
