@@ -22,8 +22,11 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.shared.Tooltip;
+import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -31,8 +34,10 @@ import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.server.VaadinSession;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +58,7 @@ public class MainLayout extends AppLayout {
   private Dialog logsDialog;
   private Button logsButton;
   private int unreadLogCount = 0;
+  private Map<String, LdapServerConfig> serverConfigMap = new HashMap<>();
 
   /**
    * Creates the main layout with navbar and drawer.
@@ -277,7 +283,38 @@ public class MainLayout extends AppLayout {
   public void refreshServerList() {
     List<LdapServerConfig> configs = configService.loadConfigurations();
     List<String> serverNames = configs.stream().map(LdapServerConfig::getName).toList();
+    
+    // Store mapping for tooltips and details
+    serverConfigMap.clear();
+    for (LdapServerConfig config : configs) {
+      serverConfigMap.put(config.getName(), config);
+    }
+    
     serverSelect.setItems(serverNames);
+    
+    // Set renderer to show server details in dropdown
+    serverSelect.setRenderer(new ComponentRenderer<>(serverName -> {
+      Div container = new Div();
+      Span nameSpan = new Span(serverName);
+      nameSpan.getStyle().set("font-weight", "500");
+      
+      LdapServerConfig config = serverConfigMap.get(serverName);
+      if (config != null) {
+        String details = config.getHost() + ":" + config.getPort();
+        if (config.getBindDn() != null && !config.getBindDn().isEmpty()) {
+          details += " (" + config.getBindDn() + ")";
+        }
+        Span detailSpan = new Span(details);
+        detailSpan.getStyle()
+            .set("font-size", "var(--lumo-font-size-s)")
+            .set("color", "var(--lumo-secondary-text-color)");
+        container.add(nameSpan, new Div(detailSpan));
+      } else {
+        container.add(nameSpan);
+      }
+      
+      return container;
+    }));
 
     if (serverNames.isEmpty()) {
       serverSelect.setEnabled(false);
@@ -352,6 +389,16 @@ public class MainLayout extends AppLayout {
         .set("color", "var(--lumo-primary-text-color)")
         .set("border-radius", "var(--lumo-border-radius-m)")
         .set("font-size", "var(--lumo-font-size-s)");
+    
+    // Add tooltip with server details
+    LdapServerConfig config = serverConfigMap.get(serverName);
+    if (config != null) {
+      String tooltipText = config.getHost() + ":" + config.getPort();
+      if (config.getBindDn() != null && !config.getBindDn().isEmpty()) {
+        tooltipText += "\nBind DN: " + config.getBindDn();
+      }
+      Tooltip.forComponent(badge).setText(tooltipText);
+    }
 
     return badge;
   }
