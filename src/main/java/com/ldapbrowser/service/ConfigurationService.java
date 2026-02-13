@@ -1,7 +1,8 @@
 package com.ldapbrowser.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.EncryptionService.EncryptionException;
 import java.io.File;
@@ -40,8 +41,9 @@ public class ConfigurationService {
    */
   public ConfigurationService(EncryptionService encryptionService) {
     this.encryptionService = encryptionService;
-    this.objectMapper = new ObjectMapper();
-    this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+    this.objectMapper = JsonMapper.builder()
+        .enable(SerializationFeature.INDENT_OUTPUT)
+        .build();
     String userHome = System.getProperty("user.home");
     this.settingsDir = Paths.get(userHome, SETTINGS_DIR);
     this.configPath = settingsDir.resolve(CONFIG_FILE);
@@ -87,7 +89,7 @@ public class ConfigurationService {
       }
 
       return configList;
-    } catch (IOException e) {
+    } catch (Exception e) {
       logger.error("Failed to load configurations", e);
       return new ArrayList<>();
     }
@@ -113,9 +115,9 @@ public class ConfigurationService {
 
       objectMapper.writeValue(configPath.toFile(), toSave);
       logger.info("Saved {} server configurations to {}", toSave.size(), configPath);
-    } catch (IOException e) {
+    } catch (Exception e) {
       logger.error("Failed to save configurations", e);
-      throw e;
+      throw new IOException(e);
     }
   }
 

@@ -1,9 +1,9 @@
 package com.ldapbrowser.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 import com.ldapbrowser.model.LogEntry;
 import com.ldapbrowser.model.LogEntry.LogLevel;
 import jakarta.annotation.PostConstruct;
@@ -57,9 +57,9 @@ public class LoggingService {
    * Constructor initializes ObjectMapper with Java 8 time support.
    */
   public LoggingService() {
-    this.objectMapper = new ObjectMapper();
-    this.objectMapper.registerModule(new JavaTimeModule());
-    this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+    this.objectMapper = JsonMapper.builder()
+        .enable(SerializationFeature.INDENT_OUTPUT)
+        .build();
   }
   
   /**
@@ -117,7 +117,7 @@ public class LoggingService {
       logBuffer.addAll(entries.subList(startIndex, entries.size()));
       
       logger.debug("Loaded {} log entries from file", logBuffer.size());
-    } catch (IOException e) {
+    } catch (Exception e) {
       logger.error("Failed to load logs from file: {}", logFilePath, e);
     } finally {
       lock.writeLock().unlock();
@@ -136,11 +136,8 @@ public class LoggingService {
         
         objectMapper.writeValue(logFilePath.toFile(), entriesToSave);
         logger.trace("Saved {} log entries to file", entriesToSave.size());
-      } catch (IOException e) {
-        logger.error("Failed to save logs to file: {}", logFilePath, e);
       } catch (Exception e) {
-        lock.readLock().unlock();
-        logger.error("Error during log file save", e);
+        logger.error("Failed to save logs to file: {}", logFilePath, e);
       }
     });
   }

@@ -120,7 +120,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     // Keyboard navigation
     getElement().setAttribute("tabindex", "0");
     getElement().addEventListener("keydown", e -> {
-      String key = e.getEventData().getString("event.key");
+      String key = e.getEventData().get("event.key").asText();
       if ("Enter".equals(key) || " ".equals(key)) {
         LdapEntry selectedEntry = asSingleSelect().getValue();
         if (selectedEntry != null && selectedEntry.isHasChildren()) {
