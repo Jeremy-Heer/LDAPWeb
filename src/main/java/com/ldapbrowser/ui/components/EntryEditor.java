@@ -13,7 +13,6 @@ import com.unboundid.ldap.sdk.schema.ObjectClassDefinition;
 import com.unboundid.ldap.sdk.schema.Schema;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.contextmenu.ContextMenu;
@@ -30,6 +29,7 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.menubar.MenuBar;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
@@ -84,11 +84,14 @@ public class EntryEditor extends VerticalLayout {
   private Button searchFromHereButton;
   private TextField searchField;
   private Button addAttributeButton;
-  private Button saveButton;
+  private Button pendingChangesButton;
   private Button testLoginButton;
   private Button refreshButton;
   private Button deleteEntryButton;
-  private Checkbox showOperationalAttributesCheckbox;
+  private Button ldifButton;
+  private Button showOperationalAttributesButton;
+  private Button renameMoveButton;
+  private boolean showOperationalAttributes = false;
   private Grid<AttributeRow> attributeGrid;
   private ListDataProvider<AttributeRow> attributeDataProvider;
   
@@ -146,11 +149,24 @@ public class EntryEditor extends VerticalLayout {
     searchFromHereButton.setEnabled(false);
     searchFromHereButton.addClickListener(e -> searchFromCurrentEntry());
 
-    // Operational attributes checkbox
-    showOperationalAttributesCheckbox = new Checkbox("Show operational attributes");
-    showOperationalAttributesCheckbox.setValue(false);
-    showOperationalAttributesCheckbox.addValueChangeListener(e -> {
-      // When toggling, refresh the entry from LDAP to get operational attributes if needed
+    // Operational attributes toggle button
+    showOperationalAttributesButton = new Button(new Icon(VaadinIcon.EYE));
+    showOperationalAttributesButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    showOperationalAttributesButton.getElement().setAttribute("title",
+        "Show operational attributes");
+    showOperationalAttributesButton.addClickListener(e -> {
+      showOperationalAttributes = !showOperationalAttributes;
+      if (showOperationalAttributes) {
+        showOperationalAttributesButton.addThemeVariants(
+            ButtonVariant.LUMO_PRIMARY);
+        showOperationalAttributesButton.getElement().setAttribute("title",
+            "Hide operational attributes");
+      } else {
+        showOperationalAttributesButton.removeThemeVariants(
+            ButtonVariant.LUMO_PRIMARY);
+        showOperationalAttributesButton.getElement().setAttribute("title",
+            "Show operational attributes");
+      }
       if (currentEntry != null && serverConfig != null) {
         refreshEntry();
       }
@@ -182,23 +198,37 @@ public class EntryEditor extends VerticalLayout {
     // Initialize context menu for attribute actions
     initializeAttributeContextMenu();
 
-    // Action buttons
-    addAttributeButton = new Button("Add Attribute", new Icon(VaadinIcon.PLUS));
+    // Action buttons - icon only with tooltips
+    addAttributeButton = new Button(new Icon(VaadinIcon.PLUS));
+    addAttributeButton.getElement().setAttribute("title", "Add attribute");
     addAttributeButton.addClickListener(e -> openAddAttributeDialog());
 
-    saveButton = new Button("Save Changes", new Icon(VaadinIcon.CHECK));
-    saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-    saveButton.addClickListener(e -> saveChanges());
+    pendingChangesButton = new Button(new Icon(VaadinIcon.CHECK));
+    pendingChangesButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    pendingChangesButton.getElement().setAttribute("title", "Pending changes");
+    pendingChangesButton.setEnabled(false);
+    pendingChangesButton.addClickListener(e -> openPendingChangesDialog());
 
-    testLoginButton = new Button("Test Login", new Icon(VaadinIcon.KEY));
+    testLoginButton = new Button(new Icon(VaadinIcon.KEY));
+    testLoginButton.getElement().setAttribute("title", "Test login");
     testLoginButton.addClickListener(e -> openTestLoginDialog());
 
-    refreshButton = new Button("Refresh", new Icon(VaadinIcon.REFRESH));
+    refreshButton = new Button(new Icon(VaadinIcon.REFRESH));
+    refreshButton.getElement().setAttribute("title", "Refresh");
     refreshButton.addClickListener(e -> refreshEntry());
 
-    deleteEntryButton = new Button("Delete Entry", new Icon(VaadinIcon.TRASH));
+    deleteEntryButton = new Button(new Icon(VaadinIcon.TRASH));
     deleteEntryButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+    deleteEntryButton.getElement().setAttribute("title", "Delete entry");
     deleteEntryButton.addClickListener(e -> confirmDeleteEntry());
+
+    ldifButton = new Button(new Icon(VaadinIcon.FILE_TEXT_O));
+    ldifButton.getElement().setAttribute("title", "LDIF");
+    ldifButton.addClickListener(e -> openLdifDialog());
+
+    renameMoveButton = new Button(new Icon(VaadinIcon.EXCHANGE));
+    renameMoveButton.getElement().setAttribute("title", "Rename / Move");
+    renameMoveButton.addClickListener(e -> openRenameMoveDialog());
 
     setButtonsEnabled(false);
     clearPendingChanges();
@@ -303,23 +333,21 @@ public class EntryEditor extends VerticalLayout {
     dnRow.add(dnPrefix, dnLabel, expandButton, searchField);
     dnRow.setFlexGrow(1, dnLabel);
 
-    // Action buttons with operational attributes checkbox on the right
+    // Action buttons
     HorizontalLayout buttonLayout = new HorizontalLayout();
     buttonLayout.setDefaultVerticalComponentAlignment(Alignment.CENTER);
     buttonLayout.setPadding(false);
     buttonLayout.setSpacing(true);
     buttonLayout.add(
         addAttributeButton,
-        saveButton,
+        pendingChangesButton,
         testLoginButton,
         refreshButton,
-        deleteEntryButton
+        deleteEntryButton,
+        ldifButton,
+        renameMoveButton,
+        showOperationalAttributesButton
     );
-
-    // Add spacer and checkbox on the right
-    Span spacer = new Span();
-    buttonLayout.add(spacer, showOperationalAttributesCheckbox);
-    buttonLayout.setFlexGrow(1, spacer);
 
     add(dnRow, buttonLayout, attributeGrid);
     setFlexGrow(1, attributeGrid);
@@ -374,9 +402,9 @@ public class EntryEditor extends VerticalLayout {
     if (entry != null) {
       dnLabel.setText(entry.getDn());
       
-      // If operational attributes checkbox is already checked,
+      // If operational attributes toggle is already on,
       // fetch entry with operational attributes
-      if (showOperationalAttributesCheckbox.getValue()
+      if (showOperationalAttributes
           && serverConfig != null) {
         try {
           LdapEntry entryWithOperational = ldapService.readEntry(
@@ -397,7 +425,7 @@ public class EntryEditor extends VerticalLayout {
       refreshAttributeDisplay();
       setButtonsEnabled(true);
       expandButton.setEnabled(true);
-      showOperationalAttributesCheckbox.setEnabled(true);
+      showOperationalAttributesButton.setEnabled(true);
     } else {
       clear();
     }
@@ -419,8 +447,10 @@ public class EntryEditor extends VerticalLayout {
     }
     setButtonsEnabled(false);
     expandButton.setEnabled(false);
-    showOperationalAttributesCheckbox.setEnabled(false);
-    showOperationalAttributesCheckbox.setValue(false);
+    showOperationalAttributes = false;
+    showOperationalAttributesButton.removeThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    showOperationalAttributesButton.getElement().setAttribute("title",
+        "Show operational attributes");
     searchField.clear();
   }
 
@@ -431,7 +461,7 @@ public class EntryEditor extends VerticalLayout {
     }
 
     List<AttributeRow> rows = new ArrayList<>();
-    boolean showOperational = showOperationalAttributesCheckbox.getValue();
+    boolean showOperational = showOperationalAttributes;
 
     // Collect attributes with their values in sorted order
     List<Map.Entry<String, List<String>>> sortedAttrs = new ArrayList<>();
@@ -953,26 +983,15 @@ public class EntryEditor extends VerticalLayout {
       return;
     }
 
-    ConfirmDialog dialog = new ConfirmDialog();
-    dialog.setHeader("Delete Value");
-    dialog.setText("Are you sure you want to delete this value from '"
-        + row.getName() + "'?\n\nValue: " + row.getValue());
-    dialog.setCancelable(true);
-    dialog.setConfirmText("Delete");
-    dialog.addConfirmListener(e -> {
-      // Track this as a pending deletion (keep value visible in grid)
-      String changeKey = row.getName() + ":" + row.getValue();
-      pendingChanges.put(changeKey, PendingChangeType.DELETED);
-      
-      // Mark as modified but don't remove from currentEntry yet
-      // (values marked as DELETED will be filtered during save)
-      modifiedAttributes.add(row.getName());
-      markPendingChanges();
-      refreshAttributeDisplay();
-      NotificationHelper.showSuccess(
-          "Deleted value from '" + row.getName() + "'.");
-    });
-    dialog.open();
+    // Directly mark as pending deletion without dialog
+    String changeKey = row.getName() + ":" + row.getValue();
+    pendingChanges.put(changeKey, PendingChangeType.DELETED);
+    
+    modifiedAttributes.add(row.getName());
+    markPendingChanges();
+    refreshAttributeDisplay();
+    NotificationHelper.showSuccess(
+        "Marked value for deletion from '" + row.getName() + "'.");
   }
 
   private void deleteAllValues(AttributeRow row) {
@@ -1098,7 +1117,7 @@ public class EntryEditor extends VerticalLayout {
       LdapEntry refreshedEntry = ldapService.readEntry(
           serverConfig,
           currentEntry.getDn(),
-          showOperationalAttributesCheckbox.getValue()
+          showOperationalAttributes
       );
       
       if (refreshedEntry != null) {
@@ -1121,12 +1140,38 @@ public class EntryEditor extends VerticalLayout {
       return;
     }
 
-    ConfirmDialog dialog = new ConfirmDialog();
-    dialog.setHeader("Delete Entry");
-    dialog.setText("Are you sure you want to delete this entry?\n\nDN: " + currentEntry.getDn());
-    dialog.setCancelable(true);
-    dialog.setConfirmText("Delete");
-    dialog.addConfirmListener(e -> deleteEntry());
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Delete Entry");
+
+    Span text = new Span("Are you sure you want to delete this entry?");
+    Span dnText = new Span("DN: " + currentEntry.getDn());
+    dnText.getStyle()
+        .set("font-family", "monospace")
+        .set("font-weight", "bold")
+        .set("word-break", "break-all");
+
+    VerticalLayout layout = new VerticalLayout(text, dnText);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    dialog.add(layout);
+
+    Button deleteButton = new Button("Delete", new Icon(VaadinIcon.TRASH));
+    deleteButton.addThemeVariants(ButtonVariant.LUMO_ERROR,
+        ButtonVariant.LUMO_PRIMARY);
+    deleteButton.addClickListener(e -> {
+      dialog.close();
+      deleteEntry();
+    });
+
+    Button ldifBtn = new Button("LDIF", new Icon(VaadinIcon.FILE_TEXT_O));
+    ldifBtn.addClickListener(e -> {
+      dialog.close();
+      openDeleteEntryLdifDialog();
+    });
+
+    Button cancelButton = new Button("Cancel", ev -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, ldifBtn, deleteButton);
     dialog.open();
   }
 
@@ -1437,24 +1482,714 @@ public class EntryEditor extends VerticalLayout {
 
   private void setButtonsEnabled(boolean enabled) {
     addAttributeButton.setEnabled(enabled);
-    saveButton.setEnabled(enabled);
     testLoginButton.setEnabled(enabled);
     refreshButton.setEnabled(enabled);
     deleteEntryButton.setEnabled(enabled);
+    ldifButton.setEnabled(enabled);
+    renameMoveButton.setEnabled(enabled);
+    showOperationalAttributesButton.setEnabled(enabled);
+    // pendingChangesButton is enabled/disabled based on pending state
+    if (!enabled) {
+      pendingChangesButton.setEnabled(false);
+    }
   }
 
   private void markPendingChanges() {
     hasPendingChanges = true;
-    saveButton.setText("Save Changes *");
-    saveButton.getStyle().set("font-weight", "bold");
+    pendingChangesButton.setEnabled(true);
+    pendingChangesButton.getStyle().set("font-weight", "bold");
   }
 
   private void clearPendingChanges() {
     hasPendingChanges = false;
     modifiedAttributes.clear();
     pendingChanges.clear();
-    saveButton.setText("Save Changes");
-    saveButton.getStyle().remove("font-weight");
+    pendingChangesButton.setEnabled(false);
+    pendingChangesButton.getStyle().remove("font-weight");
+  }
+
+  /**
+   * Opens the Pending Changes dialog showing changes in LDIF format
+   * with a Commit Changes button.
+   */
+  private void openPendingChangesDialog() {
+    if (currentEntry == null || serverConfig == null || !hasPendingChanges) {
+      return;
+    }
+
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Pending Changes");
+    dialog.setWidth("600px");
+
+    // Build LDIF for pending changes
+    String changeLdif = buildPendingChangesLdif();
+    String reverseLdif = buildPendingChangesReverseLdif();
+
+    // Pending changes LDIF
+    Span changesLabel = new Span("Pending Changes (LDIF):");
+    changesLabel.getStyle().set("font-weight", "bold");
+
+    TextArea changesArea = new TextArea();
+    changesArea.setWidthFull();
+    changesArea.setHeight("200px");
+    changesArea.setReadOnly(true);
+    changesArea.setValue(changeLdif);
+
+    Button copyChangesBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyChangesBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyChangesBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyChangesBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", changeLdif));
+      NotificationHelper.showSuccess("Changes LDIF copied to clipboard");
+    });
+
+    HorizontalLayout changesHeader = new HorizontalLayout(
+        changesLabel, copyChangesBtn);
+    changesHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    // Reverse/backout LDIF
+    Span reverseLabel = new Span("Backout Changes (LDIF):");
+    reverseLabel.getStyle().set("font-weight", "bold");
+
+    TextArea reverseArea = new TextArea();
+    reverseArea.setWidthFull();
+    reverseArea.setHeight("200px");
+    reverseArea.setReadOnly(true);
+    reverseArea.setValue(reverseLdif);
+
+    Button copyReverseBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyReverseBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyReverseBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyReverseBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", reverseLdif));
+      NotificationHelper.showSuccess("Backout LDIF copied to clipboard");
+    });
+
+    HorizontalLayout reverseHeader = new HorizontalLayout(
+        reverseLabel, copyReverseBtn);
+    reverseHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    VerticalLayout layout = new VerticalLayout(
+        changesHeader, changesArea, reverseHeader, reverseArea);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    dialog.add(layout);
+
+    Button commitButton = new Button("Commit Changes",
+        new Icon(VaadinIcon.CHECK));
+    commitButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    commitButton.addClickListener(e -> {
+      dialog.close();
+      saveChanges();
+    });
+
+    Button cancelButton = new Button("Cancel", e -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, commitButton);
+    dialog.open();
+  }
+
+  /**
+   * Builds LDIF text representing the pending changes.
+   *
+   * @return LDIF formatted string of pending changes
+   */
+  private String buildPendingChangesLdif() {
+    if (currentEntry == null) {
+      return "";
+    }
+
+    StringBuilder ldif = new StringBuilder();
+    ldif.append("dn: ").append(currentEntry.getDn()).append("\n");
+    ldif.append("changetype: modify\n");
+
+    boolean hasChanges = false;
+
+    for (String attrName : modifiedAttributes) {
+      List<String> currentValues = currentEntry.getAttributeValues(attrName);
+
+      // Check for added values
+      List<String> addedValues = new ArrayList<>();
+      List<String> deletedValues = new ArrayList<>();
+
+      if (currentValues != null) {
+        for (String value : currentValues) {
+          String changeKey = attrName + ":" + value;
+          PendingChangeType changeType = pendingChanges.get(changeKey);
+          if (changeType == PendingChangeType.ADDED) {
+            addedValues.add(value);
+          } else if (changeType == PendingChangeType.DELETED) {
+            deletedValues.add(value);
+          }
+        }
+      }
+
+      // Check for all-values-deleted from pendingChanges map
+      for (Map.Entry<String, PendingChangeType> entry
+          : pendingChanges.entrySet()) {
+        if (entry.getValue() == PendingChangeType.DELETED
+            && entry.getKey().startsWith(attrName + ":")) {
+          String value = entry.getKey().substring(
+              attrName.length() + 1);
+          if (!deletedValues.contains(value)) {
+            deletedValues.add(value);
+          }
+        }
+      }
+
+      if (!deletedValues.isEmpty()) {
+        if (hasChanges) {
+          ldif.append("-\n");
+        }
+        ldif.append("delete: ").append(attrName).append("\n");
+        for (String value : deletedValues) {
+          ldif.append(attrName).append(": ").append(value).append("\n");
+        }
+        hasChanges = true;
+      }
+
+      if (!addedValues.isEmpty()) {
+        if (hasChanges) {
+          ldif.append("-\n");
+        }
+        ldif.append("add: ").append(attrName).append("\n");
+        for (String value : addedValues) {
+          ldif.append(attrName).append(": ").append(value).append("\n");
+        }
+        hasChanges = true;
+      }
+
+      // Check for replaced values (modified but not a simple add/delete)
+      if (addedValues.isEmpty() && deletedValues.isEmpty()) {
+        if (hasChanges) {
+          ldif.append("-\n");
+        }
+        ldif.append("replace: ").append(attrName).append("\n");
+        if (currentValues != null) {
+          for (String value : currentValues) {
+            ldif.append(attrName).append(": ")
+                .append(value).append("\n");
+          }
+        }
+        hasChanges = true;
+      }
+    }
+
+    return ldif.toString();
+  }
+
+  /**
+   * Builds LDIF text to reverse/backout the pending changes.
+   *
+   * @return LDIF formatted string to undo pending changes
+   */
+  private String buildPendingChangesReverseLdif() {
+    if (currentEntry == null) {
+      return "";
+    }
+
+    StringBuilder ldif = new StringBuilder();
+    ldif.append("dn: ").append(currentEntry.getDn()).append("\n");
+    ldif.append("changetype: modify\n");
+
+    boolean hasChanges = false;
+
+    for (String attrName : modifiedAttributes) {
+      List<String> currentValues = currentEntry.getAttributeValues(attrName);
+
+      List<String> addedValues = new ArrayList<>();
+      List<String> deletedValues = new ArrayList<>();
+
+      if (currentValues != null) {
+        for (String value : currentValues) {
+          String changeKey = attrName + ":" + value;
+          PendingChangeType changeType = pendingChanges.get(changeKey);
+          if (changeType == PendingChangeType.ADDED) {
+            addedValues.add(value);
+          } else if (changeType == PendingChangeType.DELETED) {
+            deletedValues.add(value);
+          }
+        }
+      }
+
+      for (Map.Entry<String, PendingChangeType> entry
+          : pendingChanges.entrySet()) {
+        if (entry.getValue() == PendingChangeType.DELETED
+            && entry.getKey().startsWith(attrName + ":")) {
+          String value = entry.getKey().substring(
+              attrName.length() + 1);
+          if (!deletedValues.contains(value)) {
+            deletedValues.add(value);
+          }
+        }
+      }
+
+      // Reverse: added values should be deleted
+      if (!addedValues.isEmpty()) {
+        if (hasChanges) {
+          ldif.append("-\n");
+        }
+        ldif.append("delete: ").append(attrName).append("\n");
+        for (String value : addedValues) {
+          ldif.append(attrName).append(": ").append(value).append("\n");
+        }
+        hasChanges = true;
+      }
+
+      // Reverse: deleted values should be added back
+      if (!deletedValues.isEmpty()) {
+        if (hasChanges) {
+          ldif.append("-\n");
+        }
+        ldif.append("add: ").append(attrName).append("\n");
+        for (String value : deletedValues) {
+          ldif.append(attrName).append(": ").append(value).append("\n");
+        }
+        hasChanges = true;
+      }
+    }
+
+    return ldif.toString();
+  }
+
+  /**
+   * Opens the LDIF dialog showing the entry in LDIF format
+   * for both creating and deleting.
+   */
+  private void openLdifDialog() {
+    if (currentEntry == null || serverConfig == null) {
+      return;
+    }
+
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("LDIF");
+    dialog.setWidth("600px");
+
+    // Build create LDIF
+    String createLdif = buildCreateEntryLdif();
+
+    Span createLabel = new Span("Create Entry (LDIF):");
+    createLabel.getStyle().set("font-weight", "bold");
+
+    TextArea createArea = new TextArea();
+    createArea.setWidthFull();
+    createArea.setHeight("200px");
+    createArea.setReadOnly(true);
+    createArea.setValue(createLdif);
+
+    Button copyCreateBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyCreateBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyCreateBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyCreateBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", createLdif));
+      NotificationHelper.showSuccess("Create LDIF copied to clipboard");
+    });
+
+    HorizontalLayout createHeader = new HorizontalLayout(
+        createLabel, copyCreateBtn);
+    createHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    // Build delete LDIF
+    String deleteLdif = buildDeleteEntryLdif();
+
+    Span deleteLabel = new Span("Delete Entry (LDIF):");
+    deleteLabel.getStyle().set("font-weight", "bold");
+
+    TextArea deleteArea = new TextArea();
+    deleteArea.setWidthFull();
+    deleteArea.setHeight("80px");
+    deleteArea.setReadOnly(true);
+    deleteArea.setValue(deleteLdif);
+
+    Button copyDeleteBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyDeleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyDeleteBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyDeleteBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", deleteLdif));
+      NotificationHelper.showSuccess("Delete LDIF copied to clipboard");
+    });
+
+    HorizontalLayout deleteHeader = new HorizontalLayout(
+        deleteLabel, copyDeleteBtn);
+    deleteHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    VerticalLayout layout = new VerticalLayout(
+        createHeader, createArea, deleteHeader, deleteArea);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    dialog.add(layout);
+
+    Button closeButton = new Button("Close", e -> dialog.close());
+    dialog.getFooter().add(closeButton);
+    dialog.open();
+  }
+
+  /**
+   * Opens a dialog showing LDIF text for deleting the entry
+   * (from the Delete Entry dialog).
+   */
+  private void openDeleteEntryLdifDialog() {
+    if (currentEntry == null || serverConfig == null) {
+      return;
+    }
+
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Delete Entry - LDIF");
+    dialog.setWidth("600px");
+
+    // Delete entry LDIF
+    String deleteLdif = buildDeleteEntryLdif();
+
+    Span deleteLabel = new Span("Delete Entry (LDIF):");
+    deleteLabel.getStyle().set("font-weight", "bold");
+
+    TextArea deleteArea = new TextArea();
+    deleteArea.setWidthFull();
+    deleteArea.setHeight("80px");
+    deleteArea.setReadOnly(true);
+    deleteArea.setValue(deleteLdif);
+
+    Button copyDeleteBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyDeleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyDeleteBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyDeleteBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", deleteLdif));
+      NotificationHelper.showSuccess("Delete LDIF copied to clipboard");
+    });
+
+    HorizontalLayout deleteHeader = new HorizontalLayout(
+        deleteLabel, copyDeleteBtn);
+    deleteHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    // Create entry LDIF (to recreate the entry if needed)
+    String createLdif = buildCreateEntryLdif();
+
+    Span createLabel = new Span("Create Entry (LDIF):");
+    createLabel.getStyle().set("font-weight", "bold");
+
+    TextArea createArea = new TextArea();
+    createArea.setWidthFull();
+    createArea.setHeight("200px");
+    createArea.setReadOnly(true);
+    createArea.setValue(createLdif);
+
+    Button copyCreateBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyCreateBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyCreateBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyCreateBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", createLdif));
+      NotificationHelper.showSuccess("Create LDIF copied to clipboard");
+    });
+
+    HorizontalLayout createHeader = new HorizontalLayout(
+        createLabel, copyCreateBtn);
+    createHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    VerticalLayout layout = new VerticalLayout(
+        deleteHeader, deleteArea, createHeader, createArea);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    dialog.add(layout);
+
+    Button closeButton = new Button("Close", e -> dialog.close());
+    dialog.getFooter().add(closeButton);
+    dialog.open();
+  }
+
+  /**
+   * Builds LDIF text to create the current entry.
+   *
+   * @return LDIF formatted string to add the entry
+   */
+  private String buildCreateEntryLdif() {
+    if (currentEntry == null) {
+      return "";
+    }
+
+    StringBuilder ldif = new StringBuilder();
+    ldif.append("dn: ").append(currentEntry.getDn()).append("\n");
+    ldif.append("changetype: add\n");
+
+    List<String> attrNames = new ArrayList<>(
+        currentEntry.getAttributes().keySet());
+    attrNames.sort(String.CASE_INSENSITIVE_ORDER);
+
+    for (String attrName : attrNames) {
+      List<String> values = currentEntry.getAttributeValues(attrName);
+      if (values != null) {
+        for (String value : values) {
+          ldif.append(attrName).append(": ")
+              .append(value).append("\n");
+        }
+      }
+    }
+
+    return ldif.toString();
+  }
+
+  /**
+   * Builds LDIF text to delete the current entry.
+   *
+   * @return LDIF formatted string to delete the entry
+   */
+  private String buildDeleteEntryLdif() {
+    if (currentEntry == null) {
+      return "";
+    }
+
+    return "dn: " + currentEntry.getDn() + "\n"
+        + "changetype: delete\n";
+  }
+
+  /**
+   * Opens the Rename / Move dialog.
+   */
+  private void openRenameMoveDialog() {
+    if (currentEntry == null || serverConfig == null) {
+      return;
+    }
+
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Rename / Move");
+    dialog.setWidth("600px");
+
+    String currentDn = currentEntry.getDn();
+
+    // Current DN display
+    Span currentDnLabel = new Span("Current DN:");
+    currentDnLabel.getStyle().set("font-weight", "bold");
+    Span currentDnValue = new Span(currentDn);
+    currentDnValue.getStyle()
+        .set("font-family", "monospace")
+        .set("word-break", "break-all");
+
+    // Extract current RDN and Parent DN
+    String currentRdn = "";
+    String currentParentDn = "";
+    int commaIndex = currentDn.indexOf(',');
+    if (commaIndex > 0) {
+      currentRdn = currentDn.substring(0, commaIndex);
+      currentParentDn = currentDn.substring(commaIndex + 1);
+    } else {
+      currentRdn = currentDn;
+    }
+
+    TextField rdnField = new TextField(
+        "Relative Distinguished Name (RDN)");
+    rdnField.setWidthFull();
+    rdnField.setValue(currentRdn);
+
+    TextField parentDnField = new TextField("Parent DN");
+    parentDnField.setWidthFull();
+    parentDnField.setValue(currentParentDn);
+
+    RadioButtonGroup<String> deleteOldRdnRadio =
+        new RadioButtonGroup<>();
+    deleteOldRdnRadio.setLabel("Delete old RDN");
+    deleteOldRdnRadio.setItems("Yes", "No");
+    deleteOldRdnRadio.setValue("Yes");
+
+    VerticalLayout formLayout = new VerticalLayout(
+        currentDnLabel, currentDnValue,
+        rdnField, parentDnField, deleteOldRdnRadio);
+    formLayout.setPadding(false);
+    formLayout.setSpacing(true);
+    dialog.add(formLayout);
+
+    // Capture values for lambdas
+    final String origRdn = currentRdn;
+    final String origParentDn = currentParentDn;
+
+    Button applyButton = new Button("Apply", new Icon(VaadinIcon.CHECK));
+    applyButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    applyButton.addClickListener(e -> {
+      String newRdn = rdnField.getValue();
+      String newParentDn = parentDnField.getValue();
+      boolean deleteOldRdn = "Yes".equals(
+          deleteOldRdnRadio.getValue());
+
+      if (newRdn == null || newRdn.trim().isEmpty()) {
+        NotificationHelper.showError("RDN is required.");
+        return;
+      }
+
+      // Determine if parent changed
+      String parentParam = newParentDn != null
+          && !newParentDn.trim().isEmpty()
+          && !newParentDn.trim().equals(origParentDn)
+          ? newParentDn.trim() : null;
+
+      try {
+        ldapService.modifyDN(
+            serverConfig,
+            currentDn,
+            newRdn.trim(),
+            parentParam,
+            deleteOldRdn
+        );
+
+        String newDn = parentParam != null
+            ? newRdn.trim() + "," + parentParam
+            : newRdn.trim() + "," + origParentDn;
+
+        NotificationHelper.showSuccess(
+            "Entry renamed/moved to: " + newDn);
+        dialog.close();
+
+        // Refresh to show the updated entry
+        LdapEntry refreshedEntry = ldapService.readEntry(
+            serverConfig, newDn, showOperationalAttributes);
+        if (refreshedEntry != null) {
+          refreshedEntry.setServerName(
+              currentEntry.getServerName());
+          editEntry(refreshedEntry);
+        }
+      } catch (Exception ex) {
+        NotificationHelper.showError(
+            "Failed to rename/move: " + ex.getMessage());
+        logger.error("Failed to rename/move entry", ex);
+      }
+    });
+
+    Button ldifBtn = new Button("LDIF", new Icon(VaadinIcon.FILE_TEXT_O));
+    ldifBtn.addClickListener(e -> {
+      String newRdn = rdnField.getValue();
+      String newParentDn = parentDnField.getValue();
+      boolean deleteOldRdn = "Yes".equals(
+          deleteOldRdnRadio.getValue());
+      openRenameMoveLdifDialog(
+          currentDn, newRdn, newParentDn,
+          origParentDn, deleteOldRdn);
+    });
+
+    Button cancelButton = new Button("Cancel", e -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, ldifBtn, applyButton);
+    dialog.open();
+  }
+
+  /**
+   * Opens a dialog showing LDIF for rename/move and its undo.
+   *
+   * @param currentDn the current DN
+   * @param newRdn the new RDN
+   * @param newParentDn the new parent DN
+   * @param origParentDn the original parent DN
+   * @param deleteOldRdn whether to delete the old RDN
+   */
+  private void openRenameMoveLdifDialog(
+      String currentDn, String newRdn, String newParentDn,
+      String origParentDn, boolean deleteOldRdn
+  ) {
+    Dialog ldifDialog = new Dialog();
+    ldifDialog.setHeaderTitle("Rename / Move - LDIF");
+    ldifDialog.setWidth("600px");
+
+    // Determine effective new parent
+    String effectiveNewParent = (newParentDn != null
+        && !newParentDn.trim().isEmpty())
+        ? newParentDn.trim() : origParentDn;
+
+    // Build rename LDIF
+    StringBuilder renameLdif = new StringBuilder();
+    renameLdif.append("dn: ").append(currentDn).append("\n");
+    renameLdif.append("changetype: moddn\n");
+    renameLdif.append("newrdn: ").append(
+        newRdn != null ? newRdn.trim() : "").append("\n");
+    renameLdif.append("deleteoldrdn: ")
+        .append(deleteOldRdn ? "1" : "0").append("\n");
+    if (newParentDn != null && !newParentDn.trim().isEmpty()
+        && !newParentDn.trim().equals(origParentDn)) {
+      renameLdif.append("newsuperior: ")
+          .append(newParentDn.trim()).append("\n");
+    }
+
+    String renameText = renameLdif.toString();
+
+    Span renameLabel = new Span("Rename / Move (LDIF):");
+    renameLabel.getStyle().set("font-weight", "bold");
+
+    TextArea renameArea = new TextArea();
+    renameArea.setWidthFull();
+    renameArea.setHeight("150px");
+    renameArea.setReadOnly(true);
+    renameArea.setValue(renameText);
+
+    Button copyRenameBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyRenameBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyRenameBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyRenameBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", renameText));
+      NotificationHelper.showSuccess(
+          "Rename LDIF copied to clipboard");
+    });
+
+    HorizontalLayout renameHeader = new HorizontalLayout(
+        renameLabel, copyRenameBtn);
+    renameHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    // Build undo LDIF
+    String newDn = (newRdn != null ? newRdn.trim() : "")
+        + "," + effectiveNewParent;
+    // Extract original RDN from current DN
+    String origRdn = currentDn.contains(",")
+        ? currentDn.substring(0, currentDn.indexOf(','))
+        : currentDn;
+
+    StringBuilder undoLdif = new StringBuilder();
+    undoLdif.append("dn: ").append(newDn).append("\n");
+    undoLdif.append("changetype: moddn\n");
+    undoLdif.append("newrdn: ").append(origRdn).append("\n");
+    undoLdif.append("deleteoldrdn: ")
+        .append(deleteOldRdn ? "1" : "0").append("\n");
+    if (newParentDn != null && !newParentDn.trim().isEmpty()
+        && !newParentDn.trim().equals(origParentDn)) {
+      undoLdif.append("newsuperior: ")
+          .append(origParentDn).append("\n");
+    }
+
+    String undoText = undoLdif.toString();
+
+    Span undoLabel = new Span("Undo Rename / Move (LDIF):");
+    undoLabel.getStyle().set("font-weight", "bold");
+
+    TextArea undoArea = new TextArea();
+    undoArea.setWidthFull();
+    undoArea.setHeight("150px");
+    undoArea.setReadOnly(true);
+    undoArea.setValue(undoText);
+
+    Button copyUndoBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyUndoBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyUndoBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyUndoBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", undoText));
+      NotificationHelper.showSuccess(
+          "Undo LDIF copied to clipboard");
+    });
+
+    HorizontalLayout undoHeader = new HorizontalLayout(
+        undoLabel, copyUndoBtn);
+    undoHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    VerticalLayout layout = new VerticalLayout(
+        renameHeader, renameArea, undoHeader, undoArea);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    ldifDialog.add(layout);
+
+    Button closeButton = new Button("Close",
+        e -> ldifDialog.close());
+    ldifDialog.getFooter().add(closeButton);
+    ldifDialog.open();
   }
 
   /**

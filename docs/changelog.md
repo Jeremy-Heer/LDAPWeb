@@ -1,6 +1,46 @@
 # LDAP Web Browser
 
-## v0.46 - SCHEMA Migration - TODO
+## v0.53 Entry Editor Enhancements - TODO
+1. On the 'Delete Entry' dialog (displayed after the Delete entry is button is pressed), add an 'ldif' button
+    next to the 'delete' button. When the 'ldif' button is pressed, a dialog that shows:
+      - a text area with a 'copy to clipboard' icon and text content that contains in ldif format the text
+        to delete the entry.
+      - an text area with a 'copy to clipboard' icon and text that contains an ldif format the text to create
+        the entry.
+1. when deleting an attribute/value with the context menu, remove the Delete Value dialog.
+    This will be replaced with a common dialog for all changes as described below.
+2. Replace the "Save Changes" button with "Pending Changes"
+    - "Penging Changes" buton would be deactivated if there are no pending edits.
+    - When there are pending changes and the "Pending Changes" button is selected:
+      - a new "Pending Changes" dialog will open.
+3. "Pending Changes" dialog
+    - displays in ldif format, the changes that are pending.
+    - displays in ldif format, to reverse/backout the pending change
+    - A "Commit Changes" button to perform the changes
+4. A new LDIF button that opens a new LDIF dialog
+    - displayed next to "delete entry" button
+    - contains a text areay with "copy to clipboard" icon and content to create the entry in ldif format
+    - contains a text areay with "copy to clipboard" icon and content to delete the entry in ldif format
+5. The "show operational attributes" checkbox moved to a button that toggles the display of operational attributes on and off.
+6. New 'Rename / Move' button
+    - opens the Rename / Move dialog
+    - Dialog contains
+      - the current DN displayed at the top
+      - A 'Relative Distinguised Name (RDN)' and 'Parent DN' fields. These are the same as used in the 'Create' view.
+      - The RDN / Parent DN fields are pre-populated with current values.
+      - A 'delete old rdn' radio.
+    - An apply button to apply the rename/move
+    - An ldif button, that when pressed, opens an ldif dialog:
+      - contains a text areay with "copy to clipboard" icon and content to rename/move the entry in ldif format
+      - contains a text areay with "copy to clipboard" icon and content to undo the rename/move  in ldif format
+    - When data is updated and the apply button selected, the entry will be renamed and or moved using data provided.
+6. The buttons on the entry editor ('add attribute', 'pending changes', 'test login', 'refresh', 'delete entry', 'ldif', 'show operational attributes'), update to icon only buttons with tool tips to display their purpose.
+
+## v0.52
+1. Vaadin / JDK / Spring Boot upgrades
+2. Add tool tips to server connections
+
+## v0.46 - SCHEMA Migration
 ### Scheam View new tab 'Migration' next to 'Compare'
 1. drop down - "Schema Source"
    Chooses one of the ldap servers selected in the "Select servers..." dropdown at top of every page

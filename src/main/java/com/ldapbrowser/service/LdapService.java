@@ -14,6 +14,7 @@ import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.LDAPSearchException;
 import com.unboundid.ldap.sdk.Modification;
 import com.unboundid.ldap.sdk.ModificationType;
+import com.unboundid.ldap.sdk.ModifyDNRequest;
 import com.unboundid.ldap.sdk.ResultCode;
 import com.unboundid.ldap.sdk.RootDSE;
 import com.unboundid.ldap.sdk.SearchRequest;
@@ -944,6 +945,36 @@ public class LdapService {
     LDAPConnectionPool pool = getConnectionPool(config);
     pool.delete(dn);
     logger.info("Deleted entry {}", dn);
+  }
+
+  /**
+   * Renames or moves an LDAP entry using a Modify DN operation.
+   *
+   * @param config server configuration
+   * @param currentDn the current distinguished name of the entry
+   * @param newRdn the new relative distinguished name
+   * @param newParentDn the new parent DN, or null to keep current parent
+   * @param deleteOldRdn whether to delete the old RDN value
+   * @throws LDAPException if the modify DN operation fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  public void modifyDN(
+      LdapServerConfig config,
+      String currentDn,
+      String newRdn,
+      String newParentDn,
+      boolean deleteOldRdn
+  ) throws LDAPException, GeneralSecurityException {
+    LDAPConnectionPool pool = getConnectionPool(config);
+
+    ModifyDNRequest request = new ModifyDNRequest(
+        currentDn, newRdn, deleteOldRdn, newParentDn);
+    pool.modifyDN(request);
+
+    String newDn = newParentDn != null
+        ? newRdn + "," + newParentDn
+        : newRdn + "," + currentDn.substring(currentDn.indexOf(',') + 1);
+    logger.info("Modified DN from {} to {}", currentDn, newDn);
   }
 
   /**
