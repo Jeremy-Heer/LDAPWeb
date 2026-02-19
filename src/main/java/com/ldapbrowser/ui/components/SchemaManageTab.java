@@ -845,7 +845,7 @@ public class SchemaManageTab extends VerticalLayout {
     details.setSpacing(true);
     details.setPadding(true);
 
-    // Header with Edit button
+    // Header with Edit and LDIF buttons
     HorizontalLayout headerLayout = new HorizontalLayout();
     headerLayout.setWidthFull();
     headerLayout.setDefaultVerticalComponentAlignment(Alignment.CENTER);
@@ -853,11 +853,17 @@ public class SchemaManageTab extends VerticalLayout {
     H3 header = new H3("Object Class: " + oc.getNameOrOID());
     header.getStyle().set("margin-bottom", "0px");
 
-    Button editButton = new Button("Edit", new Icon(VaadinIcon.EDIT));
+    Button editButton = new Button(new Icon(VaadinIcon.EDIT));
     editButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
+    editButton.setTooltipText("Edit");
     editButton.addClickListener(e -> openEditObjectClassDialog(se));
 
-    headerLayout.add(header, editButton);
+    Button ldifButton = new Button(new Icon(VaadinIcon.FILE_TEXT_O));
+    ldifButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
+    ldifButton.setTooltipText("LDIF");
+    ldifButton.addClickListener(e -> openObjectClassLdifDialog(se));
+
+    headerLayout.add(header, editButton, ldifButton);
     headerLayout.setFlexGrow(1, header);
     headerLayout.getStyle().set("margin-bottom", "16px");
 
@@ -924,7 +930,7 @@ public class SchemaManageTab extends VerticalLayout {
     details.setSpacing(true);
     details.setPadding(true);
 
-    // Header with Edit button
+    // Header with Edit and LDIF buttons
     HorizontalLayout headerLayout = new HorizontalLayout();
     headerLayout.setWidthFull();
     headerLayout.setDefaultVerticalComponentAlignment(Alignment.CENTER);
@@ -932,11 +938,17 @@ public class SchemaManageTab extends VerticalLayout {
     H3 header = new H3("Attribute Type: " + at.getNameOrOID());
     header.getStyle().set("margin-bottom", "0px");
 
-    Button editButton = new Button("Edit", new Icon(VaadinIcon.EDIT));
+    Button editButton = new Button(new Icon(VaadinIcon.EDIT));
     editButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
+    editButton.setTooltipText("Edit");
     editButton.addClickListener(e -> openEditAttributeTypeDialog(se));
 
-    headerLayout.add(header, editButton);
+    Button ldifButton = new Button(new Icon(VaadinIcon.FILE_TEXT_O));
+    ldifButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
+    ldifButton.setTooltipText("LDIF");
+    ldifButton.addClickListener(e -> openAttributeTypeLdifDialog(se));
+
+    headerLayout.add(header, editButton, ldifButton);
     headerLayout.setFlexGrow(1, header);
     headerLayout.getStyle().set("margin-bottom", "16px");
 
@@ -1274,55 +1286,6 @@ public class SchemaManageTab extends VerticalLayout {
         filterWritableExtensions(oc.getExtensions())
     ));
 
-    // LDIF representation field with copy button
-    VerticalLayout ldifContainer = new VerticalLayout();
-    ldifContainer.setPadding(false);
-    ldifContainer.setSpacing(false);
-    
-    HorizontalLayout ldifHeader = new HorizontalLayout();
-    ldifHeader.setWidthFull();
-    ldifHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
-    ldifHeader.getStyle().set("margin-bottom", "4px");
-    
-    Span ldifLabel = new Span("LDIF Representation");
-    ldifLabel.getStyle()
-        .set("font-weight", "500")
-        .set("font-size", "var(--lumo-font-size-s)")
-        .set("color", "var(--lumo-secondary-text-color)");
-    
-    Button copyLdifButton = new Button(new Icon(VaadinIcon.COPY));
-    copyLdifButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
-    copyLdifButton.setTooltipText("Copy LDIF to clipboard");
-    
-    ldifHeader.add(ldifLabel, copyLdifButton);
-    ldifHeader.setFlexGrow(1, ldifLabel);
-    
-    TextArea ldifField = new TextArea();
-    ldifField.setWidthFull();
-    ldifField.setHeight("150px");
-    ldifField.getStyle().set("font-family", "monospace");
-    ldifField.setReadOnly(true);
-    
-    // Initialize LDIF field
-    String initialLdif = schemaDefinitionToLdif(
-        rawSchemaField.getValue(),
-        schemaFileField.getValue(),
-        "objectClasses");
-    ldifField.setValue(initialLdif);
-    
-    // Add copy functionality
-    copyLdifButton.addClickListener(e -> {
-      ldifField.getElement().executeJs(
-          "navigator.clipboard.writeText(this.value).then(() => {" +
-          "  const event = new CustomEvent('ldif-copied');" +
-          "  window.dispatchEvent(event);" +
-          "});"
-      );
-      NotificationHelper.showSuccess("LDIF copied to clipboard");
-    });
-    
-    ldifContainer.add(ldifHeader, ldifField);
-
     // Track if we're updating from raw schema to prevent circular updates
     final boolean[] updatingFromRaw = {false};
 
@@ -1354,11 +1317,6 @@ public class SchemaManageTab extends VerticalLayout {
         if (!rawSchemaField.getValue().equals(newRaw)) {
           rawSchemaField.setValue(newRaw);
         }
-        
-        // Update LDIF field
-        String ldif = schemaDefinitionToLdif(newRaw, schemaFileField.getValue(),
-            "objectClasses");
-        ldifField.setValue(ldif);
       }
     };
 
@@ -1386,15 +1344,10 @@ public class SchemaManageTab extends VerticalLayout {
           updatingFromRaw[0] = false;
         }
       }
-      
-      // Update LDIF field when raw schema changes
-      String ldif = schemaDefinitionToLdif(event.getValue(), schemaFileField.getValue(),
-          "objectClasses");
-      ldifField.setValue(ldif);
     });
 
     form.add(oidField, namesField, descField, typeField, superiorField,
-        requiredField, optionalField, schemaFileField, rawSchemaContainer, ldifContainer);
+        requiredField, optionalField, schemaFileField, rawSchemaContainer);
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
     
@@ -1614,55 +1567,6 @@ public class SchemaManageTab extends VerticalLayout {
         filterWritableExtensions(at.getExtensions())
     ));
 
-    // LDIF representation field with copy button
-    VerticalLayout ldifContainer = new VerticalLayout();
-    ldifContainer.setPadding(false);
-    ldifContainer.setSpacing(false);
-    
-    HorizontalLayout ldifHeader = new HorizontalLayout();
-    ldifHeader.setWidthFull();
-    ldifHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
-    ldifHeader.getStyle().set("margin-bottom", "4px");
-    
-    Span ldifLabel = new Span("LDIF Representation");
-    ldifLabel.getStyle()
-        .set("font-weight", "500")
-        .set("font-size", "var(--lumo-font-size-s)")
-        .set("color", "var(--lumo-secondary-text-color)");
-    
-    Button copyLdifButton = new Button(new Icon(VaadinIcon.COPY));
-    copyLdifButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
-    copyLdifButton.setTooltipText("Copy LDIF to clipboard");
-    
-    ldifHeader.add(ldifLabel, copyLdifButton);
-    ldifHeader.setFlexGrow(1, ldifLabel);
-    
-    TextArea ldifField = new TextArea();
-    ldifField.setWidthFull();
-    ldifField.setHeight("150px");
-    ldifField.getStyle().set("font-family", "monospace");
-    ldifField.setReadOnly(true);
-    
-    // Initialize LDIF field
-    String initialLdif = schemaDefinitionToLdif(
-        rawSchemaField.getValue(),
-        schemaFileField.getValue(),
-        "attributeTypes");
-    ldifField.setValue(initialLdif);
-    
-    // Add copy functionality
-    copyLdifButton.addClickListener(e -> {
-      ldifField.getElement().executeJs(
-          "navigator.clipboard.writeText(this.value).then(() => {" +
-          "  const event = new CustomEvent('ldif-copied');" +
-          "  window.dispatchEvent(event);" +
-          "});"
-      );
-      NotificationHelper.showSuccess("LDIF copied to clipboard");
-    });
-    
-    ldifContainer.add(ldifHeader, ldifField);
-
     // Track if we're updating from raw schema to prevent circular updates
     final boolean[] updatingFromRaw = {false};
 
@@ -1686,11 +1590,6 @@ public class SchemaManageTab extends VerticalLayout {
         if (!rawSchemaField.getValue().equals(newRaw)) {
           rawSchemaField.setValue(newRaw);
         }
-        
-        // Update LDIF field
-        String ldif = schemaDefinitionToLdif(newRaw, schemaFileField.getValue(),
-            "attributeTypes");
-        ldifField.setValue(ldif);
       }
     };
 
@@ -1721,16 +1620,11 @@ public class SchemaManageTab extends VerticalLayout {
           updatingFromRaw[0] = false;
         }
       }
-      
-      // Update LDIF field when raw schema changes
-      String ldif = schemaDefinitionToLdif(event.getValue(), schemaFileField.getValue(),
-          "attributeTypes");
-      ldifField.setValue(ldif);
     });
 
     form.add(oidField, namesField, descField, syntaxField, superiorField,
         equalityField, orderingField, substringField, usageField, schemaFileField,
-        rawSchemaContainer, ldifContainer);
+        rawSchemaContainer);
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
     
@@ -1885,7 +1779,43 @@ public class SchemaManageTab extends VerticalLayout {
     return filtered;
   }
 
+  /**
+   * Strips X-READ-ONLY extensions from a raw schema definition string.
+   * X-READ-ONLY 'false' is the implied default and including it causes
+   * errors when importing LDIF to the LDAP server.
+   *
+   * @param rawDefinition the raw schema definition string
+   * @return the definition with X-READ-ONLY extensions removed
+   */
+  private String stripReadOnlyExtension(String rawDefinition) {
+    if (rawDefinition == null) {
+      return rawDefinition;
+    }
+    // Remove X-READ-ONLY 'false' and X-READ-ONLY 'true'
+    String cleaned = rawDefinition
+        .replaceAll("\\s*X-READ-ONLY\\s+'false'", "")
+        .replaceAll("\\s*X-READ-ONLY\\s+'true'", "");
+    return cleaned;
+  }
 
+  /**
+   * Strips server-managed extensions from a raw schema definition string.
+   * Removes X-READ-ONLY and X-SCHEMA-FILE which should not appear in
+   * delete LDIF operations sent to the LDAP server.
+   *
+   * @param rawDefinition the raw schema definition string
+   * @return the definition with server extensions removed
+   */
+  private String stripServerExtensions(String rawDefinition) {
+    if (rawDefinition == null) {
+      return rawDefinition;
+    }
+    String cleaned = rawDefinition
+        .replaceAll("\\s*X-READ-ONLY\\s+'false'", "")
+        .replaceAll("\\s*X-READ-ONLY\\s+'true'", "")
+        .replaceAll("\\s*X-SCHEMA-FILE\\s+'[^']*'", "");
+    return cleaned;
+  }
 
   /**
    * Builds an object class definition string from the provided fields.
@@ -2918,6 +2848,7 @@ public class SchemaManageTab extends VerticalLayout {
       }
 
       // Check if OID or name already exists on any server
+      List<String> existingOnServers = new ArrayList<>();
       for (String serverName : selectedServers) {
         LdapServerConfig config = configService.getConfiguration(serverName).orElse(null);
         if (config == null) {
@@ -2926,19 +2857,71 @@ public class SchemaManageTab extends VerticalLayout {
         
         Schema schema = ldapService.getSchema(config);
         if (schema != null) {
-          if (schema.getObjectClass(oidField.getValue()) != null) {
-            NotificationHelper.showError("An object class with this OID already exists on " + serverName);
-            oidField.focus();
-            return false;
-          }
-          if (schema.getObjectClass(nameField.getValue()) != null) {
-            NotificationHelper.showError("An object class with this name already exists on " + serverName);
-            nameField.focus();
-            return false;
+          if (schema.getObjectClass(oidField.getValue()) != null
+              || schema.getObjectClass(nameField.getValue()) != null) {
+            existingOnServers.add(serverName);
           }
         }
       }
 
+      if (!existingOnServers.isEmpty()) {
+        // Show warning dialog and allow user to choose to replace
+        Dialog confirmDialog = new Dialog();
+        confirmDialog.setHeaderTitle("Object Class Already Exists");
+        confirmDialog.setWidth("500px");
+
+        Span warningText = new Span(
+            "An object class with this OID or name already exists on: "
+            + String.join(", ", existingOnServers)
+            + ". This operation will replace the existing object class. "
+            + "Do you want to continue?");
+        warningText.getStyle()
+            .set("color", "var(--lumo-warning-text-color)");
+
+        confirmDialog.add(warningText);
+
+        Button cancelConfirm = new Button("Cancel",
+            ev -> confirmDialog.close());
+        Button continueBtn = new Button("Replace", ev -> {
+          confirmDialog.close();
+          performAddObjectClass(dialog, selectedServers, nameField,
+              oidField, descriptionField, typeComboBox, obsoleteCheckbox,
+              superiorClassesSelector, requiredAttributesSelector,
+              optionalAttributesSelector, schemaFileField);
+        });
+        continueBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        confirmDialog.getFooter().add(cancelConfirm, continueBtn);
+        confirmDialog.open();
+        return false; // Dialog handles the rest asynchronously
+      }
+
+      // No conflicts - proceed with adding
+      performAddObjectClass(dialog, selectedServers, nameField, oidField,
+          descriptionField, typeComboBox, obsoleteCheckbox,
+          superiorClassesSelector, requiredAttributesSelector,
+          optionalAttributesSelector, schemaFileField);
+      return true;
+    } catch (Exception e) {
+      NotificationHelper.showError("Failed to add object class: " + e.getMessage());
+      logger.error("Failed to add object class", e);
+      return false;
+    }
+  }
+
+  /**
+   * Performs the actual add/replace of an object class to the selected servers.
+   * Extracted so it can be called directly or from the replace-confirmation
+   * dialog callback.
+   */
+  private void performAddObjectClass(Dialog parentDialog,
+      Set<String> selectedServers, TextField nameField, TextField oidField,
+      TextField descriptionField, ComboBox<String> typeComboBox,
+      Checkbox obsoleteCheckbox,
+      MultiSelectComboBox<String> superiorClassesSelector,
+      MultiSelectComboBox<String> requiredAttributesSelector,
+      MultiSelectComboBox<String> optionalAttributesSelector,
+      TextField schemaFileField) {
+    try {
       // Build object class definition
       StringBuilder objectClassDef = new StringBuilder();
       objectClassDef.append("( ").append(oidField.getValue().trim());
@@ -3068,21 +3051,23 @@ public class SchemaManageTab extends VerticalLayout {
       
       // Show appropriate message
       if (successCount > 0 && failCount == 0) {
-        NotificationHelper.showSuccess("Object class '" + nameField.getValue() + "' added successfully to " 
+        NotificationHelper.showSuccess("Object class '"
+            + nameField.getValue() + "' added successfully to "
             + successCount + " server(s)");
+        parentDialog.close();
       } else if (successCount > 0 && failCount > 0) {
-        NotificationHelper.showError("Object class added to " + successCount + " server(s), but failed on: " 
+        NotificationHelper.showError("Object class added to "
+            + successCount + " server(s), but failed on: "
             + failedServers.toString());
+        parentDialog.close();
       } else {
-        NotificationHelper.showError("Failed to add object class to all servers: " + failedServers.toString());
-        return false;
+        NotificationHelper.showError("Failed to add object class to all"
+            + " servers: " + failedServers.toString());
       }
-      
-      return true;
     } catch (Exception e) {
-      NotificationHelper.showError("Failed to add object class: " + e.getMessage());
+      NotificationHelper.showError(
+          "Failed to add object class: " + e.getMessage());
       logger.error("Failed to add object class", e);
-      return false;
     }
   }
 
@@ -3117,6 +3102,7 @@ public class SchemaManageTab extends VerticalLayout {
       }
 
       // Check if OID or name already exists on any server
+      List<String> existingOnServers = new ArrayList<>();
       for (String serverName : selectedServers) {
         LdapServerConfig config = configService.getConfiguration(serverName).orElse(null);
         if (config == null) {
@@ -3125,18 +3111,74 @@ public class SchemaManageTab extends VerticalLayout {
         
         Schema schema = ldapService.getSchema(config);
         if (schema != null) {
-          if (schema.getAttributeType(oidField.getValue()) != null) {
-            NotificationHelper.showError("An attribute type with this OID already exists on " + serverName);
-            oidField.focus();
-            return false;
-          }
-          if (schema.getAttributeType(nameField.getValue()) != null) {
-            NotificationHelper.showError("An attribute type with this name already exists on " + serverName);
-            nameField.focus();
-            return false;
+          if (schema.getAttributeType(oidField.getValue()) != null
+              || schema.getAttributeType(nameField.getValue()) != null) {
+            existingOnServers.add(serverName);
           }
         }
       }
+
+      if (!existingOnServers.isEmpty()) {
+        // Show warning dialog and allow user to choose to replace
+        Dialog confirmDialog = new Dialog();
+        confirmDialog.setHeaderTitle("Attribute Type Already Exists");
+        confirmDialog.setWidth("500px");
+
+        Span warningText = new Span(
+            "An attribute type with this OID or name already exists on: "
+            + String.join(", ", existingOnServers)
+            + ". This operation will replace the existing attribute type."
+            + " Do you want to continue?");
+        warningText.getStyle()
+            .set("color", "var(--lumo-warning-text-color)");
+
+        confirmDialog.add(warningText);
+
+        Button cancelConfirm = new Button("Cancel",
+            ev -> confirmDialog.close());
+        Button continueBtn = new Button("Replace", ev -> {
+          confirmDialog.close();
+          performAddAttributeType(dialog, selectedServers, nameField,
+              oidField, descriptionField, syntaxOidSelector,
+              superiorTypeSelector, usageComboBox, singleValuedCheckbox,
+              obsoleteCheckbox, collectiveCheckbox,
+              noUserModificationCheckbox, schemaFileField);
+        });
+        continueBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        confirmDialog.getFooter().add(cancelConfirm, continueBtn);
+        confirmDialog.open();
+        return false; // Dialog handles the rest asynchronously
+      }
+
+      // No conflicts - proceed with adding
+      performAddAttributeType(dialog, selectedServers, nameField, oidField,
+          descriptionField, syntaxOidSelector, superiorTypeSelector,
+          usageComboBox, singleValuedCheckbox, obsoleteCheckbox,
+          collectiveCheckbox, noUserModificationCheckbox, schemaFileField);
+      return true;
+    } catch (Exception e) {
+      NotificationHelper.showError(
+          "Failed to add attribute type: " + e.getMessage());
+      logger.error("Failed to add attribute type", e);
+      return false;
+    }
+  }
+
+  /**
+   * Performs the actual add/replace of an attribute type to the selected
+   * servers. Extracted so it can be called directly or from the
+   * replace-confirmation dialog callback.
+   */
+  private void performAddAttributeType(Dialog parentDialog,
+      Set<String> selectedServers, TextField nameField, TextField oidField,
+      TextField descriptionField, ComboBox<String> syntaxOidSelector,
+      ComboBox<String> superiorTypeSelector, ComboBox<String> usageComboBox,
+      Checkbox singleValuedCheckbox, Checkbox obsoleteCheckbox,
+      Checkbox collectiveCheckbox, Checkbox noUserModificationCheckbox,
+      TextField schemaFileField) {
+    try {
+      // Get syntax OID from selector (extract OID from description)
+      String syntaxOid = extractOidOrName(syntaxOidSelector.getValue());
 
       // Build attribute type definition
       StringBuilder attributeDef = new StringBuilder();
@@ -3233,21 +3275,23 @@ public class SchemaManageTab extends VerticalLayout {
 
       // Show appropriate message based on results
       if (successCount > 0 && failCount == 0) {
-        NotificationHelper.showSuccess("Attribute type '" + nameField.getValue()
-            + "' added successfully to " + successCount + " server(s)");
-        return true;
+        NotificationHelper.showSuccess("Attribute type '"
+            + nameField.getValue() + "' added successfully to "
+            + successCount + " server(s)");
+        parentDialog.close();
       } else if (successCount > 0 && failCount > 0) {
-        NotificationHelper.showError("Attribute type '" + nameField.getValue() + "' added to " + successCount
+        NotificationHelper.showError("Attribute type '"
+            + nameField.getValue() + "' added to " + successCount
             + " server(s), but failed on: " + failedServers);
-        return true; // Partial success
+        parentDialog.close();
       } else {
-        NotificationHelper.showError("Failed to add attribute type to any server: " + failedServers);
-        return false;
+        NotificationHelper.showError("Failed to add attribute type to"
+            + " any server: " + failedServers);
       }
     } catch (Exception e) {
-      NotificationHelper.showError("Failed to add attribute type: " + e.getMessage());
+      NotificationHelper.showError(
+          "Failed to add attribute type: " + e.getMessage());
       logger.error("Failed to add attribute type", e);
-      return false;
     }
   }
 
@@ -3727,6 +3771,384 @@ public class SchemaManageTab extends VerticalLayout {
     row.setFlexGrow(1, linksLayout);
 
     parent.add(row);
+  }
+
+  /**
+   * Opens an LDIF dialog for an object class showing Create and Delete LDIF.
+   *
+   * @param se schema element wrapping the object class
+   */
+  private void openObjectClassLdifDialog(
+      SchemaElement<ObjectClassDefinition> se) {
+    ObjectClassDefinition oc = se.getElement();
+
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("LDIF - Object Class: " + oc.getNameOrOID());
+    dialog.setWidth("600px");
+
+    // Create LDIF
+    String rawDef = stripReadOnlyExtension(
+        getRawDefinitionString(oc));
+    String createLdif = schemaDefinitionToLdif(rawDef,
+        getSchemaFileFromExtensions(oc.getExtensions()),
+        "objectClasses");
+
+    Span createLabel = new Span("Create Object Class (LDIF):");
+    createLabel.getStyle().set("font-weight", "bold");
+
+    TextArea createArea = new TextArea();
+    createArea.setWidthFull();
+    createArea.setHeight("150px");
+    createArea.setReadOnly(true);
+    createArea.setValue(createLdif);
+    createArea.getStyle().set("font-family", "monospace");
+
+    Button copyCreateBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyCreateBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyCreateBtn.setTooltipText("Copy to clipboard");
+    copyCreateBtn.addClickListener(e -> {
+      copyCreateBtn.getElement().executeJs(
+          "navigator.clipboard.writeText($0)", createLdif);
+      NotificationHelper.showSuccess(
+          "Create LDIF copied to clipboard");
+    });
+
+    HorizontalLayout createHeader = new HorizontalLayout(
+        createLabel, copyCreateBtn);
+    createHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    // Delete LDIF
+    String deleteLdif = buildDeleteObjectClassLdif(rawDef);
+
+    Span deleteLabel = new Span("Delete Object Class (LDIF):");
+    deleteLabel.getStyle().set("font-weight", "bold");
+
+    TextArea deleteArea = new TextArea();
+    deleteArea.setWidthFull();
+    deleteArea.setHeight("100px");
+    deleteArea.setReadOnly(true);
+    deleteArea.setValue(deleteLdif);
+    deleteArea.getStyle().set("font-family", "monospace");
+
+    Button copyDeleteBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyDeleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyDeleteBtn.setTooltipText("Copy to clipboard");
+    copyDeleteBtn.addClickListener(e -> {
+      copyDeleteBtn.getElement().executeJs(
+          "navigator.clipboard.writeText($0)", deleteLdif);
+      NotificationHelper.showSuccess(
+          "Delete LDIF copied to clipboard");
+    });
+
+    HorizontalLayout deleteHeader = new HorizontalLayout(
+        deleteLabel, copyDeleteBtn);
+    deleteHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    VerticalLayout layout = new VerticalLayout(
+        createHeader, createArea, deleteHeader, deleteArea);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    dialog.add(layout);
+
+    Button closeButton = new Button("Close", e -> dialog.close());
+    dialog.getFooter().add(closeButton);
+    dialog.open();
+  }
+
+  /**
+   * Opens an LDIF dialog for an attribute type showing Create and Delete
+   * LDIF. The Delete LDIF includes updating any object classes that
+   * reference this attribute as MUST or MAY before deleting it.
+   *
+   * @param se schema element wrapping the attribute type
+   */
+  private void openAttributeTypeLdifDialog(
+      SchemaElement<AttributeTypeDefinition> se) {
+    AttributeTypeDefinition at = se.getElement();
+
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("LDIF - Attribute Type: " + at.getNameOrOID());
+    dialog.setWidth("600px");
+
+    // Create LDIF
+    String rawDef = stripReadOnlyExtension(
+        getRawDefinitionString(at));
+    String createLdif = schemaDefinitionToLdif(rawDef,
+        getSchemaFileFromExtensions(at.getExtensions()),
+        "attributeTypes");
+
+    Span createLabel = new Span("Create Attribute Type (LDIF):");
+    createLabel.getStyle().set("font-weight", "bold");
+
+    TextArea createArea = new TextArea();
+    createArea.setWidthFull();
+    createArea.setHeight("150px");
+    createArea.setReadOnly(true);
+    createArea.setValue(createLdif);
+    createArea.getStyle().set("font-family", "monospace");
+
+    Button copyCreateBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyCreateBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyCreateBtn.setTooltipText("Copy to clipboard");
+    copyCreateBtn.addClickListener(e -> {
+      copyCreateBtn.getElement().executeJs(
+          "navigator.clipboard.writeText($0)", createLdif);
+      NotificationHelper.showSuccess(
+          "Create LDIF copied to clipboard");
+    });
+
+    HorizontalLayout createHeader = new HorizontalLayout(
+        createLabel, copyCreateBtn);
+    createHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    // Delete LDIF - includes updating object classes that reference attr
+    String deleteLdif = buildDeleteAttributeTypeLdif(at, se);
+
+    Span deleteLabel = new Span("Delete Attribute Type (LDIF):");
+    deleteLabel.getStyle().set("font-weight", "bold");
+
+    TextArea deleteArea = new TextArea();
+    deleteArea.setWidthFull();
+    deleteArea.setHeight("200px");
+    deleteArea.setReadOnly(true);
+    deleteArea.setValue(deleteLdif);
+    deleteArea.getStyle().set("font-family", "monospace");
+
+    Button copyDeleteBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyDeleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyDeleteBtn.setTooltipText("Copy to clipboard");
+    copyDeleteBtn.addClickListener(e -> {
+      copyDeleteBtn.getElement().executeJs(
+          "navigator.clipboard.writeText($0)", deleteLdif);
+      NotificationHelper.showSuccess(
+          "Delete LDIF copied to clipboard");
+    });
+
+    HorizontalLayout deleteHeader = new HorizontalLayout(
+        deleteLabel, copyDeleteBtn);
+    deleteHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    VerticalLayout layout = new VerticalLayout(
+        createHeader, createArea, deleteHeader, deleteArea);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    dialog.add(layout);
+
+    Button closeButton = new Button("Close", e -> dialog.close());
+    dialog.getFooter().add(closeButton);
+    dialog.open();
+  }
+
+  /**
+   * Builds a delete LDIF string for an object class.
+   *
+   * @param rawDefinition the raw schema definition
+   * @return LDIF to delete the object class
+   */
+  private String buildDeleteObjectClassLdif(String rawDefinition) {
+    String cleanDef = stripServerExtensions(rawDefinition);
+    StringBuilder ldif = new StringBuilder();
+    ldif.append("dn: cn=schema\n");
+    ldif.append("changetype: modify\n");
+    ldif.append("delete: objectClasses\n");
+    ldif.append("objectClasses: ").append(cleanDef).append("\n");
+    return ldif.toString();
+  }
+
+  /**
+   * Builds a delete LDIF string for an attribute type, including LDIF to
+   * update any object classes that reference this attribute as MUST or MAY.
+   *
+   * @param at the attribute type definition
+   * @param se the schema element with server context
+   * @return LDIF to clean up object classes and delete the attribute type
+   */
+  private String buildDeleteAttributeTypeLdif(AttributeTypeDefinition at,
+      SchemaElement<AttributeTypeDefinition> se) {
+    StringBuilder ldif = new StringBuilder();
+
+    // Find all attribute names for this attribute type
+    Set<String> attrNames = new HashSet<>();
+    if (at.getNames() != null && at.getNames().length > 0) {
+      attrNames.addAll(Arrays.asList(at.getNames()));
+    }
+    attrNames.add(at.getOID());
+
+    // Find object classes that reference this attribute
+    Schema schema = getSchemaForElement(se);
+    if (schema != null) {
+      for (ObjectClassDefinition oc : schema.getObjectClasses()) {
+        boolean referencesAttr = false;
+
+        // Check MAY list
+        List<String> newMay = new ArrayList<>();
+        if (oc.getOptionalAttributes() != null) {
+          for (String mayAttr : oc.getOptionalAttributes()) {
+            if (attrNames.contains(mayAttr)) {
+              referencesAttr = true;
+            } else {
+              newMay.add(mayAttr);
+            }
+          }
+        }
+
+        // Check MUST list
+        List<String> newMust = new ArrayList<>();
+        if (oc.getRequiredAttributes() != null) {
+          for (String mustAttr : oc.getRequiredAttributes()) {
+            if (attrNames.contains(mustAttr)) {
+              referencesAttr = true;
+            } else {
+              newMust.add(mustAttr);
+            }
+          }
+        }
+
+        if (referencesAttr) {
+          // Build updated OC definition without this attribute
+          String updatedDef = rebuildObjectClassWithoutAttribute(
+              oc, newMust, newMay);
+
+          // Add updated OC definition (server replaces existing)
+          ldif.append("dn: cn=schema\n");
+          ldif.append("changetype: modify\n");
+          ldif.append("add: objectClasses\n");
+          ldif.append("objectClasses: ").append(updatedDef)
+              .append("\n\n");
+        }
+      }
+    }
+
+    // Delete the attribute type itself
+    String rawDef = stripServerExtensions(
+        getRawDefinitionString(at));
+    ldif.append("dn: cn=schema\n");
+    ldif.append("changetype: modify\n");
+    ldif.append("delete: attributeTypes\n");
+    ldif.append("attributeTypes: ").append(rawDef).append("\n");
+
+    return ldif.toString();
+  }
+
+  /**
+   * Rebuilds an object class definition with updated MUST and MAY lists.
+   *
+   * @param oc the original object class definition
+   * @param newMust the new MUST attribute list
+   * @param newMay the new MAY attribute list
+   * @return rebuilded definition string
+   */
+  private String rebuildObjectClassWithoutAttribute(
+      ObjectClassDefinition oc, List<String> newMust,
+      List<String> newMay) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("( ").append(oc.getOID());
+
+    if (oc.getNames() != null && oc.getNames().length > 0) {
+      String[] names = oc.getNames();
+      if (names.length == 1) {
+        sb.append(" NAME '").append(names[0]).append("'");
+      } else {
+        sb.append(" NAME ( ");
+        for (int i = 0; i < names.length; i++) {
+          if (i > 0) {
+            sb.append(" ");
+          }
+          sb.append("'").append(names[i]).append("'");
+        }
+        sb.append(" )");
+      }
+    }
+
+    if (oc.getDescription() != null && !oc.getDescription().isEmpty()) {
+      sb.append(" DESC '").append(oc.getDescription()).append("'");
+    }
+
+    if (oc.getSuperiorClasses() != null
+        && oc.getSuperiorClasses().length > 0) {
+      String[] sups = oc.getSuperiorClasses();
+      if (sups.length == 1) {
+        sb.append(" SUP ").append(sups[0]);
+      } else {
+        sb.append(" SUP ( ");
+        for (int i = 0; i < sups.length; i++) {
+          if (i > 0) {
+            sb.append(" $ ");
+          }
+          sb.append(sups[i]);
+        }
+        sb.append(" )");
+      }
+    }
+
+    if (oc.getObjectClassType() != null) {
+      String typeName = oc.getObjectClassType().getName();
+      if ("ABSTRACT".equals(typeName) || "AUXILIARY".equals(typeName)) {
+        sb.append(" ").append(typeName);
+      }
+    }
+
+    if (!newMust.isEmpty()) {
+      sb.append(" MUST ");
+      if (newMust.size() == 1) {
+        sb.append(newMust.get(0));
+      } else {
+        sb.append("( ");
+        for (int i = 0; i < newMust.size(); i++) {
+          if (i > 0) {
+            sb.append(" $ ");
+          }
+          sb.append(newMust.get(i));
+        }
+        sb.append(" )");
+      }
+    }
+
+    if (!newMay.isEmpty()) {
+      sb.append(" MAY ");
+      if (newMay.size() == 1) {
+        sb.append(newMay.get(0));
+      } else {
+        sb.append("( ");
+        for (int i = 0; i < newMay.size(); i++) {
+          if (i > 0) {
+            sb.append(" $ ");
+          }
+          sb.append(newMay.get(i));
+        }
+        sb.append(" )");
+      }
+    }
+
+    // Add extensions (except read-only)
+    if (oc.getExtensions() != null && !oc.getExtensions().isEmpty()) {
+      Map<String, String[]> filtered =
+          filterWritableExtensions(oc.getExtensions());
+      if (filtered != null) {
+        for (Map.Entry<String, String[]> entry : filtered.entrySet()) {
+          String key = entry.getKey();
+          String[] values = entry.getValue();
+          if (values != null && values.length > 0) {
+            sb.append(" ").append(key);
+            if (values.length == 1) {
+              sb.append(" '").append(values[0]).append("'");
+            } else {
+              sb.append(" ( ");
+              for (int i = 0; i < values.length; i++) {
+                if (i > 0) {
+                  sb.append(" ");
+                }
+                sb.append("'").append(values[i]).append("'");
+              }
+              sb.append(" )");
+            }
+          }
+        }
+      }
+    }
+
+    sb.append(" )");
+    return sb.toString();
   }
 
   /**

@@ -1,6 +1,27 @@
 # LDAP Web Browser
 
-## v0.53 Entry Editor Enhancements - TODO
+## v0.54 Schema Editor
+1. When adding an objectClass and the objectClass already exist, replace the 
+  'An object class with this OID already exists' message with a warning dialog
+  indicating the object class already exist and the operation will replace the existing
+  object class. and allow the operation to continue if the user chooses to. the add object class operation
+  will automatically replace the existing object Class on the backend ldap server (Ping Directory)
+2. Same as #1. but for when adding attributes.
+3. Using the 'LDIF' button found on the Entry Editor as an example, add an 'LDIF' button
+  on Object Class details next to the existing 'Edit' button
+  - the Object Class 'LDIF' button should open a LDIF dialog that shows both Create and
+    Delete LDIF text fields in ldif format.
+  - use only an icon for the 'LDIF' button with a 'LDIF' tool tip
+4. Same as #3 but for the Attribute details. Add a 'LDIF' button and dialog.
+  - The syntax to delete an attribute type, should also include updating any object classes
+    that contain the selected attribute type as a must or may to clean up any object classes
+    before deleting the attribute.
+5. For both object class and attribute details, update the 'Edit' button to only
+    display the icon with a 'Edit' tool tip.
+6. For both the Edit Object Class and the Edit Attribute type dialogs, remove the LDIF
+    text area. (no longer needed with the stand alone LDIF dialog created above)
+
+## v0.53 Entry Editor Enhancements
 1. On the 'Delete Entry' dialog (displayed after the Delete entry is button is pressed), add an 'ldif' button
     next to the 'delete' button. When the 'ldif' button is pressed, a dialog that shows:
       - a text area with a 'copy to clipboard' icon and text content that contains in ldif format the text
