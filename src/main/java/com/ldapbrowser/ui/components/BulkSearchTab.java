@@ -519,6 +519,18 @@ public class BulkSearchTab extends VerticalLayout {
                 ldapService.deleteEntry(config, changeRecord.getDN());
                 break;
 
+              case MODIFY_DN:
+                if (changeRecord instanceof com.unboundid.ldif.LDIFModifyDNChangeRecord) {
+                  com.unboundid.ldif.LDIFModifyDNChangeRecord modDnRecord =
+                      (com.unboundid.ldif.LDIFModifyDNChangeRecord) changeRecord;
+                  ldapService.modifyDN(config,
+                      modDnRecord.getDN(),
+                      modDnRecord.getNewRDN(),
+                      modDnRecord.getNewSuperiorDN(),
+                      modDnRecord.deleteOldRDN());
+                }
+                break;
+
               default:
                 throw new Exception("Unsupported change type: " + changeRecord.getChangeType());
             }

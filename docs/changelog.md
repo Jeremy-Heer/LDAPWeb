@@ -1,5 +1,20 @@
 # LDAP Web Browser
 
+## v0.55 - Bulk View
+1. Add `changetype: moddn` (Modify DN / Rename / Move) support to the Bulk View tabs.
+   The service layer (`LdapService.modifyDN`) and the Entry Editor already support
+   rename/move operations. The Bulk View tabs currently handle `add`, `modify`, and
+   `delete` change types but throw "Unsupported change type" for `moddn`/`modrdn`.
+   - **Import Tab** (LDIF mode): Add a `MODIFY_DN` case to the change-record switch
+     that casts to `LDIFModifyDNChangeRecord` and calls `ldapService.modifyDN()` with
+     the extracted `newRDN`, `newSuperiorDN`, and `deleteOldRDN` values.
+   - **Import Tab** (CSV mode): Same `MODIFY_DN` case addition for CSV-based LDIF
+     processing.
+   - **Search Tab**: Add a `MODIFY_DN` case to the search-result LDIF processing
+     switch so users can apply rename/move templates to search results.
+   - **Generate Tab**: Add a `MODIFY_DN` case to the generate LDIF processing switch
+     so users can bulk-generate rename/move operations using the `{COUNT}` placeholder.
+
 ## v0.54 Schema Editor
 1. When adding an objectClass and the objectClass already exist, replace the 
   'An object class with this OID already exists' message with a warning dialog
