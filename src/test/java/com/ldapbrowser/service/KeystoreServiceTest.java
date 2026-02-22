@@ -167,6 +167,36 @@ class KeystoreServiceTest {
   }
 
   // ---------------------------------------------------------------------------
+  // Corrupt keystore file
+  // ---------------------------------------------------------------------------
+
+  @Nested
+  @DisplayName("corrupt keystore file")
+  class CorruptFile {
+
+    @Test
+    @DisplayName("getEncryptionKey throws KeyStoreException when keystore contains garbage bytes")
+    void getEncryptionKeyThrowsOnCorruptFile() throws Exception {
+      service.initializeKeystoreIfNeeded();
+      Files.write(service.getSettingsDir().resolve("keystore.pfx"),
+          new byte[]{0x00, 0x01, 0x02, 0x03});
+
+      assertThatThrownBy(() -> service.getEncryptionKey())
+          .isInstanceOf(java.security.KeyStoreException.class);
+    }
+
+    @Test
+    @DisplayName("getKeystoreStats returns 'not initialized' when keystore file is deleted")
+    void statsNotInitializedAfterFileDeletion() throws Exception {
+      service.initializeKeystoreIfNeeded();
+      Files.delete(service.getSettingsDir().resolve("keystore.pfx"));
+      Files.delete(service.getSettingsDir().resolve("keystore.pin"));
+
+      assertThat(service.getKeystoreStats()).containsIgnoringCase("not initialized");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Keystore stats
   // ---------------------------------------------------------------------------
 

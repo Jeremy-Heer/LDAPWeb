@@ -256,6 +256,35 @@ class TruststoreServiceTest {
   }
 
   // ---------------------------------------------------------------------------
+  // Corrupt truststore file
+  // ---------------------------------------------------------------------------
+
+  @Nested
+  @DisplayName("corrupt truststore file")
+  class CorruptFile {
+
+    @Test
+    @DisplayName("listCertificates throws when truststore contains garbage bytes")
+    void listThrowsOnCorruptFile() throws Exception {
+      service.initializeTruststoreIfNeeded();
+      Files.write(service.getTruststorePath(), new byte[]{0x00, 0x01, 0x02, 0x03});
+
+      assertThatThrownBy(() -> service.listCertificates())
+          .isInstanceOf(Exception.class);
+    }
+
+    @Test
+    @DisplayName("addCertificate throws when truststore contains garbage bytes")
+    void addThrowsOnCorruptFile() throws Exception {
+      service.initializeTruststoreIfNeeded();
+      Files.write(service.getTruststorePath(), new byte[]{0x00, 0x01, 0x02, 0x03});
+
+      assertThatThrownBy(() -> service.addCertificate("alias", testCert))
+          .isInstanceOf(Exception.class);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Password and stats
   // ---------------------------------------------------------------------------
 
