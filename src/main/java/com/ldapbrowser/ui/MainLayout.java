@@ -228,38 +228,47 @@ public class MainLayout extends AppLayout {
     com.vaadin.flow.component.icon.Icon serverIcon = VaadinIcon.SERVER.create();
     serverIcon.getStyle().set("color", "#2196F3");
     SideNavItem serverItem = new SideNavItem("Server", ServerView.class, serverIcon);
-    
+    Tooltip.forComponent(serverItem).setText("Manage Server Connections");
+
     com.vaadin.flow.component.icon.Icon searchIcon = VaadinIcon.SEARCH.create();
     searchIcon.getStyle().set("color", "#FF9800");
     SideNavItem searchItem = new SideNavItem("Search", SearchView.class, searchIcon);
-    
+    Tooltip.forComponent(searchItem).setText("Search LDAP");
+
     com.vaadin.flow.component.icon.Icon browseIcon = VaadinIcon.TREE_TABLE.create();
     browseIcon.getStyle().set("color", "#4CAF50");
     SideNavItem browseItem = new SideNavItem("Browse", BrowseView.class, browseIcon);
-    
+    Tooltip.forComponent(browseItem).setText("Browse the LDAP Tree");
+
     com.vaadin.flow.component.icon.Icon schemaIcon = VaadinIcon.DATABASE.create();
     schemaIcon.getStyle().set("color", "#9C27B0");
     SideNavItem schemaItem = new SideNavItem("Schema", SchemaView.class, schemaIcon);
-    
+    Tooltip.forComponent(schemaItem).setText("Manage LDAP Schema");
+
     com.vaadin.flow.component.icon.Icon createIcon = VaadinIcon.PLUS_CIRCLE.create();
     createIcon.getStyle().set("color", "#66BB6A");
     SideNavItem createItem = new SideNavItem("Create", Create.class, createIcon);
-    
+    Tooltip.forComponent(createItem).setText("Create LDAP Entries");
+
     com.vaadin.flow.component.icon.Icon accessIcon = VaadinIcon.KEY.create();
     accessIcon.getStyle().set("color", "#FFC107");
     SideNavItem accessItem = new SideNavItem("Access", AccessView.class, accessIcon);
-    
+    Tooltip.forComponent(accessItem).setText("Manage ACIs");
+
     com.vaadin.flow.component.icon.Icon bulkIcon = VaadinIcon.PACKAGE.create();
     bulkIcon.getStyle().set("color", "#FF5722");
     SideNavItem bulkItem = new SideNavItem("Bulk", BulkView.class, bulkIcon);
-    
+    Tooltip.forComponent(bulkItem).setText("Perform bulk modify operations");
+
     com.vaadin.flow.component.icon.Icon exportIcon = VaadinIcon.DOWNLOAD.create();
     exportIcon.getStyle().set("color", "#009688");
     SideNavItem exportItem = new SideNavItem("Export", ExportView.class, exportIcon);
-    
+    Tooltip.forComponent(exportItem).setText("Export LDAP data to file");
+
     com.vaadin.flow.component.icon.Icon settingsIcon = VaadinIcon.COG.create();
     settingsIcon.getStyle().set("color", "#607D8B");
     SideNavItem settingsItem = new SideNavItem("Settings", SettingsView.class, settingsIcon);
+    Tooltip.forComponent(settingsItem).setText("TLS and encryption");
 
     // Add all items to SideNav
     sideNav.addItem(

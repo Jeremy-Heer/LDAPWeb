@@ -1,5 +1,17 @@
 # LDAP Web Browser
 
+## v0.56 - tool tips
+1. In the main layout, add tool tips to navbar icons
+  - Server: Manage Server Connections
+  - Search: Search LDAP
+  - Browse: Browse the LDAP Tree
+  - Schema: Manage LDAP Schema
+  - Create: Create LDAP Entries
+  - Access: Manage ACIs
+  - Bulk: Perform bulk modify operations
+  - Export: Export LDAP data to file
+  - Settings: TLS and encryption
+
 ## v0.55 - Bulk View
 1. Add `changetype: moddn` (Modify DN / Rename / Move) support to the Bulk View tabs.
    The service layer (`LdapService.modifyDN`) and the Entry Editor already support
