@@ -1,5 +1,7 @@
 package com.ldapbrowser.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.ldapbrowser.exception.CertificateValidationException;
 import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
@@ -32,6 +34,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -74,7 +77,10 @@ public class LdapService {
   private final Map<String, RootDSE> rootDseCache = new ConcurrentHashMap<>();
   private final Map<String, List<String>> namingContextsCache = new ConcurrentHashMap<>();
   private final Map<String, List<String>> privateNamingContextsCache = new ConcurrentHashMap<>();
-  private final Map<String, LdapEntry> entryMinimalCache = new ConcurrentHashMap<>();
+  private final Cache<String, LdapEntry> entryMinimalCache = Caffeine.newBuilder()
+      .maximumSize(1000)
+      .expireAfterAccess(Duration.ofMinutes(60))
+      .build();
   
   // Lock objects for thread-safe cache population (prevent cache stampede)
   private final Map<String, Object> rootDseLocks = new ConcurrentHashMap<>();
@@ -1419,7 +1425,7 @@ public class LdapService {
     String cacheKey = config.getName() + ":" + dn;
     
     // First check without locking (fast path for cache hits)
-    LdapEntry ldapEntry = entryMinimalCache.get(cacheKey);
+    LdapEntry ldapEntry = entryMinimalCache.getIfPresent(cacheKey);
     if (ldapEntry != null) {
       logger.debug("Using cached minimal entry for {}: {}", config.getName(), dn);
       return ldapEntry;
@@ -1431,7 +1437,7 @@ public class LdapService {
     // Synchronize on the dedicated lock object
     synchronized (lock) {
       // Double-check after acquiring lock
-      ldapEntry = entryMinimalCache.get(cacheKey);
+      ldapEntry = entryMinimalCache.getIfPresent(cacheKey);
       if (ldapEntry != null) {
         logger.debug("Using cached minimal entry for {}: {} (after sync)", config.getName(), dn);
         return ldapEntry;
@@ -1647,9 +1653,14 @@ public class LdapService {
     rootDseCache.remove(serverName);
     namingContextsCache.remove(serverName);
     privateNamingContextsCache.remove(serverName);
+    rootDseLocks.remove(serverName);
+    namingContextsLocks.remove(serverName);
+    privateNamingContextsLocks.remove(serverName);
     
     // Clear minimal entry cache entries for this server
-    entryMinimalCache.entrySet().removeIf(entry -> entry.getKey().startsWith(serverName + ":"));
+    entryMinimalCache.asMap().entrySet().removeIf(
+        entry -> entry.getKey().startsWith(serverName + ":"));
+    entryMinimalLocks.entrySet().removeIf(e -> e.getKey().startsWith(serverName + ":"));
     
     logger.debug("Cleared browse caches for {}", serverName);
   }
@@ -1661,7 +1672,11 @@ public class LdapService {
     rootDseCache.clear();
     namingContextsCache.clear();
     privateNamingContextsCache.clear();
-    entryMinimalCache.clear();
+    rootDseLocks.clear();
+    namingContextsLocks.clear();
+    privateNamingContextsLocks.clear();
+    entryMinimalCache.invalidateAll();
+    entryMinimalLocks.clear();
     logger.debug("Cleared all browse caches");
   }
 

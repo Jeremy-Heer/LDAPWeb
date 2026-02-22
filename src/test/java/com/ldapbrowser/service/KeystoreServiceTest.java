@@ -10,7 +10,6 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.security.KeyStoreException;
 import java.util.Set;
 import javax.crypto.SecretKey;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -34,18 +33,10 @@ class KeystoreServiceTest {
   Path tempDir;
 
   KeystoreService service;
-  String originalUserHome;
 
   @BeforeEach
   void setUp() {
-    originalUserHome = System.getProperty("user.home");
-    System.setProperty("user.home", tempDir.toString());
-    service = new KeystoreService();
-  }
-
-  @AfterEach
-  void tearDown() {
-    System.setProperty("user.home", originalUserHome);
+    service = new KeystoreService(tempDir.resolve(".ldapbrowser").toString());
   }
 
   // ---------------------------------------------------------------------------

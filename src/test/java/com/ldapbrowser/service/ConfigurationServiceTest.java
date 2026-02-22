@@ -14,7 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -36,22 +35,15 @@ class ConfigurationServiceTest {
   @Mock
   private EncryptionService encryptionService;
 
-  private String originalUserHome;
   private ConfigurationService service;
 
   @BeforeEach
   void setUp() {
-    originalUserHome = System.getProperty("user.home");
-    System.setProperty("user.home", tempHome.toString());
     // Encryption disabled by default for most tests; use lenient to avoid
     // UnnecessaryStubbing warnings in tests that change this behavior.
     lenient().when(encryptionService.isEncryptionEnabled()).thenReturn(false);
-    service = new ConfigurationService(encryptionService);
-  }
-
-  @AfterEach
-  void tearDown() {
-    System.setProperty("user.home", originalUserHome);
+    service = new ConfigurationService(encryptionService,
+        tempHome.resolve(".ldapbrowser").toString());
   }
 
   // -------------------------------------------------------------------------

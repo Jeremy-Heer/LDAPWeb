@@ -1,5 +1,6 @@
 package com.ldapbrowser.service;
 
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
@@ -9,13 +10,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -27,7 +28,6 @@ import org.springframework.stereotype.Service;
 public class ConfigurationService {
 
   private static final Logger logger = LoggerFactory.getLogger(ConfigurationService.class);
-  private static final String SETTINGS_DIR = ".ldapbrowser";
   private static final String CONFIG_FILE = "connections.json";
   private final ObjectMapper objectMapper;
   private final Path configPath;
@@ -38,14 +38,16 @@ public class ConfigurationService {
    * Constructor initializes the configuration service.
    *
    * @param encryptionService encryption service for password handling
+   * @param settingsDirValue resolved path of the application settings directory
+   *     (injected from {@code ldapbrowser.settings.dir} property)
    */
-  public ConfigurationService(EncryptionService encryptionService) {
+  public ConfigurationService(EncryptionService encryptionService,
+      @Value("${ldapbrowser.settings.dir}") String settingsDirValue) {
     this.encryptionService = encryptionService;
     this.objectMapper = JsonMapper.builder()
         .enable(SerializationFeature.INDENT_OUTPUT)
         .build();
-    String userHome = System.getProperty("user.home");
-    this.settingsDir = Paths.get(userHome, SETTINGS_DIR);
+    this.settingsDir = Path.of(settingsDirValue);
     this.configPath = settingsDir.resolve(CONFIG_FILE);
     ensureConfigDirectoryExists();
   }
@@ -89,7 +91,7 @@ public class ConfigurationService {
       }
 
       return configList;
-    } catch (Exception e) {
+    } catch (JacksonException e) {
       logger.error("Failed to load configurations", e);
       return new ArrayList<>();
     }

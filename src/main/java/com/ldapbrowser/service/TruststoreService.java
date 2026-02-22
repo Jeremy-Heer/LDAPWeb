@@ -1,11 +1,10 @@
 package com.ldapbrowser.service;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
@@ -16,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -27,7 +27,6 @@ import org.springframework.stereotype.Service;
 public class TruststoreService {
 
   private static final Logger logger = LoggerFactory.getLogger(TruststoreService.class);
-  private static final String SETTINGS_DIR = ".ldapbrowser";
   private static final String TRUSTSTORE_FILENAME = "truststore.pfx";
   private static final String PIN_FILENAME = "truststore.pin";
   private static final String KEYSTORE_TYPE = "PKCS12";
@@ -39,11 +38,13 @@ public class TruststoreService {
 
   /**
    * Creates the truststore service.
-   * Initializes paths to ~/.ldapbrowser/truststore.pfx and ~/.ldapbrowser/truststore.pin.
+   *
+   * @param settingsDirValue resolved path of the application settings directory
+   *     (injected from {@code ldapbrowser.settings.dir} property)
    */
-  public TruststoreService() {
-    String userHome = System.getProperty("user.home");
-    this.settingsDir = Paths.get(userHome, SETTINGS_DIR);
+  public TruststoreService(
+      @Value("${ldapbrowser.settings.dir}") String settingsDirValue) {
+    this.settingsDir = Path.of(settingsDirValue);
     this.truststorePath = settingsDir.resolve(TRUSTSTORE_FILENAME);
     this.pinPath = settingsDir.resolve(PIN_FILENAME);
   }
@@ -69,7 +70,7 @@ public class TruststoreService {
       keyStore.load(null, pin.toCharArray());
 
       // Save keystore
-      try (FileOutputStream fos = new FileOutputStream(truststorePath.toFile())) {
+      try (OutputStream fos = Files.newOutputStream(truststorePath)) {
         keyStore.store(fos, pin.toCharArray());
       }
 
@@ -84,8 +85,7 @@ public class TruststoreService {
         pinPath.toFile().setWritable(true, true);
       } catch (Exception e) {
         // Permissions may not work on all platforms, log but continue
-        System.err.println("Warning: Could not set restrictive permissions on pin file: " 
-            + e.getMessage());
+        logger.warn("Could not set restrictive permissions on pin file: {}", e.getMessage());
       }
     }
   }
@@ -125,7 +125,7 @@ public class TruststoreService {
     char[] pin = loadPin();
     KeyStore keyStore = KeyStore.getInstance(KEYSTORE_TYPE);
 
-    try (FileInputStream fis = new FileInputStream(truststorePath.toFile())) {
+    try (InputStream fis = Files.newInputStream(truststorePath)) {
       keyStore.load(fis, pin);
     }
 
@@ -140,7 +140,7 @@ public class TruststoreService {
    */
   private void saveKeyStore(KeyStore keyStore) throws Exception {
     char[] pin = loadPin();
-    try (FileOutputStream fos = new FileOutputStream(truststorePath.toFile())) {
+    try (OutputStream fos = Files.newOutputStream(truststorePath)) {
       keyStore.store(fos, pin);
     }
   }

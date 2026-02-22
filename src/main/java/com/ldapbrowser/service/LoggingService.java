@@ -11,7 +11,6 @@ import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -69,9 +68,7 @@ public class LoggingService {
   @PostConstruct
   public void init() {
     try {
-      // Expand user home directory
-      String expandedPath = settingsDir.replace("${user.home}", System.getProperty("user.home"));
-      Path settingsDirPath = Paths.get(expandedPath);
+      Path settingsDirPath = Path.of(settingsDir);
       
       // Create settings directory if it doesn't exist
       if (!Files.exists(settingsDirPath)) {
@@ -130,10 +127,14 @@ public class LoggingService {
   private void saveLogsToFile() {
     executorService.submit(() -> {
       lock.readLock().lock();
+      List<LogEntry> entriesToSave;
       try {
-        List<LogEntry> entriesToSave = new ArrayList<>(logBuffer);
+        entriesToSave = new ArrayList<>(logBuffer);
+      } finally {
         lock.readLock().unlock();
-        
+      }
+      
+      try {
         objectMapper.writeValue(logFilePath.toFile(), entriesToSave);
         logger.trace("Saved {} log entries to file", entriesToSave.size());
       } catch (Exception e) {

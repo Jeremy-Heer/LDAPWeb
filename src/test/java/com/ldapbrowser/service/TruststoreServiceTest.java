@@ -10,7 +10,6 @@ import java.security.KeyStore;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,7 +39,6 @@ class TruststoreServiceTest {
   Path tempDir;
 
   TruststoreService service;
-  String originalUserHome;
 
   // ---------------------------------------------------------------------------
   // Class-level setup — generate a test certificate once using keytool
@@ -102,14 +100,7 @@ class TruststoreServiceTest {
 
   @BeforeEach
   void setUp() {
-    originalUserHome = System.getProperty("user.home");
-    System.setProperty("user.home", tempDir.toString());
-    service = new TruststoreService();
-  }
-
-  @AfterEach
-  void tearDown() {
-    System.setProperty("user.home", originalUserHome);
+    service = new TruststoreService(tempDir.resolve(".ldapbrowser").toString());
   }
 
   // ---------------------------------------------------------------------------

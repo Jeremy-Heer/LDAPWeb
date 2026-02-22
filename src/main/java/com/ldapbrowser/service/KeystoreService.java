@@ -23,6 +23,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -33,7 +34,6 @@ import org.springframework.stereotype.Service;
 public class KeystoreService {
 
   private static final Logger logger = LoggerFactory.getLogger(KeystoreService.class);
-  private static final String SETTINGS_DIR = ".ldapbrowser";
   private static final String KEYSTORE_FILE = "keystore.pfx";
   private static final String PIN_FILE = "keystore.pin";
   private static final String KEY_ALIAS = "ldap-password-encryption-key";
@@ -47,10 +47,13 @@ public class KeystoreService {
 
   /**
    * Constructor initializes paths for keystore and PIN file.
+   *
+   * @param settingsDirValue resolved path of the application settings directory
+   *     (injected from {@code ldapbrowser.settings.dir} property)
    */
-  public KeystoreService() {
-    String userHome = System.getProperty("user.home");
-    this.settingsDir = Path.of(userHome, SETTINGS_DIR);
+  public KeystoreService(
+      @Value("${ldapbrowser.settings.dir}") String settingsDirValue) {
+    this.settingsDir = Path.of(settingsDirValue);
     this.keystorePath = settingsDir.resolve(KEYSTORE_FILE);
     this.pinPath = settingsDir.resolve(PIN_FILE);
   }

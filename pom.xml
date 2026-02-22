@@ -14,7 +14,7 @@
 
   <groupId>com.ldapbrowser</groupId>
   <artifactId>ldap-browser</artifactId>
-  <version>0.56</version>
+  <version>0.60</version>
   <name>LDAP Browser</name>
   <description>Comprehensive Java web application for browsing, searching, and managing LDAP directories</description>
 
@@ -63,6 +63,12 @@
       <groupId>com.unboundid</groupId>
       <artifactId>unboundid-ldapsdk</artifactId>
       <version>${unboundid.version}</version>
+    </dependency>
+
+    <!-- Bounded in-memory caching -->
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
     </dependency>
 
     <!-- Development tools -->
