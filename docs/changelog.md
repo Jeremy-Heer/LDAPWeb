@@ -1,5 +1,155 @@
 # LDAP Web Browser
 
+## v0.60 - Configuration & Resource Management
+1. Unify settings directory injection across all services
+   - `KeystoreService` and `TruststoreService` hardcode `".ldapbrowser"` instead of
+     reading from the `ldapbrowser.settings.dir` `@Value` property like
+     `ConfigurationService` does. Inject the value consistently so changing the
+     property does not break keystore or truststore paths.
+   - Extract a shared constant or configuration bean for `SETTINGS_DIR`.
+2. Add bounded caching with eviction policies
+   - `entryMinimalCache` in `LdapService` grows without bound. Replace with a
+     bounded cache (Caffeine or Guava LRU) with a configurable max size and TTL.
+   - Clean up lock maps (`rootDseLocks`, `namingContextsLocks`,
+     `privateNamingContextsLocks`, `entryMinimalLocks`) in `clearBrowseCache()` to
+     prevent memory leaks proportional to unique server/DN combinations.
+3. Fix `LoggingService.saveLogsToFile()` race condition
+   - The read lock is released before the file write completes. Hold the lock for
+     the entire write operation, or serialize writes properly to prevent concurrent
+     file corruption.
+4. Fix manual `${user.home}` expansion in `LoggingService.init()`
+   - Replace `settingsDir.replace("${user.home}", System.getProperty("user.home"))`
+     with proper Spring property resolution so the value is expanded automatically.
+5. Replace `System.err.println` with SLF4J logger in `TruststoreService`
+   - The warning about restrictive file permissions should use `logger.warn()`
+     instead of `System.err.println`.
+6. Standardize `Path.of()` over `Paths.get()` across all services
+   - `ConfigurationService` uses `Paths.get()` while `KeystoreService` uses
+     `Path.of()`. Use the modern `Path.of()` consistently.
+7. Improve exception handling in `ConfigurationService.loadConfigurations()`
+   - Catching broad `Exception` and returning an empty list silently swallows JSON
+     parse errors (corrupt config file). Distinguish "no configurations" from
+     "corrupted file" and surface the error to the user.
+8. Use consistent `try-with-resources` in `TruststoreService`
+   - Some methods use explicit `FileOutputStream`/`FileInputStream` with
+     try-finally while others use `try-with-resources`. Standardize on
+     `try-with-resources` throughout.
+
+## v0.59 - Code Quality & Refactoring
+1. Decompose `LdapService` god class (~2,238 lines)
+   - Extract `LdapConnectionService` — connection pool lifecycle, health checks,
+     retry logic, `executeWithRetry()`.
+   - Extract `LdapSchemaService` — schema retrieval, caching, schema modification
+     operations (`modifyObjectClassInSchema`, `modifyAttributeTypeInSchema`,
+     `addObjectClassToSchema`, `addAttributeTypeToSchema`).
+   - Extract `LdapBrowseService` — browse/paging operations, Root DSE and naming
+     contexts caching.
+   - Extract `LdapCrudService` — entry read, modify, add, delete operations.
+   - Keep `LdapService` as a thin facade delegating to focused services.
+2. Decompose `EntryEditor` UI component (~2,318 lines)
+   - Separate UI layout construction from event handling logic.
+   - Extract clipboard functionality into a reusable utility.
+   - Extract LDAP operation calls into a dedicated presenter or controller layer.
+3. Externalize `OidLookupTable` static data (~1,500 lines)
+   - Move the `HashMap` initializer data to a JSON or properties resource file
+     loaded at startup. Keep the lookup API unchanged.
+4. Eliminate LDIF generation code duplication
+   - `modifyAttribute()`, `addAttribute()`, `deleteAttribute()` in `LdapService`
+     contain nearly identical LDIF `StringBuilder` patterns. Extract a
+     `LdifGenerator` utility class.
+5. Eliminate schema modification code duplication
+   - `modifyObjectClassInSchema()`, `modifyAttributeTypeInSchema()`,
+     `addObjectClassToSchema()`, `addAttributeTypeToSchema()` follow identical
+     patterns differing only in the attribute name (`objectClasses` vs
+     `attributeTypes`). Parameterize into a shared method.
+6. Add `equals()` and `hashCode()` to `LdapEntry`
+   - `LdapEntry` is used as a `HashMap` key in `LdapTreeGrid.entryServerMap` but
+     relies on identity comparison. Implement based on the entry DN.
+7. Fix naming inconsistencies
+   - Rename `isHasChildren()` to `hasChildren()` in `LdapEntry`.
+   - Rename `Create.java` view to `CreateView.java` to match the `*View` naming
+     convention used by all other views.
+8. Adopt `Optional` return types where appropriate
+   - Methods like `LdapEntry.getFirstAttributeValue()` return `null`. Return
+     `Optional<String>` instead to encourage null-safe usage by callers.
+9. Refactor `NotificationHelper` static coupling
+   - Replace static `setLoggingService()` side-channel with proper dependency
+     injection through Vaadin session or a request-scoped bean.
+
+## v0.58 - Security Hardening
+1. Fix `TrustAllTrustManager` fallback on truststore load failure
+   - In `LdapService.createSSLUtil()`, when loading the truststore throws an
+     `IOException`, the code falls back to `TrustAllTrustManager`. This should fail
+     closed (throw an exception / surface error to user) rather than silently
+     trusting all certificates.
+2. Fix StartTLS post-connect processor certificate validation
+   - `StartTLSPostConnectProcessor` in `LdapService` is hardcoded with
+     `TrustAllTrustManager`, bypassing certificate validation for pooled
+     connections. Use the same configured trust manager as the initial connection.
+3. Prevent LDAP filter injection in `SearchFilter.toLdapFilter()`
+   - `toLdapFilter()` constructs LDAP filter strings via string concatenation
+     without escaping user-provided attribute names and values. Use the UnboundID
+     SDK `Filter.encodeValue()` or the type-safe `Filter.create*()` factory methods.
+4. Add input validation to `LdapServerConfig` fields
+   - Host, port, and bind DN fields have no validation. Validate non-null/non-empty
+     host, valid port range (1-65535), and well-formed DN before connection attempts.
+5. Validate LDAP search filter syntax before execution
+   - `browseEntriesWithPage()` passes the user-provided `searchFilter` directly to
+     LDAP without validating it is a well-formed filter. Use
+     `Filter.create(searchFilter)` to validate syntax before sending to the server.
+6. Return defensive copy of certificate chain array
+   - `CertificateValidationException.getCertificateChain()` returns the internal
+     mutable array. Return `certificateChain.clone()` instead.
+7. Add a warning log when `validateCertificate` is disabled
+   - When the user disables certificate validation, log a `WARN` message so the
+     security posture is visible in logs.
+8. Add OWASP dependency-check Maven plugin
+   - Configure `org.owasp:dependency-check-maven` in the build to scan for known
+     CVEs in project dependencies.
+
+## v0.57 - Unit Test Foundation
+1. Set up test infrastructure
+   - Add `spring-boot-starter-test`, `mockito`, and `assertj` test dependencies to
+     `pom.xml` (if not already present via Spring Boot starter).
+   - Configure Surefire and Failsafe plugins with explicit settings.
+   - Set Checkstyle `failsOnError` to `true` so style violations block the build.
+2. Add unit tests for `EncryptionService`
+   - Test encrypt/decrypt round-trip for various inputs (empty string, unicode,
+     long text).
+   - Test that different encryptions of the same plaintext produce different
+     ciphertexts (unique IV).
+   - Test decryption with wrong key fails gracefully.
+   - Test null/empty input handling.
+3. Add unit tests for `SearchFilter` and `SearchFilterGroup`
+   - Test `toLdapFilter()` output for each `SearchOperator`.
+   - Test filter group combination with AND/OR/NOT.
+   - Test edge cases: special characters, empty values, null attributes.
+   - (After v0.58 fix) Test that special LDAP characters are properly escaped.
+4. Add unit tests for `ConfigurationService`
+   - Test save and load round-trip for server configurations.
+   - Test behavior with missing/corrupt configuration files.
+   - Test encryption integration (encrypted passwords persist and restore).
+5. Add unit tests for `LdapService` core methods
+   - Mock the UnboundID `LDAPConnection` and `LDAPConnectionPool`.
+   - Test `executeWithRetry()` retry behavior and pool recreation.
+   - Test `getConnectionErrorMessage()` mapping for all result codes.
+   - Test `createSSLUtil()` with various `LdapServerConfig` combinations.
+   - Test browse, search, and CRUD operations with mocked connections.
+6. Add unit tests for `TruststoreService` and `KeystoreService`
+   - Test truststore creation, certificate add/remove, and listing.
+   - Test keystore PIN file permissions.
+   - Test behavior when truststore file is missing or corrupt.
+7. Add unit tests for `AciParser`
+   - Test parsing of well-formed ACI strings.
+   - Test handling of malformed ACI input.
+   - Test round-trip: parse then serialize back to ACI string.
+8. Add unit tests for `OidLookupTable`
+   - Test lookup of known OIDs.
+   - Test unknown OID returns appropriate default/null.
+9. Add unit tests for UI utility classes
+   - Test `NotificationHelper` message formatting.
+   - Test `DnUtils` (if present) for DN parsing and manipulation.
+
 ## v0.56 - tool tips
 1. In the main layout, add tool tips to navbar icons
   - Server: Manage Server Connections
