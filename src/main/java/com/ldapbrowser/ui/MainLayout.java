@@ -10,7 +10,7 @@ import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.ui.views.AccessView;
 import com.ldapbrowser.ui.views.BrowseView;
 import com.ldapbrowser.ui.views.BulkView;
-import com.ldapbrowser.ui.views.Create;
+import com.ldapbrowser.ui.views.CreateView;
 import com.ldapbrowser.ui.views.ExportView;
 import com.ldapbrowser.ui.views.SchemaView;
 import com.ldapbrowser.ui.views.SearchView;
@@ -247,7 +247,7 @@ public class MainLayout extends AppLayout {
 
     com.vaadin.flow.component.icon.Icon createIcon = VaadinIcon.PLUS_CIRCLE.create();
     createIcon.getStyle().set("color", "#66BB6A");
-    SideNavItem createItem = new SideNavItem("Create", Create.class, createIcon);
+    SideNavItem createItem = new SideNavItem("Create", CreateView.class, createIcon);
     Tooltip.forComponent(createItem).setText("Create LDAP Entries");
 
     com.vaadin.flow.component.icon.Icon accessIcon = VaadinIcon.KEY.create();

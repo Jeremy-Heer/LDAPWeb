@@ -26,10 +26,12 @@ public class CertificateValidationException extends Exception {
   /**
    * Gets the certificate chain that failed validation.
    *
-   * @return certificate chain, typically with server certificate at index 0
+   * <p>Returns a defensive copy so callers cannot mutate internal state.
+   *
+   * @return copy of certificate chain, or {@code null} if none was provided
    */
   public X509Certificate[] getCertificateChain() {
-    return certificateChain;
+    return certificateChain != null ? certificateChain.clone() : null;
   }
 
   /**

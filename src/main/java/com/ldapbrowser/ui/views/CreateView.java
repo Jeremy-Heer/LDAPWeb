@@ -35,7 +35,7 @@ import java.util.Set;
  */
 @Route(value = "create", layout = MainLayout.class)
 @PageTitle("Create | LDAP Browser")
-public class Create extends VerticalLayout {
+public class CreateView extends VerticalLayout {
 
   private final LdapService ldapService;
   private final ConfigurationService configService;
@@ -62,7 +62,7 @@ public class Create extends VerticalLayout {
    * @param configService configuration service
    * @param truststoreService truststore service
    */
-  public Create(LdapService ldapService, ConfigurationService configService,
+  public CreateView(LdapService ldapService, ConfigurationService configService,
       TruststoreService truststoreService) {
     this.ldapService = ldapService;
     this.configService = configService;

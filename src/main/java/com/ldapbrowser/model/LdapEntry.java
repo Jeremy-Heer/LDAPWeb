@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Represents an LDAP entry with its attributes.
@@ -115,7 +116,7 @@ public class LdapEntry {
    *
    * @return true if entry has children
    */
-  public boolean isHasChildren() {
+  public boolean hasChildren() {
     return hasChildren;
   }
   
@@ -162,5 +163,34 @@ public class LdapEntry {
   public String getDisplayName() {
     String displayRdn = getRdn();
     return displayRdn != null ? displayRdn : dn;
+  }
+
+  /**
+   * Two entries are equal when their DN and server name match.
+   * Required so {@code LdapEntry} can be used safely as a {@link java.util.HashMap} key.
+   *
+   * @param o the object to compare
+   * @return true if both DN and server name are equal
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof LdapEntry)) {
+      return false;
+    }
+    LdapEntry other = (LdapEntry) o;
+    return Objects.equals(dn, other.dn) && Objects.equals(serverName, other.serverName);
+  }
+
+  /**
+   * Hash code consistent with {@link #equals}.
+   *
+   * @return hash code based on DN and server name
+   */
+  @Override
+  public int hashCode() {
+    return Objects.hash(dn, serverName);
   }
 }

@@ -123,7 +123,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
       String key = e.getEventData().get("event.key").asText();
       if ("Enter".equals(key) || " ".equals(key)) {
         LdapEntry selectedEntry = asSingleSelect().getValue();
-        if (selectedEntry != null && selectedEntry.isHasChildren()) {
+        if (selectedEntry != null && selectedEntry.hasChildren()) {
           if (isExpanded(selectedEntry)) {
             collapse(selectedEntry);
           } else {
@@ -371,7 +371,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     }
 
     // Container types
-    if (entry.isHasChildren() && objectClasses != null) {
+    if (entry.hasChildren() && objectClasses != null) {
       for (String objectClass : objectClasses) {
         String lowerClass = objectClass.toLowerCase();
         if (lowerClass.contains("organizationalunit") || lowerClass.contains("ou")) {
@@ -786,7 +786,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
             entryServerMap.put(child, serverConfig); // Track server for this entry
             treeData.addItem(parent, child);
 
-            if (child.isHasChildren() || shouldShowExpanderForEntry(child)) {
+            if (child.hasChildren() || shouldShowExpanderForEntry(child)) {
               LdapEntry placeholder = createPlaceholderEntry();
               treeData.addItem(child, placeholder);
             }
@@ -829,7 +829,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
    * @param entry the entry to expand
    */
   public void expandEntry(LdapEntry entry) {
-    if (entry.isHasChildren() && !isExpanded(entry)) {
+    if (entry.hasChildren() && !isExpanded(entry)) {
       loadChildren(entry);
       expand(entry);
     }

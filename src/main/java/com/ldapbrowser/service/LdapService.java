@@ -4,6 +4,7 @@ import com.ldapbrowser.exception.CertificateValidationException;
 import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.util.LdifGenerator;
 import com.unboundid.asn1.ASN1OctetString;
 import com.unboundid.ldap.sdk.Attribute;
 import com.unboundid.ldap.sdk.Control;
@@ -253,13 +254,15 @@ public class LdapService {
         logger.debug("Using truststore validation for {}", config.getName());
         return new SSLUtil(trustManager);
       } catch (IOException e) {
-        logger.error("Failed to load truststore, falling back to trust all: {}", e.getMessage());
-        // Fall back to trust all if truststore can't be loaded
-        return new SSLUtil(new TrustAllTrustManager());
+        logger.error("Failed to load truststore for {}: {}", config.getName(), e.getMessage());
+        throw new GeneralSecurityException(
+            "Truststore could not be loaded for server "
+                + config.getName() + ": " + e.getMessage(), e);
       }
     } else {
-      // Trust all certificates when validation is disabled
-      logger.debug("Certificate validation disabled for {}", config.getName());
+      // Trust all certificates when validation is disabled.
+      logger.warn("Certificate validation is DISABLED for server '{}' — "
+          + "all certificates will be trusted", config.getName());
       return new SSLUtil(new TrustAllTrustManager());
     }
   }
@@ -444,7 +447,7 @@ public class LdapService {
 
     StartTLSPostConnectProcessor postConnectProcessor = null;
     if (config.isUseStartTls() && !config.isUseSsl()) {
-      SSLUtil sslUtil = new SSLUtil(new TrustAllTrustManager());
+      SSLUtil sslUtil = createSslUtil(config);
       SSLContext sslContext = sslUtil.createSSLContext();
       postConnectProcessor = new StartTLSPostConnectProcessor(sslContext);
     }
@@ -827,23 +830,13 @@ public class LdapService {
     
     pool.modify(dn, mod);
     logger.info("Modified attribute {} on {}", attributeName, dn);
-    
-    // Generate LDIF format
-    StringBuilder ldif = new StringBuilder();
-    ldif.append("dn: ").append(dn).append("\n");
-    ldif.append("changetype: modify\n");
-    ldif.append("replace: ").append(attributeName).append("\n");
-    for (String value : values) {
-      ldif.append(attributeName).append(": ").append(value).append("\n");
-    }
-    ldif.append("-");
-    
+
     // Log to activity log
     loggingService.logModification(
         config.getName(),
         "Modified attribute '" + attributeName + "' on entry",
         dn,
-        ldif.toString()
+        LdifGenerator.replace(dn, attributeName, values)
     );
   }
 
@@ -873,23 +866,13 @@ public class LdapService {
     
     pool.modify(dn, mod);
     logger.info("Added attribute {} to {}", attributeName, dn);
-    
-    // Generate LDIF format
-    StringBuilder ldif = new StringBuilder();
-    ldif.append("dn: ").append(dn).append("\n");
-    ldif.append("changetype: modify\n");
-    ldif.append("add: ").append(attributeName).append("\n");
-    for (String value : values) {
-      ldif.append(attributeName).append(": ").append(value).append("\n");
-    }
-    ldif.append("-");
-    
+
     // Log to activity log
     loggingService.logModification(
         config.getName(),
         "Added attribute '" + attributeName + "' to entry",
         dn,
-        ldif.toString()
+        LdifGenerator.add(dn, attributeName, values)
     );
   }
 
@@ -913,20 +896,13 @@ public class LdapService {
     
     pool.modify(dn, mod);
     logger.info("Deleted attribute {} from {}", attributeName, dn);
-    
-    // Generate LDIF format
-    StringBuilder ldif = new StringBuilder();
-    ldif.append("dn: ").append(dn).append("\n");
-    ldif.append("changetype: modify\n");
-    ldif.append("delete: ").append(attributeName).append("\n");
-    ldif.append("-");
-    
+
     // Log to activity log
     loggingService.logModification(
         config.getName(),
         "Deleted attribute '" + attributeName + "' from entry",
         dn,
-        ldif.toString()
+        LdifGenerator.delete(dn, attributeName)
     );
   }
 
@@ -1097,6 +1073,10 @@ public class LdapService {
    */
   public BrowseResult browseEntriesWithPage(LdapServerConfig config, String baseDn, 
       int pageNumber, String searchFilter) throws LDAPException {
+    // Validate filter syntax before sending to the server.
+    if (searchFilter != null && !searchFilter.isEmpty()) {
+      Filter.create(searchFilter); // throws LDAPException if malformed
+    }
     try {
       return executeWithRetry(config, 
           pool -> browsePage(config, baseDn, pageNumber, pool, searchFilter));
@@ -1988,27 +1968,9 @@ public class LdapService {
    */
   public void modifyObjectClassInSchema(LdapServerConfig config, String oldDefinition,
       String newDefinition) throws LDAPException {
-    try {
-      LDAPConnectionPool pool = getConnectionPool(config);
-      String schemaDN = getSchemaSubentryDN(config);
-      
-      if (schemaDN == null) {
-        throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
-            "Cannot determine schema subentry DN");
-      }
-      
-      // PingDirectory handles modifications via ADD operation only
-      // No need to delete the old definition first
-      Modification addModification = new Modification(ModificationType.ADD,
-          "objectClasses", newDefinition);
-      
-      pool.modify(schemaDN, addModification);
-      
-      logger.info("Modified object class in schema on {}", config.getName());
-    } catch (GeneralSecurityException e) {
-      throw new LDAPException(ResultCode.LOCAL_ERROR,
-          "SSL/TLS error: " + e.getMessage());
-    }
+    // PingDirectory handles modifications via ADD operation only; oldDefinition unused.
+    applySchemaModification(config, "objectClasses", newDefinition,
+        "Modified object class in schema on {}");
   }
 
   /**
@@ -2021,27 +1983,9 @@ public class LdapService {
    */
   public void modifyAttributeTypeInSchema(LdapServerConfig config, String oldDefinition,
       String newDefinition) throws LDAPException {
-    try {
-      LDAPConnectionPool pool = getConnectionPool(config);
-      String schemaDN = getSchemaSubentryDN(config);
-      
-      if (schemaDN == null) {
-        throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
-            "Cannot determine schema subentry DN");
-      }
-      
-      // PingDirectory handles modifications via ADD operation only
-      // No need to delete the old definition first
-      Modification addModification = new Modification(ModificationType.ADD,
-          "attributeTypes", newDefinition);
-      
-      pool.modify(schemaDN, addModification);
-      
-      logger.info("Modified attribute type in schema on {}", config.getName());
-    } catch (GeneralSecurityException e) {
-      throw new LDAPException(ResultCode.LOCAL_ERROR,
-          "SSL/TLS error: " + e.getMessage());
-    }
+    // PingDirectory handles modifications via ADD operation only; oldDefinition unused.
+    applySchemaModification(config, "attributeTypes", newDefinition,
+        "Modified attribute type in schema on {}");
   }
 
   /**
@@ -2053,25 +1997,8 @@ public class LdapService {
    */
   public void addObjectClassToSchema(LdapServerConfig config, String definition)
       throws LDAPException {
-    try {
-      LDAPConnectionPool pool = getConnectionPool(config);
-      String schemaDN = getSchemaSubentryDN(config);
-      
-      if (schemaDN == null) {
-        throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
-            "Cannot determine schema subentry DN");
-      }
-      
-      Modification addModification = new Modification(ModificationType.ADD,
-          "objectClasses", definition);
-      
-      pool.modify(schemaDN, addModification);
-      
-      logger.info("Added object class to schema on {}", config.getName());
-    } catch (GeneralSecurityException e) {
-      throw new LDAPException(ResultCode.LOCAL_ERROR,
-          "SSL/TLS error: " + e.getMessage());
-    }
+    applySchemaModification(config, "objectClasses", definition,
+        "Added object class to schema on {}");
   }
 
   /**
@@ -2083,24 +2010,42 @@ public class LdapService {
    */
   public void addAttributeTypeToSchema(LdapServerConfig config, String definition)
       throws LDAPException {
+    applySchemaModification(config, "attributeTypes", definition,
+        "Added attribute type to schema on {}");
+  }
+
+  /**
+   * Shared helper for all schema ADD modifications.
+   *
+   * <p>Retrieves the schema subentry DN, applies a single {@code ADD} modification
+   * on the given schema attribute, and logs the result.
+   *
+   * @param config              server configuration
+   * @param schemaAttributeName LDAP attribute holding the definition
+   *                            ({@code objectClasses} or {@code attributeTypes})
+   * @param definition          the new schema definition string
+   * @param logMessage          SLF4J message template (single {@code {}} placeholder
+   *                            for server name)
+   * @throws LDAPException if the modification fails or the schema DN cannot
+   *                       be determined
+   */
+  private void applySchemaModification(LdapServerConfig config, String schemaAttributeName,
+      String definition, String logMessage) throws LDAPException {
     try {
       LDAPConnectionPool pool = getConnectionPool(config);
       String schemaDN = getSchemaSubentryDN(config);
-      
+
       if (schemaDN == null) {
         throw new LDAPException(ResultCode.NO_SUCH_OBJECT,
             "Cannot determine schema subentry DN");
       }
-      
-      Modification addModification = new Modification(ModificationType.ADD,
-          "attributeTypes", definition);
-      
+
+      Modification addModification = new Modification(
+          ModificationType.ADD, schemaAttributeName, definition);
       pool.modify(schemaDN, addModification);
-      
-      logger.info("Added attribute type to schema on {}", config.getName());
+      logger.info(logMessage, config.getName());
     } catch (GeneralSecurityException e) {
-      throw new LDAPException(ResultCode.LOCAL_ERROR,
-          "SSL/TLS error: " + e.getMessage());
+      throw new LDAPException(ResultCode.LOCAL_ERROR, "SSL/TLS error: " + e.getMessage());
     }
   }
 

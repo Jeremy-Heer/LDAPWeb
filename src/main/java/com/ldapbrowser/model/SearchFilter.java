@@ -1,5 +1,6 @@
 package com.ldapbrowser.model;
 
+import com.unboundid.ldap.sdk.Filter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -107,13 +108,16 @@ public class SearchFilter {
    */
   public String toLdapFilter() {
     if (children.isEmpty()) {
-      // Simple filter
+      // Simple filter — escape value to prevent LDAP filter injection
+      String attr = attribute != null ? attribute : "null";
       if (operator == Operator.PRESENT) {
-        return "(" + attribute + "=*)";
+        return "(" + attr + "=*)";
       } else if (operator == Operator.SUBSTRING) {
-        return "(" + attribute + "=*" + value + "*)";
+        String encoded = value != null ? Filter.encodeValue(value) : "null";
+        return "(" + attr + "=*" + encoded + "*)";
       } else {
-        return "(" + attribute + operator.getLdapSymbol() + value + ")";
+        String encoded = value != null ? Filter.encodeValue(value) : "null";
+        return "(" + attr + operator.getLdapSymbol() + encoded + ")";
       }
     } else {
       // Composite filter

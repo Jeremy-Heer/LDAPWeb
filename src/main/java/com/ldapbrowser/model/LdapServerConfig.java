@@ -1,7 +1,10 @@
 package com.ldapbrowser.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.unboundid.ldap.sdk.DN;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -124,6 +127,33 @@ public class LdapServerConfig implements Serializable {
 
   public void setValidateCertificate(boolean validateCertificate) {
     this.validateCertificate = validateCertificate;
+  }
+
+  /**
+   * Validates this configuration before a connection attempt.
+   *
+   * <p>Checks that host is non-empty, port is in range 1–65535, and
+   * bindDn (when provided) is a well-formed LDAP DN.
+   *
+   * @throws IllegalArgumentException if any field is invalid
+   */
+  public void validate() {
+    List<String> errors = new ArrayList<>();
+    if (host == null || host.trim().isEmpty()) {
+      errors.add("host must not be empty");
+    }
+    if (port < 1 || port > 65535) {
+      errors.add("port must be between 1 and 65535 (got " + port + ")");
+    }
+    if (bindDn != null && !bindDn.trim().isEmpty()
+        && !DN.isValidDN(bindDn.trim())) {
+      errors.add("bindDn is not a well-formed DN: " + bindDn);
+    }
+    if (!errors.isEmpty()) {
+      throw new IllegalArgumentException(
+          "Invalid server configuration [" + name + "]: "
+              + String.join("; ", errors));
+    }
   }
 
   /**
