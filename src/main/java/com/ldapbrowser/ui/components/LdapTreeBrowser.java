@@ -8,7 +8,6 @@ import com.vaadin.flow.component.ComponentEvent;
 import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -57,7 +56,8 @@ public class LdapTreeBrowser extends VerticalLayout {
   private LdapTreeGrid treeGrid;
   private HorizontalLayout headerLayout;
   private Button refreshButton;
-  private Checkbox privateNamingContextsCheckbox;
+  private Button privateNamingContextsButton;
+  private boolean includePrivateNamingContexts;
 
   // Configuration
   private LdapServerConfig serverConfig;
@@ -106,11 +106,17 @@ public class LdapTreeBrowser extends VerticalLayout {
         .set("font-weight", "600")
         .set("color", "#333");
 
-    // Private naming contexts checkbox
-    privateNamingContextsCheckbox = new Checkbox("Include private naming contexts");
-    privateNamingContextsCheckbox.getStyle()
-        .set("font-size", "0.85em")
-        .set("margin-left", "1em");
+    // Private naming contexts toggle button
+    Icon privateIcon = new Icon(VaadinIcon.LOCK);
+    privateNamingContextsButton = new Button(privateIcon);
+    privateNamingContextsButton.addThemeVariants(
+        ButtonVariant.LUMO_ICON,
+        ButtonVariant.LUMO_TERTIARY,
+        ButtonVariant.LUMO_SMALL
+    );
+    privateNamingContextsButton.setTooltipText(
+        "Include private naming contexts");
+    privateNamingContextsButton.getStyle().set("color", "#999");
 
     // Refresh button
     Icon refreshIcon = new Icon(VaadinIcon.REFRESH);
@@ -123,7 +129,7 @@ public class LdapTreeBrowser extends VerticalLayout {
     refreshButton.setTooltipText("Refresh LDAP Browser");
     refreshButton.getStyle().set("color", "#4a90e2");
 
-    headerLayout.add(treeIcon, browserTitle, privateNamingContextsCheckbox, refreshButton);
+    headerLayout.add(treeIcon, browserTitle, privateNamingContextsButton, refreshButton);
     headerLayout.setFlexGrow(1, browserTitle);
   }
 
@@ -158,10 +164,24 @@ public class LdapTreeBrowser extends VerticalLayout {
       refreshButton.addClickListener(e -> refreshTree());
     }
 
-    // Private naming contexts checkbox handler
-    if (privateNamingContextsCheckbox != null) {
-      privateNamingContextsCheckbox.addValueChangeListener(e -> {
-        treeGrid.setIncludePrivateNamingContexts(e.getValue());
+    // Private naming contexts toggle button handler
+    if (privateNamingContextsButton != null) {
+      privateNamingContextsButton.addClickListener(e -> {
+        includePrivateNamingContexts = !includePrivateNamingContexts;
+        treeGrid.setIncludePrivateNamingContexts(
+            includePrivateNamingContexts);
+        // Update button appearance to reflect state
+        if (includePrivateNamingContexts) {
+          privateNamingContextsButton.getStyle()
+              .set("color", "#4a90e2");
+          privateNamingContextsButton.setTooltipText(
+              "Exclude private naming contexts");
+        } else {
+          privateNamingContextsButton.getStyle()
+              .set("color", "#999");
+          privateNamingContextsButton.setTooltipText(
+              "Include private naming contexts");
+        }
         refreshTree();
       });
     }

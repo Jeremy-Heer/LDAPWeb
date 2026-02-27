@@ -74,8 +74,13 @@ public class EntryEditor extends VerticalLayout {
    */
   private enum PendingChangeType {
     ADDED,    // Value was added
-    DELETED   // Value was deleted
+    DELETED,  // Value was deleted
+    MODIFIED  // Value was modified (replaced)
   }
+
+  // Store original attribute values before modification for backout LDIF
+  private final Map<String, List<String>> originalAttributeValues =
+      new java.util.HashMap<>();
 
   // UI Components
   private Span dnLabel;
@@ -577,26 +582,31 @@ public class EntryEditor extends VerticalLayout {
    * @return the icon component showing pending changes
    */
   private Span createPendingChangeIcon(AttributeRow row) {
-    String changeKey = row.getName() + ":" + row.getValueIndex();
+    String changeKey = row.getName() + ":" + row.getValue();
     PendingChangeType changeType = pendingChanges.get(changeKey);
-    
+
     if (changeType == null) {
       return new Span();
     }
-    
+
     Span iconSpan = new Span();
     Icon icon;
-    
+
     if (changeType == PendingChangeType.ADDED) {
       icon = new Icon(VaadinIcon.PLUS_CIRCLE);
       icon.setColor("green");
       icon.getElement().setAttribute("title", "Value will be added");
+    } else if (changeType == PendingChangeType.MODIFIED) {
+      icon = new Icon(VaadinIcon.EDIT);
+      icon.setColor("#1565c0");
+      icon.getElement().setAttribute(
+          "title", "Value will be modified");
     } else { // DELETED
       icon = new Icon(VaadinIcon.MINUS_CIRCLE);
       icon.setColor("red");
       icon.getElement().setAttribute("title", "Value will be deleted");
     }
-    
+
     iconSpan.add(icon);
     return iconSpan;
   }
@@ -750,6 +760,13 @@ public class EntryEditor extends VerticalLayout {
           .set("color", "#2e7d32")
           .set("padding", "4px 8px")
           .set("border-radius", "4px");
+    } else if (changeType == PendingChangeType.MODIFIED) {
+      // Blue background for modified values
+      valueSpan.getStyle()
+          .set("background-color", "#e3f2fd")
+          .set("color", "#1565c0")
+          .set("padding", "4px 8px")
+          .set("border-radius", "4px");
     }
 
     return valueSpan;
@@ -900,12 +917,25 @@ public class EntryEditor extends VerticalLayout {
 
       List<String> allValues = currentEntry.getAttributeValues(row.getName());
       if (allValues != null && row.getValueIndex() < allValues.size()) {
+        // Save original values before first modification
+        if (!originalAttributeValues.containsKey(row.getName())) {
+          originalAttributeValues.put(
+              row.getName(), new ArrayList<>(allValues));
+        }
         allValues.set(row.getValueIndex(), newValue.trim());
-        currentEntry.getAttributes().put(row.getName(), new ArrayList<>(allValues));
+        currentEntry.getAttributes().put(
+            row.getName(), new ArrayList<>(allValues));
+
+        // Track the new value as MODIFIED for highlighting
+        String changeKey = row.getName() + ":" + newValue.trim();
+        pendingChanges.put(changeKey, PendingChangeType.MODIFIED);
+
         modifiedAttributes.add(row.getName());
         markPendingChanges();
         refreshAttributeDisplay();
-        NotificationHelper.showSuccess("Updated value for '" + row.getName() + "'.");
+        NotificationHelper.showSuccess(
+            "Pending change: updated value for '"
+                + row.getName() + "'.");
         dialog.close();
       } else {
         NotificationHelper.showError("Unable to update value.");
@@ -1504,6 +1534,7 @@ public class EntryEditor extends VerticalLayout {
     hasPendingChanges = false;
     modifiedAttributes.clear();
     pendingChanges.clear();
+    originalAttributeValues.clear();
     pendingChangesButton.setEnabled(false);
     pendingChangesButton.getStyle().remove("font-weight");
   }
@@ -1748,6 +1779,23 @@ public class EntryEditor extends VerticalLayout {
           ldif.append(attrName).append(": ").append(value).append("\n");
         }
         hasChanges = true;
+      }
+
+      // Reverse: modified values should be replaced with originals
+      if (addedValues.isEmpty() && deletedValues.isEmpty()) {
+        List<String> origValues =
+            originalAttributeValues.get(attrName);
+        if (origValues != null) {
+          if (hasChanges) {
+            ldif.append("-\n");
+          }
+          ldif.append("replace: ").append(attrName).append("\n");
+          for (String value : origValues) {
+            ldif.append(attrName).append(": ")
+                .append(value).append("\n");
+          }
+          hasChanges = true;
+        }
       }
     }
 

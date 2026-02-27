@@ -1,5 +1,16 @@
 # LDAP Web Browser
 
+## v0.64 - Entry Editor Fixes
+1. When editing an existing attribute value, after updated the value on the 'edit value' dialog
+    the new updated value is not highlighted on the entry detials grid.
+2. When editing an existing attribute value, and selecting the 'pending changes' button, the backout
+  ldif is incomplete. no lines after 'changetype: modify'. Should contain the old value.
+3. When updating attributes for an entry, the notification should indicate a pending change for the
+  change that was added.
+
+## v0.63 - Tree browse private checkbox
+1. Replace the 'include private naming contexts' checkbox with a button and tool tip.
+
 ## v0.62 - Tree Browser View Bug
 1. When collapsing and reexpanding a parrent node and a child node was already expanded, 
   The child node that was previouly expanded is displayed expanded with a "Loading..." place holder
