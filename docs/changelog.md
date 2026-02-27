@@ -1,5 +1,8 @@
 # LDAP Web Browser
 
+## v0.61 - Tree Browse View bugs
+1. Resolve bug with 'Failed to load Root DSE: Cannot add the same item multiple times: com.ldapbrowser.model.LdapEntry@3c1' error when multiple LDAP servers are selected and expanded.
+
 ## v0.60 - Configuration & Resource Management
 1. Unify settings directory injection across all services
    - `KeystoreService` and `TruststoreService` hardcode `".ldapbrowser"` instead of

@@ -523,6 +523,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     // Create Root DSE entry
     LdapEntry rootDse = new LdapEntry();
     rootDse.setDn("");
+    rootDse.setServerName(config.getName());
     rootDse.setRdn("Root DSE");
     rootDse.setHasChildren(true);
     rootDse.addAttribute("objectClass", "top");
@@ -605,6 +606,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
         // Create Root DSE entry
         LdapEntry rootDse = new LdapEntry();
         rootDse.setDn("");
+        rootDse.setServerName(serverConfig.getName());
         rootDse.setRdn("Root DSE");
         rootDse.setHasChildren(true);
         rootDse.addAttribute("objectClass", "top");
@@ -672,6 +674,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
             // Create minimal entry
             LdapEntry ctxEntry = new LdapEntry();
             ctxEntry.setDn(ctx);
+            ctxEntry.setServerName(serverConfig.getName());
             ctxEntry.setRdn(ctx);
             ctxEntry.setHasChildren(true);
             ctxEntry.addAttribute("objectClass", "organizationalUnit");
