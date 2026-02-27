@@ -1,5 +1,10 @@
 # LDAP Web Browser
 
+## v0.62 - Tree Browser View Bug
+1. When collapsing and reexpanding a parrent node and a child node was already expanded, 
+  The child node that was previouly expanded is displayed expanded with a "Loading..." place holder
+  Address this by reseting the child expanded state when a parrent node is collapsed.
+
 ## v0.61 - Tree Browse View bugs
 1. Resolve bug with 'Failed to load Root DSE: Cannot add the same item multiple times: com.ldapbrowser.model.LdapEntry@3c1' error when multiple LDAP servers are selected and expanded.
 

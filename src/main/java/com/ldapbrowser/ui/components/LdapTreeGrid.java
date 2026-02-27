@@ -143,9 +143,9 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
       });
     });
 
-    // Collapse listener
+    // Collapse listener - reset child expanded states
     addCollapseListener(event -> {
-      // Don't auto-select on collapse - this was causing unwanted selections
+      event.getItems().forEach(this::collapseDescendants);
     });
 
     // Selection listener to handle Root DSE expansion and pagination controls
@@ -849,6 +849,24 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     treeData.getChildren(entry).forEach(this::collapseRecursively);
     if (isExpanded(entry)) {
       collapse(entry);
+    }
+  }
+
+  /**
+   * Collapses all descendant nodes of a given entry.
+   * This resets the expanded state of children so that re-expanding
+   * the parent does not show stale expanded children with "Loading..."
+   * placeholders.
+   *
+   * @param entry the parent entry whose descendants should be collapsed
+   */
+  private void collapseDescendants(LdapEntry entry) {
+    List<LdapEntry> children = treeData.getChildren(entry);
+    for (LdapEntry child : children) {
+      if (isExpanded(child)) {
+        collapseDescendants(child);
+        collapse(child);
+      }
     }
   }
 
