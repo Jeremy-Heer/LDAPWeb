@@ -10,6 +10,7 @@ import com.ldapbrowser.ui.components.ExportTab;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.RolesAllowed;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -20,6 +21,7 @@ import java.util.Set;
  */
 @Route(value = "export", layout = MainLayout.class)
 @PageTitle("Export | LDAP Browser")
+@RolesAllowed({"ADMIN", "VIEWER"})
 public class ExportView extends VerticalLayout {
 
   private final ConfigurationService configurationService;

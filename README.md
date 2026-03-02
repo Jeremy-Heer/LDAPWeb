@@ -1,38 +1,43 @@
 # LDAP Browser
 
-A comprehensive Java web application for browsing, searching, and managing LDAP directories with advanced features including schema management, access control, and bulk operations.
+A comprehensive Java web application for browsing, searching, and managing LDAP directories with advanced features including schema management, access control, bulk operations, and multi-mode authentication.
 
 ## Technology Stack
 
-- **Spring Boot** 3.2.0
-- **Vaadin** 24.3.0 (Web UI Framework)
+- **Spring Boot** 4.0.0
+- **Vaadin** 25.0.3 (Web UI Framework)
+- **Spring Security** 7.0 (Authentication & Authorization)
 - **UnboundID LDAP SDK** 7.0.3
-- **Java** 17+
+- **Java** 21+
 - **Maven** (Build Tool)
 
 ## Project Status
 
-**Current Version:** v0.19
+**Current Version:** v0.65
 
 ### Completed Features
-✅ **Server Management** - Grid-based server configuration with CRUD operations  
-✅ **Multi-Server Support** - Concurrent operations across multiple LDAP servers with independent browser tab state  
-✅ **LDAP Search** - Advanced search with filter builder, multi-scope, and result editing  
-✅ **Directory Browsing** - Interactive tree navigation with entry details and inline editing  
-✅ **Schema Management** - Browse, compare, and manage LDAP schemas across servers  
-✅ **Entry Creation** - Create new LDAP entries with template support and validation  
-✅ **Access Control** - Global/entry-level ACI management and effective rights checking  
-✅ **Bulk Operations** - Import/export, bulk search, entry generation, and group membership management  
-✅ **Export Functionality** - Export LDAP data in LDIF, CSV, and JSON formats  
-✅ **Schema-Aware Editing** - Color-coded attributes (required/optional/operational) based on cached schema  
-✅ **Connection Management** - Pooled connections with SSL/TLS, StartTLS, and automatic retry  
-✅ **Configuration Persistence** - JSON-based storage in ~/.ldapbrowser/connections.json  
-✅ **Code Quality** - Google Java Style compliance (0 Checkstyle violations)
+✅ **Server Management** - Grid-based server configuration with CRUD operations
+✅ **Multi-Server Support** - Concurrent operations across multiple LDAP servers with independent browser tab state
+✅ **LDAP Search** - Advanced search with filter builder, multi-scope, and result editing
+✅ **Directory Browsing** - Interactive tree navigation with entry details and inline editing
+✅ **Schema Management** - Browse, compare, and manage LDAP schemas across servers
+✅ **Entry Creation** - Create new LDAP entries with template support and validation
+✅ **Access Control** - Global/entry-level ACI management and effective rights checking
+✅ **Bulk Operations** - Import/export, bulk search, entry generation, and group membership management
+✅ **Export Functionality** - Export LDAP data in LDIF, CSV, and JSON formats
+✅ **Schema-Aware Editing** - Color-coded attributes (required/optional/operational) based on cached schema
+✅ **Connection Management** - Pooled connections with SSL/TLS, StartTLS, and automatic retry
+✅ **Configuration Persistence** - JSON-based storage in ~/.ldapbrowser/connections.json
+✅ **Authentication** - Three modes: none (open), local (form login with JSON user store), OAuth2/OIDC
+✅ **Role-Based Access Control** - ADMIN and VIEWER roles with per-view authorization
+✅ **Password Encryption** - AES-GCM encryption with `ENC:` prefix and keystore-backed key management
+✅ **Security Hardening** - Localhost binding, POSIX file permissions, defensive copies, `@PreDestroy` cleanup
+✅ **Code Quality** - Google Java Style compliance (0 Checkstyle violations), 278 unit tests
 
 ## Quick Start
 
 ### Prerequisites
-- Java 17 or higher
+- Java 21 or higher
 - Maven 3.6 or higher
 
 ### Build and Run
@@ -43,9 +48,10 @@ A comprehensive Java web application for browsing, searching, and managing LDAP 
    cd LDAPWeb
    ```
 
-2. **Compile the project**
+2. **Compile and test**
    ```bash
    mvn clean compile
+   mvn test
    ```
 
 3. **Run in development mode**
@@ -58,8 +64,8 @@ A comprehensive Java web application for browsing, searching, and managing LDAP 
    ```
 
 4. **Access the application**
-   - Open your browser to: http://localhost:8080
-   - The application will automatically reload on code changes
+   - Open your browser to: http://localhost:8081
+   - The default auth mode is `none` — no login required
 
 ### Production Build
 
@@ -70,8 +76,141 @@ mvn clean package -Pproduction -DskipTests
 
 Run the production JAR:
 ```bash
-java -jar target/ldap-browser-0.19.jar
+java -jar target/ldap-browser-0.65.jar
 ```
+
+## Authentication
+
+The application supports three authentication modes controlled by the
+`ldapbrowser.auth.mode` property. The default mode is `none`.
+
+### Mode: `none` (default)
+
+No authentication — all routes are open to any user. Best for local
+single-user deployments.
+
+```bash
+# Default — just run the JAR
+java -jar target/ldap-browser-0.65.jar
+```
+
+No login screen is shown. All views are accessible.
+
+### Mode: `local` (form login)
+
+Form-based login backed by a JSON user store at
+`~/.ldapbrowser/users.json`. Passwords are hashed with BCrypt.
+
+```bash
+java -jar target/ldap-browser-0.65.jar \
+  --spring.profiles.active=local-auth
+```
+
+On first run, a default **admin** account is created with a random
+password printed to the console:
+
+```
+============================================
+  Initial admin account created
+  Username : admin
+  Password : <random>
+  Change this password after first login!
+============================================
+```
+
+No manual user setup is required. The admin user has full access to
+all views. Additional users can be managed through the Settings view.
+
+### Mode: `oauth` (OpenID Connect)
+
+Delegates authentication to any OIDC-compliant identity provider
+(Keycloak, Entra ID, Okta, Auth0, etc.).
+
+```bash
+java -jar target/ldap-browser-0.65.jar \
+  --spring.profiles.active=oauth
+```
+
+You must configure your provider's client credentials. Edit
+`application-oauth.properties` or pass them as command-line flags:
+
+```properties
+spring.security.oauth2.client.registration.oidc.client-id=your-client-id
+spring.security.oauth2.client.registration.oidc.client-secret=your-secret
+spring.security.oauth2.client.provider.oidc.issuer-uri=https://idp.example.com/realms/myrealm
+```
+
+#### Example: Google Sign-In
+
+To use Google for authentication, you first need to create OAuth 2.0 credentials in the Google Cloud Console.
+
+1.  **Google Cloud Console Setup**
+    1.  Go to the [Google Cloud Console](https://console.cloud.google.com/).
+    2.  Create a new project or select an existing one.
+    3.  Navigate to **APIs & Services > Credentials**.
+    4.  Click **Create Credentials** and select **OAuth client ID**.
+    5.  Choose **Web application** as the application type.
+    6.  Under **Authorized redirect URIs**, add `http://localhost:8081/login/oauth2/code/oidc`. This is the default callback URL Spring Security uses.
+    7.  Click **Create**. Copy the generated **Client ID** and **Client Secret**.
+
+2.  **Application Configuration**
+    Run the application with the `oauth` profile and your Google credentials. The issuer URI for Google is `https://accounts.google.com`.
+
+    ```bash
+    java -jar target/ldap-browser-0.65.jar \
+      --spring.profiles.active=oauth \
+      --spring.security.oauth2.client.registration.oidc.client-id=YOUR_GOOGLE_CLIENT_ID \
+      --spring.security.oauth2.client.registration.oidc.client-secret=YOUR_GOOGLE_CLIENT_SECRET \
+      --spring.security.oauth2.client.provider.oidc.issuer-uri=https://accounts.google.com
+    ```
+
+    Alternatively, add these properties to `src/main/resources/application-oauth.properties`.
+
+#### Role Mapping
+
+OIDC tokens are mapped to application roles using these properties:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `ldapbrowser.oauth.role-claim` | `roles` | Token claim containing role names |
+| `ldapbrowser.oauth.admin-role` | `ldap-admin` | Claim value mapped to ADMIN |
+| `ldapbrowser.oauth.viewer-role` | `ldap-viewer` | Claim value mapped to VIEWER |
+| `ldapbrowser.oauth.default-role` | `VIEWER` | Fallback when no matching claim is found |
+
+Nested claims are supported (e.g., `realm_access.roles` for Keycloak).
+
+### Roles and View Access
+
+When authentication is enabled (`local` or `oauth`), views are
+protected by role:
+
+| View | Required Role |
+|------|---------------|
+| Server | ADMIN |
+| Settings | ADMIN |
+| Create | ADMIN |
+| Access | ADMIN |
+| Bulk | ADMIN |
+| Browse | ADMIN or VIEWER |
+| Search | ADMIN or VIEWER |
+| Schema | ADMIN or VIEWER |
+| Export | ADMIN or VIEWER |
+| Help | Everyone |
+
+In `none` mode all role annotations are ignored and every view is
+accessible.
+
+### Network Binding
+
+By default the server binds to `127.0.0.1` (localhost only). To allow
+remote access, override the bind address:
+
+```bash
+java -jar target/ldap-browser-0.65.jar --server.address=0.0.0.0
+```
+
+For hosted deployments, place the application behind a reverse proxy
+(nginx, Caddy, etc.) that handles TLS termination.
 
 ## Features
 
@@ -169,8 +308,17 @@ Data export in multiple formats:
 ### Connection Management
 - Connection pooling per server (1-10 connections)
 - Automatic retry on stale connections
-- SSL/TLS with trust-all certificate handling
+- SSL/TLS with custom truststore support
 - StartTLS post-connect processing
+- `@PreDestroy` cleanup closes all pools on shutdown
+
+### Security
+- Three authentication modes: none, local (BCrypt), OAuth2/OIDC
+- Role-based view authorization (ADMIN / VIEWER)
+- AES-GCM password encryption with `ENC:` prefix
+- PKCS#12 keystore for encryption key storage
+- POSIX file permissions on sensitive files
+- Localhost-only binding by default
 
 ### State Management
 - UI-scoped server selection (independent browser tabs)
@@ -229,7 +377,10 @@ mvn test
 src/
 ├── main/
 │   ├── java/com/ldapbrowser/
-│   │   ├── LdapBrowserApplication.java      # Spring Boot application entry
+│   │   ├── LdapBrowserApplication.java      # Spring Boot entry point
+│   │   ├── config/                          # Security & auth config
+│   │   │   ├── SecurityConfiguration.java   # Multi-mode security filter chain
+│   │   │   └── OidcRoleMappingConfig.java   # OIDC claim → role mapping
 │   │   ├── model/                           # Data models
 │   │   │   ├── LdapServerConfig.java        # Server configuration
 │   │   │   ├── LdapEntry.java               # LDAP entry representation
@@ -239,70 +390,87 @@ src/
 │   │   ├── service/                         # Business logic
 │   │   │   ├── LdapService.java             # Core LDAP operations
 │   │   │   ├── ConfigurationService.java    # Server config persistence
+│   │   │   ├── EncryptionService.java       # AES-GCM password encryption
+│   │   │   ├── KeystoreService.java         # PKCS#12 key management
+│   │   │   ├── TruststoreService.java       # Certificate trust store
+│   │   │   ├── UserService.java             # Local user store (BCrypt)
 │   │   │   └── LoggingService.java          # Structured LDAP logging
 │   │   ├── ui/
-│   │   │   ├── MainLayout.java              # AppLayout with navbar/drawer
-│   │   │   ├── views/                       # Page views
+│   │   │   ├── MainLayout.java              # AppLayout with user menu
+│   │   │   ├── views/                       # Page views (role-annotated)
+│   │   │   │   ├── LoginView.java           # Login page (local/oauth)
 │   │   │   │   ├── ServerView.java          # Server management
 │   │   │   │   ├── SearchView.java          # Search interface
 │   │   │   │   ├── BrowseView.java          # Tree browser
 │   │   │   │   ├── SchemaView.java          # Schema management
-│   │   │   │   ├── Create.java              # Entry creation
+│   │   │   │   ├── CreateView.java          # Entry creation
 │   │   │   │   ├── AccessView.java          # Access control
 │   │   │   │   ├── BulkView.java            # Bulk operations
-│   │   │   │   └── ExportView.java          # Export functionality
+│   │   │   │   ├── ExportView.java          # Export functionality
+│   │   │   │   ├── SettingsView.java        # App settings & users
+│   │   │   │   └── HelpView.java            # Help documentation
 │   │   │   └── components/                  # Reusable UI components
-│   │   │       ├── LdapTreeBrowser.java     # Tree navigation component
-│   │   │       ├── EntryEditor.java         # Entry editing component
-│   │   │       ├── AdvancedSearchBuilder.java
-│   │   │       ├── SchemaManageTab.java
-│   │   │       ├── SchemaCompareTab.java
-│   │   │       ├── AciBuilderDialog.java
-│   │   │       └── ...                      # Various specialized tabs
 │   │   └── util/                            # Utilities
 │   │       ├── AciParser.java               # ACI string parser
-│   │       ├── SchemaCompareUtil.java       # Schema canonicalization
+│   │       ├── LdifGenerator.java           # LDIF export utility
 │   │       └── OidLookupTable.java          # OID to name mapping
 │   └── resources/
 │       ├── application.properties           # Main configuration
-│       └── application-development.properties # Dev profile
+│       ├── application-development.properties # Dev profile
+│       ├── application-local-auth.properties  # Local auth profile
+│       └── application-oauth.properties       # OAuth/OIDC profile
 └── test/
-    └── java/                                # Unit tests
+    └── java/                                # 278 unit tests (15 files)
 ```
 
 ## Navigation
 
 The application includes the following pages:
 
-- **Server** ✅ - Grid-based server configuration management with CRUD operations
-- **Search** ✅ - Advanced LDAP search with filter builder and result editing
-- **Browse** ✅ - Interactive tree-based directory navigation with inline editing
-- **Schema** ✅ - Schema browsing, comparison, and management across servers
-- **Create** ✅ - Create new LDAP entries with templates and validation
-- **Access** ✅ - ACI management (global, entry-level, effective rights)
-- **Bulk** ✅ - Bulk operations (import, search, generate, group memberships)
-- **Export** ✅ - Export data in LDIF, CSV, and JSON formats
+- **Server** ✅ - Grid-based server configuration management with CRUD operations (ADMIN)
+- **Search** ✅ - Advanced LDAP search with filter builder and result editing (ADMIN, VIEWER)
+- **Browse** ✅ - Interactive tree-based directory navigation with inline editing (ADMIN, VIEWER)
+- **Schema** ✅ - Schema browsing, comparison, and management across servers (ADMIN, VIEWER)
+- **Create** ✅ - Create new LDAP entries with templates and validation (ADMIN)
+- **Access** ✅ - ACI management (global, entry-level, effective rights) (ADMIN)
+- **Bulk** ✅ - Bulk operations (import, search, generate, group memberships) (ADMIN)
+- **Export** ✅ - Export data in LDIF, CSV, and JSON formats (ADMIN, VIEWER)
+- **Settings** ✅ - Application settings and user management (ADMIN)
+- **Help** ✅ - Online help documentation (Everyone)
 
 ## Key Features Summary
 
 ### Technical Highlights
-- **74 Java source files** across models, services, UI components, and views
+- **59 Java source files** plus **15 test files** (278 tests)
+- **Three authentication modes** — none, local, OAuth2/OIDC
+- **Role-based access control** — ADMIN and VIEWER roles
+- **AES-GCM password encryption** with PKCS#12 keystore
 - **Connection pooling** with 1-10 connections per server
+- **Automatic retry** on stale or timed-out connections
 - **Schema caching** for improved performance
 - **Multi-server operations** with parallel execution and result aggregation
 - **UI-scoped state** allowing independent browser tabs
 - **Schema-aware editing** with color-coded attributes
-- **Advanced search** with filter builder and multiple scopes
 - **Tree navigation** with lazy loading and real-time updates
 - **Bulk operations** supporting import, export, search, and group management
 - **ACI management** with visual builder and effective rights checking
+- **Google Java Style** enforced via Checkstyle (0 violations)
 
 ### Integration Points
-- UnboundID LDAP SDK for all LDAP protocol operations
-- Vaadin 24.3.0 for reactive web UI
-- Spring Boot 3.2.0 for dependency injection and application framework
-- JSON-based configuration persistence
+- UnboundID LDAP SDK 7.0.3 for all LDAP protocol operations
+- Vaadin 25.0.3 for reactive web UI
+- Spring Boot 4.0.0 / Spring Security 7.0 for DI and security
+- JSON-based configuration and user persistence
 - Structured logging for all LDAP operations
+
+## Build Validation
+
+```bash
+mvn compile            # Verify compilation
+mvn test               # Run 278 unit tests
+mvn checkstyle:check   # Check style (0 violations)
+mvn clean package -Pproduction -DskipTests  # Production JAR
+```
 
 ## Contributing
 
@@ -312,7 +480,7 @@ This project follows Google Java Style conventions. Please ensure your code pass
 mvn checkstyle:check
 ```
 
-The project maintains **0 Checkstyle violations** - please keep it that way!
+The project maintains **0 Checkstyle violations** — please keep it that way!
 
 ## License
 
@@ -321,10 +489,10 @@ The project maintains **0 Checkstyle violations** - please keep it that way!
 ## Documentation
 
 See the `docs/` directory for detailed documentation:
-- [Changelog](docs/changelog.md) - Complete version history (v0.1 through v0.20)
+- [Changelog](docs/changelog.md) - Complete version history
 - [Requirements](docs/requirements.md) - Original feature requirements
-- [Implementation Summaries](docs/) - Detailed notes for each version
+- [Help](docs/help.md) - User-facing help documentation
 
 ---
 
-**Current Status:** Version 0.19 - Full-featured LDAP browser with all major components implemented and functional. Active development continues with connection retry and recovery improvements.
+**Current Status:** Version 0.65 — Full-featured LDAP browser with multi-mode authentication, role-based access control, encrypted credential storage, and comprehensive security hardening.

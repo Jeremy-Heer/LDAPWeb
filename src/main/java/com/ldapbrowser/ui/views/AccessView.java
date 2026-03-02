@@ -13,6 +13,7 @@ import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.RolesAllowed;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -23,6 +24,7 @@ import java.util.Set;
  */
 @Route(value = "access", layout = MainLayout.class)
 @PageTitle("Access | LDAP Browser")
+@RolesAllowed("ADMIN")
 public class AccessView extends VerticalLayout {
 
   private final GlobalAccessControlTab globalAccessControlTab;

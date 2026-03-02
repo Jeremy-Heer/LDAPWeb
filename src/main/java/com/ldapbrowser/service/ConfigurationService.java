@@ -10,10 +10,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -116,6 +119,7 @@ public class ConfigurationService {
       }
 
       objectMapper.writeValue(configPath.toFile(), toSave);
+      setRestrictivePermissions(configPath);
       logger.info("Saved {} server configurations to {}", toSave.size(), configPath);
     } catch (Exception e) {
       logger.error("Failed to save configurations", e);
@@ -200,6 +204,25 @@ public class ConfigurationService {
    */
   public Path getSettingsDir() {
     return settingsDir;
+  }
+
+  /**
+   * Sets owner-only read/write permissions (Unix-like systems).
+   *
+   * @param path file path
+   */
+  private void setRestrictivePermissions(Path path) {
+    try {
+      Set<PosixFilePermission> perms = new HashSet<>();
+      perms.add(PosixFilePermission.OWNER_READ);
+      perms.add(PosixFilePermission.OWNER_WRITE);
+      Files.setPosixFilePermissions(path, perms);
+      logger.debug("Set restrictive permissions on: {}", path);
+    } catch (UnsupportedOperationException e) {
+      logger.debug("POSIX permissions not supported on this system");
+    } catch (IOException e) {
+      logger.warn("Failed to set restrictive permissions on: {}", path, e);
+    }
   }
 
   /**

@@ -16,6 +16,7 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.RolesAllowed;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -26,6 +27,7 @@ import java.util.Set;
  */
 @Route(value = "bulk", layout = MainLayout.class)
 @PageTitle("Bulk | LDAP Browser")
+@RolesAllowed("ADMIN")
 public class BulkView extends VerticalLayout implements BeforeEnterObserver {
 
   private final ConfigurationService configService;

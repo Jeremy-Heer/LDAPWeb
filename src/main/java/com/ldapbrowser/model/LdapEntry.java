@@ -55,7 +55,7 @@ public class LdapEntry {
   }
   
   public Map<String, List<String>> getAttributes() {
-    return attributes;
+    return java.util.Collections.unmodifiableMap(attributes);
   }
   
   public void setAttributes(Map<String, List<String>> attributes) {
@@ -63,7 +63,7 @@ public class LdapEntry {
   }
   
   public Map<String, List<String>> getOperationalAttributes() {
-    return operationalAttributes;
+    return java.util.Collections.unmodifiableMap(operationalAttributes);
   }
   
   public void setOperationalAttributes(Map<String, List<String>> operationalAttributes) {
@@ -158,11 +158,14 @@ public class LdapEntry {
   /**
    * Gets display name for tree view.
    *
-   * @return display name
+   * @return display name, never null
    */
   public String getDisplayName() {
     String displayRdn = getRdn();
-    return displayRdn != null ? displayRdn : dn;
+    if (displayRdn != null) {
+      return displayRdn;
+    }
+    return dn != null ? dn : "(unknown)";
   }
 
   /**

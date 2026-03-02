@@ -25,6 +25,7 @@ import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import java.util.List;
+import jakarta.annotation.security.RolesAllowed;
 import java.util.Set;
 
 /**
@@ -33,6 +34,7 @@ import java.util.Set;
  */
 @Route(value = "browse", layout = MainLayout.class)
 @PageTitle("Browse | LDAP Browser")
+@RolesAllowed({"ADMIN", "VIEWER"})
 public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
   private final LdapService ldapService;

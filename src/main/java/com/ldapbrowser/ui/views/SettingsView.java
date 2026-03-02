@@ -5,6 +5,7 @@ import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.EncryptionService;
 import com.ldapbrowser.service.KeystoreService;
 import com.ldapbrowser.service.TruststoreService;
+import com.ldapbrowser.service.UserService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
@@ -18,17 +19,24 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.TabSheet;
+import com.vaadin.flow.component.checkbox.CheckboxGroup;
+import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.RolesAllowed;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Settings view for managing application configuration.
@@ -36,13 +44,16 @@ import java.util.List;
  */
 @Route(value = "settings", layout = MainLayout.class)
 @PageTitle("Settings | LDAP Browser")
+@RolesAllowed("ADMIN")
 public class SettingsView extends VerticalLayout {
 
   private final TruststoreService truststoreService;
   private final KeystoreService keystoreService;
   private final EncryptionService encryptionService;
   private final ConfigurationService configurationService;
+  private final UserService userService;
   private Grid<String> certificateGrid;
+  private Grid<UserService.UserRecord> userGrid;
 
   /**
    * Creates the Settings view.
@@ -52,15 +63,26 @@ public class SettingsView extends VerticalLayout {
    * @param encryptionService encryption service
    * @param configurationService configuration service
    */
+  /**
+   * Creates the Settings view.
+   *
+   * @param truststoreService truststore service
+   * @param keystoreService keystore service
+   * @param encryptionService encryption service
+   * @param configurationService configuration service
+   * @param userService optional user service (local auth only)
+   */
   public SettingsView(
       TruststoreService truststoreService,
       KeystoreService keystoreService,
       EncryptionService encryptionService,
-      ConfigurationService configurationService) {
+      ConfigurationService configurationService,
+      Optional<UserService> userService) {
     this.truststoreService = truststoreService;
     this.keystoreService = keystoreService;
     this.encryptionService = encryptionService;
     this.configurationService = configurationService;
+    this.userService = userService.orElse(null);
 
     setSpacing(true);
     setPadding(true);
@@ -73,6 +95,9 @@ public class SettingsView extends VerticalLayout {
     tabSheet.setSizeFull();
 
     // Add tabs
+    if (this.userService != null) {
+      tabSheet.add("Users", createUsersTab());
+    }
     tabSheet.add("Truststore", createTruststoreTab());
     tabSheet.add("Keystore", createKeystoreTab());
     tabSheet.add("Encryption", createEncryptionTab());
@@ -707,6 +732,239 @@ public class SettingsView extends VerticalLayout {
       statusLabel.setText("Current Mode: Cleartext (Development)");
       statusLabel.getStyle().set("color", "var(--lumo-error-text-color)");
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Users tab (local auth mode only)
+  // ------------------------------------------------------------------
+
+  /**
+   * Creates the Users management tab.
+   *
+   * @return users tab content
+   */
+  private VerticalLayout createUsersTab() {
+    VerticalLayout layout = new VerticalLayout();
+    layout.setSpacing(true);
+    layout.setPadding(false);
+    layout.setSizeFull();
+
+    Span infoText = new Span(
+        "Manage local user accounts. Passwords are stored "
+        + "as BCrypt hashes in ~/.ldapbrowser/users.json");
+    infoText.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+    // Action buttons
+    Button addButton = new Button("Add User",
+        event -> openAddUserDialog());
+    addButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button passwordButton = new Button("Change Password",
+        event -> openChangePasswordDialog());
+    passwordButton.setEnabled(false);
+
+    Button deleteButton = new Button("Delete",
+        event -> deleteSelectedUser());
+    deleteButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+    deleteButton.setEnabled(false);
+
+    HorizontalLayout toolbar = new HorizontalLayout(
+        addButton, passwordButton, deleteButton);
+    toolbar.setSpacing(true);
+
+    // User grid
+    userGrid = new Grid<>();
+    userGrid.setSizeFull();
+    userGrid.addColumn(UserService.UserRecord::username)
+        .setHeader("Username").setFlexGrow(1);
+    userGrid.addColumn(record -> String.join(", ", record.roles()))
+        .setHeader("Roles").setFlexGrow(1);
+
+    userGrid.addSelectionListener(event -> {
+      boolean selected = event.getFirstSelectedItem().isPresent();
+      passwordButton.setEnabled(selected);
+      deleteButton.setEnabled(selected);
+    });
+
+    refreshUserGrid();
+
+    layout.add(infoText, toolbar, userGrid);
+    layout.expand(userGrid);
+    return layout;
+  }
+
+  /** Reloads the user grid from the users file. */
+  private void refreshUserGrid() {
+    if (userService != null && userGrid != null) {
+      userGrid.setItems(userService.loadUsers());
+    }
+  }
+
+  /** Opens the Add User dialog. */
+  private void openAddUserDialog() {
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("Add User");
+    dialog.setWidth("400px");
+
+    TextField usernameField = new TextField("Username");
+    usernameField.setWidthFull();
+    usernameField.setRequired(true);
+
+    PasswordField passwordField = new PasswordField("Password");
+    passwordField.setWidthFull();
+    passwordField.setRequired(true);
+    passwordField.setMinLength(8);
+
+    PasswordField confirmField = new PasswordField("Confirm Password");
+    confirmField.setWidthFull();
+    confirmField.setRequired(true);
+
+    CheckboxGroup<String> rolesGroup = new CheckboxGroup<>("Roles");
+    rolesGroup.setItems("ADMIN", "VIEWER");
+    rolesGroup.select("VIEWER");
+
+    VerticalLayout content = new VerticalLayout(
+        usernameField, passwordField, confirmField, rolesGroup);
+    content.setPadding(false);
+    content.setSpacing(true);
+    dialog.add(content);
+
+    Button saveButton = new Button("Save", event -> {
+      String username = usernameField.getValue().trim();
+      String password = passwordField.getValue();
+      String confirm = confirmField.getValue();
+      Set<String> roles = rolesGroup.getSelectedItems();
+
+      if (username.isEmpty()) {
+        NotificationHelper.showError("Username is required", 3000);
+        return;
+      }
+      if (password.length() < 8) {
+        NotificationHelper.showError(
+            "Password must be at least 8 characters", 3000);
+        return;
+      }
+      if (!password.equals(confirm)) {
+        NotificationHelper.showError("Passwords do not match", 3000);
+        return;
+      }
+      if (roles.isEmpty()) {
+        NotificationHelper.showError(
+            "At least one role is required", 3000);
+        return;
+      }
+      try {
+        userService.addUser(username, password, roles);
+        NotificationHelper.showSuccess(
+            "User '" + username + "' created", 3000);
+        refreshUserGrid();
+        dialog.close();
+      } catch (IllegalArgumentException ex) {
+        NotificationHelper.showError(ex.getMessage(), 3000);
+      } catch (IOException ex) {
+        NotificationHelper.showError(
+            "Failed to save user: " + ex.getMessage(), 5000);
+      }
+    });
+    saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button cancelButton = new Button("Cancel",
+        event -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, saveButton);
+    dialog.open();
+  }
+
+  /** Opens the Change Password dialog for the selected user. */
+  private void openChangePasswordDialog() {
+    UserService.UserRecord selected =
+        userGrid.asSingleSelect().getValue();
+    if (selected == null) {
+      return;
+    }
+
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle(
+        "Change Password — " + selected.username());
+    dialog.setWidth("400px");
+
+    PasswordField newPassword = new PasswordField("New Password");
+    newPassword.setWidthFull();
+    newPassword.setRequired(true);
+    newPassword.setMinLength(8);
+
+    PasswordField confirmPassword =
+        new PasswordField("Confirm Password");
+    confirmPassword.setWidthFull();
+    confirmPassword.setRequired(true);
+
+    VerticalLayout content = new VerticalLayout(
+        newPassword, confirmPassword);
+    content.setPadding(false);
+    content.setSpacing(true);
+    dialog.add(content);
+
+    Button saveButton = new Button("Change Password", event -> {
+      String password = newPassword.getValue();
+      String confirm = confirmPassword.getValue();
+
+      if (password.length() < 8) {
+        NotificationHelper.showError(
+            "Password must be at least 8 characters", 3000);
+        return;
+      }
+      if (!password.equals(confirm)) {
+        NotificationHelper.showError("Passwords do not match", 3000);
+        return;
+      }
+      try {
+        userService.changePassword(selected.username(), password);
+        NotificationHelper.showSuccess(
+            "Password changed for '" + selected.username() + "'",
+            3000);
+        dialog.close();
+      } catch (IOException ex) {
+        NotificationHelper.showError(
+            "Failed to change password: " + ex.getMessage(), 5000);
+      }
+    });
+    saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    Button cancelButton = new Button("Cancel",
+        event -> dialog.close());
+
+    dialog.getFooter().add(cancelButton, saveButton);
+    dialog.open();
+  }
+
+  /** Deletes the selected user after confirmation. */
+  private void deleteSelectedUser() {
+    UserService.UserRecord selected =
+        userGrid.asSingleSelect().getValue();
+    if (selected == null) {
+      return;
+    }
+    Dialog confirmDialog = new Dialog();
+    confirmDialog.setHeaderTitle("Delete User");
+    confirmDialog.add(
+        new Span("Delete user '" + selected.username()
+            + "'? This cannot be undone."));
+    confirmDialog.getFooter().add(
+        new Button("Cancel", e -> confirmDialog.close()),
+        new Button("Delete", e -> {
+          try {
+            userService.removeUser(selected.username());
+            NotificationHelper.showSuccess(
+                "User '" + selected.username() + "' deleted", 3000);
+            refreshUserGrid();
+          } catch (IOException ex) {
+            NotificationHelper.showError(
+                "Failed to delete user: " + ex.getMessage(), 5000);
+          }
+          confirmDialog.close();
+        })
+    );
+    confirmDialog.open();
   }
 }
 

@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import jakarta.annotation.security.RolesAllowed;
 import java.util.Set;
 
 /**
@@ -35,6 +36,7 @@ import java.util.Set;
  */
 @Route(value = "create", layout = MainLayout.class)
 @PageTitle("Create | LDAP Browser")
+@RolesAllowed("ADMIN")
 public class CreateView extends VerticalLayout {
 
   private final LdapService ldapService;

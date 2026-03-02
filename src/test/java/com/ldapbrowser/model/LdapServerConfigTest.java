@@ -1,5 +1,6 @@
 package com.ldapbrowser.model;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -176,6 +177,40 @@ class LdapServerConfigTest {
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("host must not be empty")
           .hasMessageContaining("port must be between 1 and 65535");
+    }
+  }
+
+  // ---- equals / hashCode with port ------------------------------------
+
+  @Nested
+  @DisplayName("Equals and hashCode include port")
+  class EqualsHashCode {
+
+    @Test
+    @DisplayName("same name/host/port are equal")
+    void sameFields() {
+      LdapServerConfig a = valid();
+      LdapServerConfig b = valid();
+      assertThat(a).isEqualTo(b);
+      assertThat(a.hashCode()).isEqualTo(b.hashCode());
+    }
+
+    @Test
+    @DisplayName("different port makes configs unequal")
+    void differentPort() {
+      LdapServerConfig a = valid();
+      LdapServerConfig b = valid();
+      b.setPort(636);
+      assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
+    @DisplayName("hashCode differs when port differs")
+    void hashCodeDiffersOnPort() {
+      LdapServerConfig a = valid();
+      LdapServerConfig b = valid();
+      b.setPort(636);
+      assertThat(a.hashCode()).isNotEqualTo(b.hashCode());
     }
   }
 }

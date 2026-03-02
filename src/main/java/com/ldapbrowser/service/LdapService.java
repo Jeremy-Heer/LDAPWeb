@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import jakarta.annotation.PreDestroy;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
@@ -655,6 +656,7 @@ public class LdapService {
   /**
    * Closes all connection pools.
    */
+  @PreDestroy
   public void closeAllConnectionPools() {
     connectionPools.forEach((name, pool) -> {
       pool.close();

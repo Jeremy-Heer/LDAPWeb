@@ -244,6 +244,41 @@ class EncryptionServiceTest {
   }
 
   // ---------------------------------------------------------------
+  // ENC: prefix format
+  // ---------------------------------------------------------------
+
+  @Nested
+  @DisplayName("ENC: prefix format")
+  class EncPrefix {
+
+    @Test
+    @DisplayName("encrypted output starts with ENC: prefix")
+    void outputHasPrefix() throws Exception {
+      String encrypted = service.encryptPassword("test-password");
+      assertThat(encrypted).startsWith("ENC:");
+    }
+
+    @Test
+    @DisplayName("decrypt handles ENC: prefix transparently")
+    void decryptWithPrefix() throws Exception {
+      String encrypted = service.encryptPassword("test-password");
+      assertThat(encrypted).startsWith("ENC:");
+      assertThat(service.decryptPassword(encrypted))
+          .isEqualTo("test-password");
+    }
+
+    @Test
+    @DisplayName("decrypt handles legacy format without prefix")
+    void decryptLegacyWithoutPrefix() throws Exception {
+      // Encrypt and strip the prefix to simulate legacy format
+      String encrypted = service.encryptPassword("legacy-pass");
+      String legacy = encrypted.substring("ENC:".length());
+      assertThat(service.decryptPassword(legacy))
+          .isEqualTo("legacy-pass");
+    }
+  }
+
+  // ---------------------------------------------------------------
   // isPasswordEncrypted heuristic
   // ---------------------------------------------------------------
 
@@ -252,10 +287,16 @@ class EncryptionServiceTest {
   class PasswordDetection {
 
     @Test
-    @DisplayName("encrypted output is detected as encrypted")
+    @DisplayName("encrypted output with ENC: prefix is detected")
     void encryptedDetected() throws Exception {
       String encrypted = service.encryptPassword("test-password");
       assertThat(service.isPasswordEncrypted(encrypted)).isTrue();
+    }
+
+    @Test
+    @DisplayName("ENC: prefix alone is detected as encrypted")
+    void prefixOnly() {
+      assertThat(service.isPasswordEncrypted("ENC:anything")).isTrue();
     }
 
     @Test
@@ -281,6 +322,15 @@ class EncryptionServiceTest {
     void shortBase64NotDetected() {
       // Base64 of a few bytes — too short to be IV + ciphertext + tag
       assertThat(service.isPasswordEncrypted("AQID")).isFalse();
+    }
+
+    @Test
+    @DisplayName("legacy format (long Base64 without prefix) still detected")
+    void legacyLongBase64Detected() throws Exception {
+      String encrypted = service.encryptPassword("test");
+      // Strip ENC: to simulate legacy
+      String legacy = encrypted.substring("ENC:".length());
+      assertThat(service.isPasswordEncrypted(legacy)).isTrue();
     }
   }
 

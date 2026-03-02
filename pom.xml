@@ -14,7 +14,7 @@
 
   <groupId>com.ldapbrowser</groupId>
   <artifactId>ldap-browser</artifactId>
-  <version>0.64</version>
+  <version>0.65</version>
   <name>LDAP Browser</name>
   <description>Comprehensive Java web application for browsing, searching, and managing LDAP directories</description>
 
@@ -41,6 +41,16 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Spring Security -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-client</artifactId>
     </dependency>
 
     <!-- Vaadin -->
@@ -98,6 +108,11 @@
     <dependency>
       <groupId>org.assertj</groupId>
       <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -158,7 +173,7 @@
         <artifactId>dependency-check-maven</artifactId>
         <version>10.0.3</version>
         <configuration>
-          <failBuildOnCVSS>9</failBuildOnCVSS>
+          <failBuildOnCVSS>7</failBuildOnCVSS>
           <suppressionFile>dependency-check-suppressions.xml</suppressionFile>
           <skipProvidedScope>true</skipProvidedScope>
         </configuration>

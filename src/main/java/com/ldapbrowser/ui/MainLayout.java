@@ -41,11 +41,19 @@ import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * Main layout for LDAP Browser application.
  * Provides the navbar and drawer navigation structure.
+ *
+ * <p>Marked {@code @AnonymousAllowed} so that it does not block
+ * access to child views. Each view enforces its own role
+ * requirements via {@code @RolesAllowed} or {@code @PermitAll}.
  */
+@com.vaadin.flow.server.auth.AnonymousAllowed
 public class MainLayout extends AppLayout {
 
   private static final Logger logger = LoggerFactory.getLogger(MainLayout.class);
@@ -53,6 +61,7 @@ public class MainLayout extends AppLayout {
   private final ConfigurationService configService;
   private final LdapService ldapService;
   private final LoggingService loggingService;
+  private final String authMode;
   private MultiSelectComboBox<String> serverSelect;
   private HorizontalLayout selectedServersContainer;
   private Dialog logsDialog;
@@ -66,12 +75,15 @@ public class MainLayout extends AppLayout {
    * @param configService configuration service
    * @param ldapService LDAP service for connection management
    * @param loggingService logging service for activity logs
+   * @param authMode active authentication mode
    */
   public MainLayout(ConfigurationService configService, LdapService ldapService, 
-      LoggingService loggingService) {
+      LoggingService loggingService,
+      @Value("${ldapbrowser.auth.mode:none}") String authMode) {
     this.configService = configService;
     this.ldapService = ldapService;
     this.loggingService = loggingService;
+    this.authMode = authMode;
     
     // Set the logging service for NotificationHelper to use
     NotificationHelper.setLoggingService(loggingService);
@@ -184,9 +196,45 @@ public class MainLayout extends AppLayout {
     header.setWidth("100%");
     header.expand(selectedServersContainer); // Make this expand to push buttons to the right
     header.add(logsButton, helpButton); // Add buttons at the end
+
+    // User menu (only when authentication is enabled)
+    if (!"none".equals(authMode)) {
+      header.add(createUserMenu());
+    }
+
     header.addClassNames("py-0", "px-m");
 
     addToNavbar(header);
+  }
+
+  /**
+   * Creates the user menu showing the authenticated user and a sign-out
+   * button. Only rendered when authentication is enabled.
+   *
+   * @return user menu layout
+   */
+  private HorizontalLayout createUserMenu() {
+    HorizontalLayout userMenu = new HorizontalLayout();
+    userMenu.setAlignItems(FlexComponent.Alignment.CENTER);
+    userMenu.setSpacing(true);
+
+    Authentication auth =
+        SecurityContextHolder.getContext().getAuthentication();
+    String username = (auth != null) ? auth.getName() : "anonymous";
+
+    Span userLabel = new Span(username);
+    userLabel.getStyle()
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
+
+    Button signOutButton = new Button("Sign out", VaadinIcon.SIGN_OUT.create());
+    signOutButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY,
+        ButtonVariant.LUMO_SMALL);
+    signOutButton.addClickListener(event ->
+        UI.getCurrent().getPage().setLocation("/logout"));
+
+    userMenu.add(userLabel, signOutButton);
+    return userMenu;
   }
 
   /**

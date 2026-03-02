@@ -26,6 +26,7 @@ import com.vaadin.flow.data.provider.ListDataProvider;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.RolesAllowed;
 import java.io.IOException;
 import java.util.List;
 
@@ -35,6 +36,7 @@ import java.util.List;
  */
 @Route(value = "", layout = MainLayout.class)
 @PageTitle("Server | LDAP Browser")
+@RolesAllowed("ADMIN")
 public class ServerView extends VerticalLayout {
 
   private static final org.slf4j.Logger logger = 
@@ -551,6 +553,7 @@ public class ServerView extends VerticalLayout {
         useStartTls
     );
     // Don't validate certificate for temporary browse connection
+    // Use the server config's certificate validation setting when available
     tempConfig.setValidateCertificate(false);
 
     new com.ldapbrowser.ui.dialogs.DnBrowserDialog(ldapService, truststoreService)

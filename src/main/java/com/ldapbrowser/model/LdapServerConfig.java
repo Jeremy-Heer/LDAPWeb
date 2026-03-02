@@ -196,12 +196,14 @@ public class LdapServerConfig implements Serializable {
       return false;
     }
     LdapServerConfig that = (LdapServerConfig) o;
-    return Objects.equals(name, that.name) && Objects.equals(host, that.host);
+    return Objects.equals(name, that.name)
+        && Objects.equals(host, that.host)
+        && port == that.port;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, host);
+    return Objects.hash(name, host, port);
   }
 
   @Override

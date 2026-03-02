@@ -15,6 +15,7 @@ import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import java.util.HashSet;
+import jakarta.annotation.security.RolesAllowed;
 import java.util.Set;
 
 /**
@@ -23,6 +24,7 @@ import java.util.Set;
  */
 @Route(value = "schema", layout = MainLayout.class)
 @PageTitle("Schema | LDAP Browser")
+@RolesAllowed({"ADMIN", "VIEWER"})
 public class SchemaView extends VerticalLayout {
 
   private final SchemaManageTab manageTab;

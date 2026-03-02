@@ -6,6 +6,7 @@ import com.vaadin.flow.component.markdown.Markdown;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import jakarta.annotation.security.PermitAll;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -16,6 +17,7 @@ import java.nio.charset.StandardCharsets;
  */
 @Route(value = "help", layout = MainLayout.class)
 @PageTitle("Help | LDAP Browser")
+@PermitAll
 public class HelpView extends VerticalLayout {
 
   /**

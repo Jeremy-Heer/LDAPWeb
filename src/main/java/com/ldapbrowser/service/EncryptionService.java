@@ -23,6 +23,7 @@ public class EncryptionService {
   private static final String ALGORITHM = "AES/GCM/NoPadding";
   private static final int GCM_IV_LENGTH = 12; // 96 bits
   private static final int GCM_TAG_LENGTH = 128; // 128 bits
+  private static final String ENCRYPTED_PREFIX = "ENC:";
 
   private final KeystoreService keystoreService;
   private final boolean encryptionEnabled;
@@ -79,8 +80,9 @@ public class EncryptionService {
       byteBuffer.put(iv);
       byteBuffer.put(ciphertext);
 
-      // Return Base64-encoded result
-      return Base64.getEncoder().encodeToString(byteBuffer.array());
+      // Return prefixed Base64-encoded result
+      return ENCRYPTED_PREFIX
+          + Base64.getEncoder().encodeToString(byteBuffer.array());
     } catch (Exception e) {
       throw new EncryptionException("Failed to encrypt password", e);
     }
@@ -106,8 +108,14 @@ public class EncryptionService {
       // Get encryption key
       SecretKey key = keystoreService.getEncryptionKey();
 
+      // Strip prefix if present
+      String payload = encrypted;
+      if (payload.startsWith(ENCRYPTED_PREFIX)) {
+        payload = payload.substring(ENCRYPTED_PREFIX.length());
+      }
+
       // Decode Base64
-      byte[] decoded = Base64.getDecoder().decode(encrypted);
+      byte[] decoded = Base64.getDecoder().decode(payload);
 
       // Extract IV and ciphertext
       ByteBuffer byteBuffer = ByteBuffer.wrap(decoded);
@@ -140,7 +148,8 @@ public class EncryptionService {
 
   /**
    * Checks if a password is encrypted.
-   * Heuristic: encrypted passwords are Base64-encoded and longer than typical cleartext.
+   * Detects both the new {@code ENC:} prefix format and the legacy
+   * heuristic (Base64 with decoded length &ge; 28 bytes).
    *
    * @param password password to check
    * @return true if password appears to be encrypted
@@ -150,7 +159,12 @@ public class EncryptionService {
       return false;
     }
 
-    // Try to decode as Base64
+    // New format: explicit prefix
+    if (password.startsWith(ENCRYPTED_PREFIX)) {
+      return true;
+    }
+
+    // Legacy heuristic for passwords encrypted before prefix was added
     try {
       byte[] decoded = Base64.getDecoder().decode(password);
       // Encrypted passwords have IV (12 bytes) + ciphertext + tag (16 bytes)
@@ -173,8 +187,14 @@ public class EncryptionService {
    */
   public String reencryptPassword(String encrypted, SecretKey oldKey) throws EncryptionException {
     try {
+      // Strip prefix if present
+      String payload = encrypted;
+      if (payload.startsWith(ENCRYPTED_PREFIX)) {
+        payload = payload.substring(ENCRYPTED_PREFIX.length());
+      }
+
       // Decode Base64
-      byte[] decoded = Base64.getDecoder().decode(encrypted);
+      byte[] decoded = Base64.getDecoder().decode(payload);
 
       // Extract IV and ciphertext
       ByteBuffer byteBuffer = ByteBuffer.wrap(decoded);

@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
@@ -12,7 +13,9 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -78,15 +81,7 @@ public class TruststoreService {
       Files.writeString(pinPath, pin);
 
       // Set restrictive permissions on pin file (Unix-like systems)
-      try {
-        pinPath.toFile().setReadable(false, false);
-        pinPath.toFile().setReadable(true, true);
-        pinPath.toFile().setWritable(false, false);
-        pinPath.toFile().setWritable(true, true);
-      } catch (Exception e) {
-        // Permissions may not work on all platforms, log but continue
-        logger.warn("Could not set restrictive permissions on pin file: {}", e.getMessage());
-      }
+      setRestrictivePermissions(pinPath);
     }
   }
 
@@ -100,6 +95,25 @@ public class TruststoreService {
     byte[] bytes = new byte[PIN_LENGTH];
     random.nextBytes(bytes);
     return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+  }
+
+  /**
+   * Sets restrictive file permissions on the PIN file (Unix-like systems).
+   *
+   * @param path path to the file
+   */
+  private void setRestrictivePermissions(Path path) {
+    try {
+      Set<PosixFilePermission> perms = new HashSet<>();
+      perms.add(PosixFilePermission.OWNER_READ);
+      perms.add(PosixFilePermission.OWNER_WRITE);
+      Files.setPosixFilePermissions(path, perms);
+      logger.debug("Set restrictive permissions on: {}", path);
+    } catch (UnsupportedOperationException e) {
+      logger.debug("POSIX file permissions not supported on this system");
+    } catch (IOException e) {
+      logger.warn("Failed to set restrictive permissions on: {}", path, e);
+    }
   }
 
   /**
