@@ -23,6 +23,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.UIScope;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import jakarta.annotation.security.RolesAllowed;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /**
  * Create view for creating new LDAP entries.
@@ -37,6 +39,8 @@ import java.util.Set;
 @Route(value = "create", layout = MainLayout.class)
 @PageTitle("Create | LDAP Browser")
 @RolesAllowed("ADMIN")
+@UIScope
+@Component
 public class CreateView extends VerticalLayout {
 
   private final LdapService ldapService;

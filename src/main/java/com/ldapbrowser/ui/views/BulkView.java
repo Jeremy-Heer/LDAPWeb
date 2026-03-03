@@ -16,10 +16,12 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /**
  * Bulk operations view.
@@ -28,6 +30,8 @@ import java.util.Set;
 @Route(value = "bulk", layout = MainLayout.class)
 @PageTitle("Bulk | LDAP Browser")
 @RolesAllowed("ADMIN")
+@UIScope
+@Component
 public class BulkView extends VerticalLayout implements BeforeEnterObserver {
 
   private final ConfigurationService configService;
@@ -35,6 +39,7 @@ public class BulkView extends VerticalLayout implements BeforeEnterObserver {
   private final BulkSearchTab searchTab;
   private final BulkGenerateTab generateTab;
   private final com.ldapbrowser.ui.components.BulkGroupMembershipsTab groupMembershipsTab;
+  private TabSheet tabSheet;
 
   /**
    * Creates the Bulk view.
@@ -60,7 +65,7 @@ public class BulkView extends VerticalLayout implements BeforeEnterObserver {
     add(title);
 
     // Create the tab sheet
-    TabSheet tabSheet = new TabSheet();
+    tabSheet = new TabSheet();
     tabSheet.setSizeFull();
 
     // Add Import tab

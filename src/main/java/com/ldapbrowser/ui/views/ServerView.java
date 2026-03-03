@@ -26,9 +26,11 @@ import com.vaadin.flow.data.provider.ListDataProvider;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
 import java.io.IOException;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
 /**
  * Server configuration view.
@@ -37,6 +39,8 @@ import java.util.List;
 @Route(value = "", layout = MainLayout.class)
 @PageTitle("Server | LDAP Browser")
 @RolesAllowed("ADMIN")
+@UIScope
+@Component
 public class ServerView extends VerticalLayout {
 
   private static final org.slf4j.Logger logger = 

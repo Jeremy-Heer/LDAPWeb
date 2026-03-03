@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.68 - Preserve UI state when browsing
+
 ## v0.67 - Server Settings Bug
 1. On the Server view and after editing a server and updating the default base then proceeding
   to perform the same operation on a second server configuration, the

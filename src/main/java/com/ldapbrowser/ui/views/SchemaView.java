@@ -10,12 +10,14 @@ import com.ldapbrowser.ui.components.SchemaCompareTab;
 import com.ldapbrowser.ui.components.SchemaManageTab;
 import com.ldapbrowser.ui.components.SchemaMigrationTab;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.spring.annotation.UIScope;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import java.util.HashSet;
 import jakarta.annotation.security.RolesAllowed;
+import java.util.HashSet;
+import org.springframework.stereotype.Component;
 import java.util.Set;
 
 /**
@@ -25,6 +27,8 @@ import java.util.Set;
 @Route(value = "schema", layout = MainLayout.class)
 @PageTitle("Schema | LDAP Browser")
 @RolesAllowed({"ADMIN", "VIEWER"})
+@UIScope
+@Component
 public class SchemaView extends VerticalLayout {
 
   private final SchemaManageTab manageTab;

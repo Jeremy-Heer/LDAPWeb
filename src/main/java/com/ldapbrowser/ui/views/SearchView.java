@@ -31,13 +31,16 @@ import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.QueryParameters;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
+import org.springframework.stereotype.Component;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -47,6 +50,8 @@ import org.slf4j.LoggerFactory;
 @Route(value = "search", layout = MainLayout.class)
 @PageTitle("Search | LDAP Browser")
 @RolesAllowed({"ADMIN", "VIEWER"})
+@UIScope
+@Component
 public class SearchView extends VerticalLayout implements BeforeEnterObserver {
 
   private static final Logger logger = LoggerFactory.getLogger(SearchView.class);
@@ -80,7 +85,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     this.ldapService = ldapService;
     this.truststoreService = truststoreService;
     this.currentResults = new ArrayList<>();
-    this.columnFilters = new java.util.HashMap<>();
+    this.columnFilters = new HashMap<>();
 
     setSizeFull();
     setPadding(false);

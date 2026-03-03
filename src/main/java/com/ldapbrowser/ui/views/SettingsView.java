@@ -19,6 +19,7 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.TabSheet;
+import com.vaadin.flow.spring.annotation.UIScope;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -37,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /**
  * Settings view for managing application configuration.
@@ -45,6 +47,8 @@ import java.util.Set;
 @Route(value = "settings", layout = MainLayout.class)
 @PageTitle("Settings | LDAP Browser")
 @RolesAllowed("ADMIN")
+@UIScope
+@Component
 public class SettingsView extends VerticalLayout {
 
   private final TruststoreService truststoreService;
@@ -54,6 +58,7 @@ public class SettingsView extends VerticalLayout {
   private final UserService userService;
   private Grid<String> certificateGrid;
   private Grid<UserService.UserRecord> userGrid;
+  private TabSheet tabSheet;
 
   /**
    * Creates the Settings view.
@@ -92,6 +97,7 @@ public class SettingsView extends VerticalLayout {
     add(title);
 
     TabSheet tabSheet = new TabSheet();
+    this.tabSheet = tabSheet;
     tabSheet.setSizeFull();
 
     // Add tabs

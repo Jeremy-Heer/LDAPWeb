@@ -24,17 +24,25 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import java.util.List;
+import com.vaadin.flow.shared.Registration;
+import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
+import java.util.List;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /**
  * Browse view for navigating LDAP directory tree.
  * Displays tree navigator on the left and entry details on the right.
+ *
+ * <p>Annotated {@code @UIScope} so the same instance is reused
+ * within a browser tab, preserving tree state across navigation.
  */
 @Route(value = "browse", layout = MainLayout.class)
 @PageTitle("Browse | LDAP Browser")
 @RolesAllowed({"ADMIN", "VIEWER"})
+@UIScope
+@Component
 public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
   private final LdapService ldapService;
@@ -45,6 +53,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
   private EntryEditor entryEditor;
   private SplitLayout splitLayout;
   private Set<String> lastLoadedServers;
+  private Registration pollRegistration;
 
   /**
    * Creates the Browse view.
@@ -73,9 +82,9 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
     
     // Start polling for server selection changes every second
     UI ui = attachEvent.getUI();
-    ui.setPollInterval(1000); // Poll every second
+    ui.setPollInterval(1000);
     
-    ui.addPollListener(pollEvent -> {
+    pollRegistration = ui.addPollListener(pollEvent -> {
       checkServerSelectionChanges();
     });
   }
@@ -84,17 +93,25 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
   protected void onDetach(DetachEvent detachEvent) {
     super.onDetach(detachEvent);
     
+    // Remove poll listener to prevent duplicates on re-attach
+    if (pollRegistration != null) {
+      pollRegistration.remove();
+      pollRegistration = null;
+    }
+    
     // Stop polling when view is detached
     UI ui = detachEvent.getUI();
-    ui.setPollInterval(-1); // Disable polling
+    ui.setPollInterval(-1);
   }
 
   private void checkServerSelectionChanges() {
     Set<String> currentServers = MainLayout.getSelectedServers();
-    if (lastLoadedServers == null || !lastLoadedServers.equals(currentServers)) {
+    if (lastLoadedServers == null
+        || !lastLoadedServers.equals(currentServers)) {
       getUI().ifPresent(ui -> ui.access(() -> {
         loadTree();
-        lastLoadedServers = currentServers != null ? Set.copyOf(currentServers) : Set.of();
+        lastLoadedServers = currentServers != null
+            ? Set.copyOf(currentServers) : Set.of();
       }));
     }
   }

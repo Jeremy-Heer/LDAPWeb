@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Tree grid component for browsing LDAP entries.
@@ -810,7 +811,9 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
         
         // Show notification about pagination
         if (pageNumber > 0 || result.hasNextPage() || result.hasPrevPage()) {
-          String message = String.format("Loaded page %d (%d entries) - Use pagination controls to navigate",
+          String message = String.format(
+              "Loaded page %d (%d entries)"
+              + " - Use pagination controls to navigate",
               pageNumber + 1, children.size());
           showNotification(message, NotificationVariant.LUMO_SUCCESS);
         }
@@ -1060,4 +1063,5 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
 
     dialog.open();
   }
+
 }
