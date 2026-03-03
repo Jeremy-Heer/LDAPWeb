@@ -17,11 +17,11 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.HeaderRow;
-import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.component.textfield.TextField;
@@ -59,6 +59,8 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   private TextField filterField;
   private Select<SearchScope> scopeSelect;
   private MultiSelectComboBox<String> returnAttributesField;
+  private RadioButtonGroup<String> baseTypeRadio;
+  private Button browseButton;
   private Button searchButton;
   private Grid<LdapEntry> resultsGrid;
   private EntryEditor entryEditor;
@@ -88,10 +90,6 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   }
 
   private void createLayout() {
-    // Header
-    H3 title = new H3("LDAP Search");
-    title.getStyle().set("margin", "var(--lumo-space-m)");
-
     // Search form
     VerticalLayout searchForm = createSearchForm();
 
@@ -113,7 +111,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     splitLayout.addToPrimary(resultsLayout);
     splitLayout.addToSecondary(entryEditor);
 
-    add(title, searchForm, splitLayout);
+    add(searchForm, splitLayout);
     expand(splitLayout);
   }
 
@@ -125,7 +123,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     // First row: compact search fields
     HorizontalLayout compactSearchRow = new HorizontalLayout();
     compactSearchRow.setWidthFull();
-    compactSearchRow.setDefaultVerticalComponentAlignment(Alignment.END);
+    compactSearchRow.setDefaultVerticalComponentAlignment(Alignment.START);
     compactSearchRow.setSpacing(true);
 
     // Search Base with Browse button
@@ -138,14 +136,27 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     searchBaseField = new TextField("Search Base");
     searchBaseField.setWidthFull();
     searchBaseField.setPlaceholder("dc=example,dc=com");
+    searchBaseField.setEnabled(false);
 
-    Button browseButton = new Button(VaadinIcon.FOLDER_OPEN.create());
+    browseButton = new Button(VaadinIcon.FOLDER_OPEN.create());
     browseButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
     browseButton.setTooltipText("Select DN from Directory");
     browseButton.addClickListener(e -> showBrowseDialog());
+    browseButton.setEnabled(false);
 
     searchBaseLayout.add(searchBaseField, browseButton);
     searchBaseLayout.expand(searchBaseField);
+
+    // Base type radio group
+    baseTypeRadio = new RadioButtonGroup<>();
+    baseTypeRadio.setItems("Default Base", "Custom Base");
+    baseTypeRadio.setValue("Default Base");
+    baseTypeRadio.getStyle().set("margin-top", "0");
+    baseTypeRadio.addValueChangeListener(e -> {
+      boolean isCustom = "Custom Base".equals(e.getValue());
+      searchBaseField.setEnabled(isCustom);
+      browseButton.setEnabled(isCustom);
+    });
 
     // Filter field with Filter Builder button
     HorizontalLayout filterLayout = new HorizontalLayout();
@@ -228,22 +239,34 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
       }
     });
 
-    compactSearchRow.add(searchBaseLayout, filterLayout, scopeSelect, returnAttributesField);
-    compactSearchRow.setFlexGrow(2, searchBaseLayout);
-    compactSearchRow.setFlexGrow(2, filterLayout);
-    compactSearchRow.setFlexGrow(0, scopeSelect);
-    compactSearchRow.setFlexGrow(1, returnAttributesField);
+    // Add base type radio under search base
+    VerticalLayout searchBaseWithRadio = new VerticalLayout(
+        searchBaseLayout, baseTypeRadio);
+    searchBaseWithRadio.setPadding(false);
+    searchBaseWithRadio.setSpacing(false);
 
-    // Second row: action buttons
+    // Add search button under filter, aligned with radio group
     searchButton = new Button("Search", VaadinIcon.SEARCH.create());
     searchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     searchButton.addClickListener(e -> performSearch());
 
-    HorizontalLayout buttonLayout = new HorizontalLayout(searchButton);
-    buttonLayout.setSpacing(true);
-    buttonLayout.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    HorizontalLayout searchButtonRow = new HorizontalLayout(searchButton);
+    searchButtonRow.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+    searchButtonRow.setSpacing(false);
 
-    formLayout.add(compactSearchRow, buttonLayout);
+    VerticalLayout filterWithButton = new VerticalLayout(
+        filterLayout, searchButtonRow);
+    filterWithButton.setPadding(false);
+    filterWithButton.setSpacing(false);
+
+    compactSearchRow.add(searchBaseWithRadio, filterWithButton,
+        scopeSelect, returnAttributesField);
+    compactSearchRow.setFlexGrow(2, searchBaseWithRadio);
+    compactSearchRow.setFlexGrow(2, filterWithButton);
+    compactSearchRow.setFlexGrow(0, scopeSelect);
+    compactSearchRow.setFlexGrow(1, returnAttributesField);
+
+    formLayout.add(compactSearchRow);
     return formLayout;
   }
 
@@ -506,11 +529,12 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   }
 
   private void performSearch() {
+    boolean useDefaultBase = "Default Base".equals(baseTypeRadio.getValue());
     String baseDn = searchBaseField.getValue();
     String filter = filterField.getValue();
     SearchScope scope = scopeSelect.getValue();
 
-    if (baseDn == null || baseDn.isEmpty()) {
+    if (!useDefaultBase && (baseDn == null || baseDn.isEmpty())) {
       NotificationHelper.showError("Please enter a search base", 3000);
       return;
     }
@@ -538,6 +562,34 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     currentResults.clear();
     List<LdapServerConfig> configs = configService.loadConfigurations();
 
+    // Validate default base availability when using default base
+    if (useDefaultBase) {
+      for (String serverName : selectedServers) {
+        configs.stream()
+            .filter(c -> c.getName().equals(serverName))
+            .findFirst()
+            .ifPresent(config -> {
+              if (config.getBaseDn() == null
+                  || config.getBaseDn().isEmpty()) {
+                NotificationHelper.showError(
+                    "No default base DN configured for server: "
+                        + serverName,
+                    5000);
+              }
+            });
+      }
+      // Check if any server lacks a default base
+      boolean anyMissing = selectedServers.stream().anyMatch(serverName ->
+          configs.stream()
+              .filter(c -> c.getName().equals(serverName))
+              .findFirst()
+              .map(c -> c.getBaseDn() == null || c.getBaseDn().isEmpty())
+              .orElse(true));
+      if (anyMissing) {
+        return;
+      }
+    }
+
     String finalFilter = filter;
     String[] finalAttributes = attributesToReturn;
     for (String serverName : selectedServers) {
@@ -546,17 +598,24 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
           .findFirst()
           .ifPresent(config -> {
             try {
+              String searchBase = useDefaultBase
+                  ? config.getBaseDn() : baseDn;
               List<LdapEntry> results;
               if (finalAttributes != null) {
-                results = ldapService.search(config, baseDn, finalFilter, scope, finalAttributes);
+                results = ldapService.search(
+                    config, searchBase, finalFilter, scope,
+                    finalAttributes);
               } else {
-                results = ldapService.search(config, baseDn, finalFilter, scope);
+                results = ldapService.search(
+                    config, searchBase, finalFilter, scope);
               }
               currentResults.addAll(results);
-              logger.info("Search on {} returned {} results", serverName, results.size());
+              logger.info("Search on {} returned {} results",
+                  serverName, results.size());
             } catch (LDAPException | GeneralSecurityException e) {
               NotificationHelper.showError(
-                  "Search failed on " + serverName + ": " + e.getMessage(),
+                  "Search failed on " + serverName + ": "
+                      + e.getMessage(),
                   5000);
               logger.error("Search failed on {}", serverName, e);
             }

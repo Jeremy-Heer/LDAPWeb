@@ -454,6 +454,9 @@ public class MainLayout extends AppLayout {
       if (config.getBindDn() != null && !config.getBindDn().isEmpty()) {
         tooltipText += "\nBind DN: " + config.getBindDn();
       }
+      if (config.getBaseDn() != null && !config.getBaseDn().isEmpty()) {
+        tooltipText += "\nBase DN: " + config.getBaseDn();
+      }
       Tooltip.forComponent(badge).setText(tooltipText);
     }
 

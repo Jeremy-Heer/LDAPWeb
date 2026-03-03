@@ -1,5 +1,27 @@
 # LDAP Web Browser
 
+## v0.66 - Search View Enhancements
+1. Remove LDAP Search title and pull the form content up removing
+  wasted white space at the currently consumed by the title
+2. Add horizontal radio button group under search base with options
+  - default base (default selected)
+  - custom base
+3. when default base is selected, the search base and browse dn is disabled
+  - searches performed with default base selected would use the default base
+    defined for each server.
+4. when custom base is selected, the existing behavior is used. requiring
+    a search base to be chosen which is then the same base for each server.
+5. Add the default base to the server tool tip in the main layout.
+6. If no default base is provided for a selected server and the default base radio
+  is selected, display a notificaiton when search is pressed preventing the search.
+
+
+## v0.65 - Enable login
+1. Modes
+  - stand alone
+  - local
+  - oauth
+
 ## v0.64 - Entry Editor Fixes
 1. When editing an existing attribute value, after updated the value on the 'edit value' dialog
     the new updated value is not highlighted on the entry detials grid.
