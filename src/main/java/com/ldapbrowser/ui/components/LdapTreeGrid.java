@@ -422,6 +422,11 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
       return "Loading...";
     }
 
+    // Server nodes: display just the server name
+    if (entry.getDn().startsWith("SERVER:")) {
+      return entry.getRdn();
+    }
+
     if (entry.getDn().isEmpty() || "Root DSE".equals(entry.getRdn())) {
       return "Root DSE";
     }
@@ -486,7 +491,12 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
       // Create server entry
       LdapEntry serverEntry = new LdapEntry();
       serverEntry.setDn("SERVER:" + config.getName()); // Unique DN for server node
-      serverEntry.setRdn(config.getName());
+      // Strip internal _tmp_ prefix for display
+      String displayName = config.getName();
+      if (displayName.startsWith("_tmp_")) {
+        displayName = displayName.substring(5);
+      }
+      serverEntry.setRdn(displayName);
       serverEntry.setHasChildren(true);
       serverEntry.addAttribute("objectClass", "serverNode");
       

@@ -1,5 +1,13 @@
 # LDAP Web Browser
 
+## v0.67 - Server Settings Bug
+1. On the Server view and after editing a server and updating the default base then proceeding
+  to perform the same operation on a second server configuration, the
+  displayed Select DN from Directory tree grid is displaying the first
+  server ldap data.
+2. create a solution to display the actual server name rather than "Server:Temporary" when
+  editing the default base
+
 ## v0.66 - Search View Enhancements
 1. Remove LDAP Search title and pull the form content up removing
   wasted white space at the currently consumed by the title
