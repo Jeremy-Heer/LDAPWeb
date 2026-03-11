@@ -76,6 +76,16 @@ public class LdapEntry {
    * @param name attribute name
    * @param value attribute value
    */
+  /**
+   * Sets the values for a specific attribute.
+   *
+   * @param name attribute name
+   * @param values attribute values
+   */
+  public void setAttribute(String name, List<String> values) {
+    attributes.put(name, values);
+  }
+
   public void addAttribute(String name, String value) {
     attributes.computeIfAbsent(name, k -> new ArrayList<>()).add(value);
   }

@@ -814,7 +814,7 @@ public class EntryEditor extends VerticalLayout {
       values.removeIf(String::isEmpty);
 
       // Update or add the attribute
-      currentEntry.getAttributes().put(name.trim(), new ArrayList<>(values));
+      currentEntry.setAttribute(name.trim(), new ArrayList<>(values));
       
       // Track all values as pending additions
       for (String value : values) {
@@ -923,7 +923,7 @@ public class EntryEditor extends VerticalLayout {
               row.getName(), new ArrayList<>(allValues));
         }
         allValues.set(row.getValueIndex(), newValue.trim());
-        currentEntry.getAttributes().put(
+        currentEntry.setAttribute(
             row.getName(), new ArrayList<>(allValues));
 
         // Track the new value as MODIFIED for highlighting
@@ -982,7 +982,7 @@ public class EntryEditor extends VerticalLayout {
       }
       
       allValues.add(newValue.trim());
-      currentEntry.getAttributes().put(row.getName(), allValues);
+      currentEntry.setAttribute(row.getName(), allValues);
       
       // Track this as a pending addition using the value itself
       String changeKey = row.getName() + ":" + newValue.trim();
