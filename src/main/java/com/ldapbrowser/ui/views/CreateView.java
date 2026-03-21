@@ -388,6 +388,8 @@ public class CreateView extends VerticalLayout {
         addTemplateAttribute("objectClass", "organizationalUnit");
         addTemplateAttribute("ou", "");
         break;
+      default:
+        break;
     }
 
     // Add an empty row at the end for additional attributes

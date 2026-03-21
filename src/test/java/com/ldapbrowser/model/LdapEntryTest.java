@@ -3,6 +3,7 @@ package com.ldapbrowser.model;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,6 +142,32 @@ class LdapEntryTest {
 
       assertThatThrownBy(() -> ops.put("extra", List.of("v")))
           .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("setAttribute modifies internal state via unmodifiable getter")
+    void setAttributeWorksWithUnmodifiableGetter() {
+      LdapEntry entry = new LdapEntry("cn=test", "s1");
+      entry.addAttribute("cn", "original");
+
+      List<String> updated = new ArrayList<>(entry.getAttributeValues("cn"));
+      updated.set(0, "modified");
+      entry.setAttribute("cn", updated);
+
+      assertThat(entry.getAttributeValues("cn")).containsExactly("modified");
+      assertThatThrownBy(() -> entry.getAttributes().put("sn", List.of("x")))
+          .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("setAttribute adds new attribute visible through getter")
+    void setAttributeAddsNewEntry() {
+      LdapEntry entry = new LdapEntry("cn=test", "s1");
+      entry.setAttribute("description", new ArrayList<>(List.of("val1", "val2")));
+
+      assertThat(entry.getAttributeValues("description"))
+          .containsExactly("val1", "val2");
+      assertThat(entry.getAttributes()).containsKey("description");
     }
   }
 

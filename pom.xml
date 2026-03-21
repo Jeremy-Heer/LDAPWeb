@@ -14,7 +14,7 @@
 
   <groupId>com.ldapbrowser</groupId>
   <artifactId>ldap-browser</artifactId>
-  <version>0.69</version>
+  <version>0.70</version>
   <name>LDAP Browser</name>
   <description>Comprehensive Java web application for browsing, searching, and managing LDAP directories</description>
 
@@ -201,6 +201,27 @@
           <execution>
             <id>validate</id>
             <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <version>4.8.6.6</version>
+        <configuration>
+          <effort>Max</effort>
+          <threshold>Medium</threshold>
+          <failOnError>true</failOnError>
+          <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+        </configuration>
+        <executions>
+          <execution>
+            <id>spotbugs-check</id>
+            <phase>verify</phase>
             <goals>
               <goal>check</goal>
             </goals>

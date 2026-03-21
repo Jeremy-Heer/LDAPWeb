@@ -213,12 +213,12 @@ public class KeystoreService {
       long fileSize = Files.size(keystorePath);
 
       return String.format(
-          "Keystore Location: %s\n"
-          + "Keystore Type: %s\n"
-          + "Key Algorithm: %s\n"
-          + "Key Size: %d bits\n"
-          + "Key Alias: %s\n"
-          + "Creation Date: %s\n"
+          "Keystore Location: %s%n"
+          + "Keystore Type: %s%n"
+          + "Key Algorithm: %s%n"
+          + "Key Size: %d bits%n"
+          + "Key Alias: %s%n"
+          + "Creation Date: %s%n"
           + "File Size: %d bytes",
           keystorePath,
           KEYSTORE_TYPE,

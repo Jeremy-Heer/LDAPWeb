@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.70 - Included Github Spotbugs
+
 ## v0.69 - Entry editor bug fix
 
 ## v0.68 - Preserve UI state when browsing

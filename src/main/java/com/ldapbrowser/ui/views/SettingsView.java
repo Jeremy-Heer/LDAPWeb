@@ -32,6 +32,7 @@ import jakarta.annotation.security.RolesAllowed;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.util.HashSet;
@@ -304,7 +305,7 @@ public class SettingsView extends VerticalLayout {
         } else if (pemArea.getValue() != null && !pemArea.getValue().trim().isEmpty()) {
           // Try to parse PEM text
           String pemText = pemArea.getValue().trim();
-          byte[] certBytes = pemText.getBytes();
+          byte[] certBytes = pemText.getBytes(StandardCharsets.UTF_8);
           ByteArrayInputStream bais = new ByteArrayInputStream(certBytes);
           CertificateFactory cf = CertificateFactory.getInstance("X.509");
           cert = cf.generateCertificate(bais);

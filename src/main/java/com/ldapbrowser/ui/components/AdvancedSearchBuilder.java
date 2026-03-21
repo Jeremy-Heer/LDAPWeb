@@ -480,6 +480,8 @@ public class AdvancedSearchBuilder extends VerticalLayout {
         case '!':
           rootLogicalOperator.setValue(LogicalOperator.NOT);
           break;
+        default:
+          break;
       }
 
       // Parse sub-filters as separate groups
@@ -712,6 +714,8 @@ public class AdvancedSearchBuilder extends VerticalLayout {
             break;
           case '!':
             groupLogicalOperator.setValue(LogicalOperator.NOT);
+            break;
+          default:
             break;
         }
 

@@ -61,6 +61,9 @@ public class ConfigurationService {
   private void ensureConfigDirectoryExists() {
     try {
       Path configDir = configPath.getParent();
+      if (configDir == null) {
+        return;
+      }
       if (!Files.exists(configDir)) {
         Files.createDirectories(configDir);
         logger.info("Created configuration directory: {}", configDir);

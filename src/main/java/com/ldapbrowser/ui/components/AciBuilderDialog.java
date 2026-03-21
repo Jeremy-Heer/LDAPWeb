@@ -355,6 +355,8 @@ public class AciBuilderDialog extends Dialog {
                   target.scopeCombo.setValue(value);
                 }
                 break;
+              default:
+                break;
             }
             
             targetIndex++;
@@ -527,6 +529,8 @@ public class AciBuilderDialog extends Dialog {
           dynamicControlsContainer.add(scopeCombo);
           // Trigger preview update since we set a default value
           updatePreview();
+          break;
+        default:
           break;
       }
     }

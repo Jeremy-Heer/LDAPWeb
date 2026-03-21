@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <!--
+    SpotBugs exclusion filter for LDAP Browser.
+
+    Suppresses false positives that are inherent to the
+    Vaadin + Spring Boot architecture. Vaadin UI components
+    extend Serializable but are never truly serialized;
+    Spring services are injected via constructor DI by design.
+
+    Genuine bug categories (DM_DEFAULT_ENCODING, NP_NULL_*,
+    etc.) are NOT excluded so they continue to fail the build.
+  -->
+
+  <!-- SE_BAD_FIELD: Vaadin components store Spring services
+       which are not Serializable. This is the standard
+       Vaadin + Spring DI pattern and never causes issues. -->
+  <Match>
+    <Bug pattern="SE_BAD_FIELD" />
+  </Match>
+
+  <!-- EI_EXPOSE_REP / EI_EXPOSE_REP2: Spring DI constructor
+       injection stores service references directly. Defensive
+       copies of injected singletons are unnecessary. -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP" />
+  </Match>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP2" />
+  </Match>
+
+  <!-- CT_CONSTRUCTOR_THROW: Vaadin Dialog subclasses build
+       their UI in the constructor, which may throw. Not a
+       practical concern for UI components. -->
+  <Match>
+    <Bug pattern="CT_CONSTRUCTOR_THROW" />
+  </Match>
+
+  <!-- DMI_RANDOM_USED_ONLY_ONCE: The codebase uses
+       new SecureRandom() inline for cryptographic operations.
+       Creating a fresh instance per call is acceptable for
+       SecureRandom (unlike java.util.Random). -->
+  <Match>
+    <Bug pattern="DMI_RANDOM_USED_ONLY_ONCE" />
+  </Match>
+
+  <!-- REC_CATCH_EXCEPTION: UI error handlers intentionally
+       catch Exception as a safety net to display user-friendly
+       error messages rather than letting exceptions propagate
+       to the Vaadin error handler. -->
+  <Match>
+    <Bug pattern="REC_CATCH_EXCEPTION" />
+  </Match>
+</FindBugsFilter>
