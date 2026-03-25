@@ -1,14 +1,20 @@
 package com.ldapbrowser.ui.views;
 
+import com.ldapbrowser.model.EntryTemplate;
+import com.ldapbrowser.model.EntryTemplate.CreateTemplateSection;
+import com.ldapbrowser.model.EntryTemplate.FieldType;
+import com.ldapbrowser.model.EntryTemplate.TemplateAttribute;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
+import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -46,11 +52,13 @@ public class CreateView extends VerticalLayout {
   private final LdapService ldapService;
   private final ConfigurationService configService;
   private final TruststoreService truststoreService;
+  private final TemplateService templateService;
 
   // UI Components
   private TextField rdnField;
   private TextField parentDnField;
   private Button parentDnBrowseButton;
+  private ComboBox<String> parentDnCombo;
   private TextField dnField;
   private ComboBox<String> templateComboBox;
   private Grid<AttributeRow> attributeGrid;
@@ -60,6 +68,8 @@ public class CreateView extends VerticalLayout {
 
   // Data
   private List<AttributeRow> attributeRows;
+  private List<EntryTemplate> createTemplates = new ArrayList<>();
+  private EntryTemplate activeTemplate;
 
   /**
    * Creates the Create view.
@@ -67,12 +77,16 @@ public class CreateView extends VerticalLayout {
    * @param ldapService LDAP service
    * @param configService configuration service
    * @param truststoreService truststore service
+   * @param templateService template service
    */
-  public CreateView(LdapService ldapService, ConfigurationService configService,
-      TruststoreService truststoreService) {
+  public CreateView(LdapService ldapService,
+      ConfigurationService configService,
+      TruststoreService truststoreService,
+      TemplateService templateService) {
     this.ldapService = ldapService;
     this.configService = configService;
     this.truststoreService = truststoreService;
+    this.templateService = templateService;
     this.attributeRows = new ArrayList<>();
 
     setSizeFull();
@@ -116,10 +130,23 @@ public class CreateView extends VerticalLayout {
     // Template dropdown
     templateComboBox = new ComboBox<>("Entry Template (Optional)");
     templateComboBox.setWidthFull();
-    templateComboBox.setItems("None", "User", "Group", "Dynamic Group", "OU");
+    loadTemplateItems();
     templateComboBox.setValue("None");
-    templateComboBox.setPlaceholder("Select a template to auto-populate attributes");
-    templateComboBox.addValueChangeListener(e -> applyTemplate(e.getValue()));
+    templateComboBox.setPlaceholder(
+        "Select a template to auto-populate attributes");
+    templateComboBox.addValueChangeListener(
+        e -> applyTemplate(e.getValue()));
+
+    // Parent DN combo (shown when template has parentFilter)
+    parentDnCombo = new ComboBox<>("Parent DN");
+    parentDnCombo.setWidthFull();
+    parentDnCombo.setPlaceholder("Select a parent DN");
+    parentDnCombo.setVisible(false);
+    parentDnCombo.addValueChangeListener(e -> {
+      if (e.getValue() != null) {
+        parentDnField.setValue(e.getValue());
+      }
+    });
 
     // Attribute grid
     attributeGrid = new Grid<>(AttributeRow.class, false);
@@ -209,7 +236,8 @@ public class CreateView extends VerticalLayout {
     buttonLayout.setSpacing(true);
     buttonLayout.add(addRowButton, clearButton, createButton);
 
-    add(titleLayout, infoText, dnCompositionLayout, dnField, templateComboBox, attributeGrid, buttonLayout);
+    add(titleLayout, infoText, dnCompositionLayout, parentDnCombo,
+        dnField, templateComboBox, attributeGrid, buttonLayout);
     setFlexGrow(1, attributeGrid);
   }
 
@@ -222,12 +250,32 @@ public class CreateView extends VerticalLayout {
     return nameField;
   }
 
-  private TextField createAttributeValueField(AttributeRow row) {
+  private com.vaadin.flow.component.Component createAttributeValueField(
+      AttributeRow row) {
+    if (row.getFieldType() != null
+        && row.getFieldType() != FieldType.TEXT) {
+      com.vaadin.flow.component.Component field =
+          com.ldapbrowser.ui.components.TemplateFieldFactory
+              .createField(row.getFieldType(),
+                  row.getAttributeValue(), row.getSelectValues());
+      if (field instanceof com.vaadin.flow.component.HasValue<?, ?> hv) {
+        @SuppressWarnings("unchecked")
+        com.vaadin.flow.component.HasValue<?, String> typedHv =
+            (com.vaadin.flow.component.HasValue<?, String>) hv;
+        typedHv.addValueChangeListener(
+            e -> row.setAttributeValue(
+                e.getValue() != null ? e.getValue().toString() : ""));
+      }
+      return field;
+    }
     TextField valueField = new TextField();
     valueField.setWidthFull();
     valueField.setPlaceholder("Enter attribute value");
-    valueField.setValue(row.getAttributeValue() != null ? row.getAttributeValue() : "");
-    valueField.addValueChangeListener(e -> row.setAttributeValue(e.getValue()));
+    valueField.setValue(
+        row.getAttributeValue() != null
+            ? row.getAttributeValue() : "");
+    valueField.addValueChangeListener(
+        e -> row.setAttributeValue(e.getValue()));
     return valueField;
   }
 
@@ -345,56 +393,170 @@ public class CreateView extends VerticalLayout {
     }
   }
 
-  private void applyTemplate(String template) {
-    if (template == null || "None".equals(template)) {
+  private void applyTemplate(String templateName) {
+    if (templateName == null || "None".equals(templateName)) {
+      activeTemplate = null;
+      showManualParentDn(true);
       return;
     }
+
+    // Find the matching configured template
+    EntryTemplate tmpl = createTemplates.stream()
+        .filter(t -> t.getName().equals(templateName))
+        .findFirst()
+        .orElse(null);
+    activeTemplate = tmpl;
 
     // Clear existing attributes but keep non-empty user-entered ones
     List<AttributeRow> existingRows = new ArrayList<>();
     for (AttributeRow row : attributeRows) {
-      if (row.getAttributeName() != null && !row.getAttributeName().trim().isEmpty() &&
-          row.getAttributeValue() != null && !row.getAttributeValue().trim().isEmpty()) {
+      if (row.getAttributeName() != null
+          && !row.getAttributeName().trim().isEmpty()
+          && row.getAttributeValue() != null
+          && !row.getAttributeValue().trim().isEmpty()) {
         existingRows.add(row);
       }
     }
-
     attributeRows.clear();
     attributeRows.addAll(existingRows);
 
-    // Add template-specific attributes
-    switch (template) {
-      case "User":
-        addTemplateAttribute("objectClass", "inetOrgPerson");
-        addTemplateAttribute("cn", "");
-        addTemplateAttribute("sn", "");
-        addTemplateAttribute("uid", "");
-        addTemplateAttribute("mail", "");
-        break;
-
-      case "Group":
-        addTemplateAttribute("objectClass", "groupOfUniqueNames");
-        addTemplateAttribute("cn", "");
-        addTemplateAttribute("uniqueMember", "");
-        break;
-
-      case "Dynamic Group":
-        addTemplateAttribute("objectClass", "groupOfURLs");
-        addTemplateAttribute("cn", "");
-        addTemplateAttribute("memberURL", "");
-        break;
-
-      case "OU":
-        addTemplateAttribute("objectClass", "organizationalUnit");
-        addTemplateAttribute("ou", "");
-        break;
-      default:
-        break;
+    if (tmpl == null || tmpl.getCreateSection() == null) {
+      showManualParentDn(true);
+      addEmptyRow();
+      refreshGrid();
+      return;
     }
 
-    // Add an empty row at the end for additional attributes
+    CreateTemplateSection cs = tmpl.getCreateSection();
+
+    // Apply RDN pattern
+    if (cs.getRdn() != null && !cs.getRdn().isEmpty()) {
+      int braceIndex = cs.getRdn().indexOf('{');
+      if (braceIndex > 0) {
+        rdnField.setValue(cs.getRdn().substring(0, braceIndex));
+      } else {
+        rdnField.setValue(cs.getRdn());
+      }
+      rdnField.setPlaceholder(cs.getRdn());
+    }
+
+    // Apply parent filter
+    if (cs.getParentFilter() != null
+        && !cs.getParentFilter().isEmpty()) {
+      resolveParentDnCandidates(cs.getParentFilter());
+      showManualParentDn(false);
+    } else {
+      showManualParentDn(true);
+    }
+
+    // Apply attributes from template
+    for (TemplateAttribute attr : cs.getAttributes()) {
+      List<String> values = attr.getValues();
+      String firstVal = values.isEmpty() ? "" : values.get(0);
+      if (attr.isHidden()) {
+        addTemplateAttribute(attr.getLdapAttributeName(), firstVal);
+      } else {
+        addTemplateAttributeWithType(
+            attr.getLdapAttributeName(), firstVal,
+            attr.getFieldType(), values);
+      }
+      // Add remaining values as additional rows for multi-valued attrs
+      for (int i = 1; i < values.size(); i++) {
+        attributeRows.add(
+            new AttributeRow(attr.getLdapAttributeName(), values.get(i)));
+      }
+    }
+
     addEmptyRow();
     refreshGrid();
+  }
+
+  private void loadTemplateItems() {
+    List<String> items = new ArrayList<>();
+    items.add("None");
+    try {
+      LdapServerConfig serverCfg = getSelectedServerConfig();
+      List<EntryTemplate> all =
+          (serverCfg != null)
+              ? templateService.getTemplatesForServer(serverCfg)
+              : templateService.loadTemplates();
+      createTemplates = all.stream()
+          .filter(t -> t.getCreateSection() != null)
+          .toList();
+      for (EntryTemplate t : createTemplates) {
+        items.add(t.getName());
+      }
+    } catch (Exception e) {
+      // templates file may not exist yet
+    }
+    // Keep legacy hardcoded templates for backwards compatibility
+    for (String legacy : List.of(
+        "User", "Group", "Dynamic Group", "OU")) {
+      if (!items.contains(legacy)) {
+        items.add(legacy);
+      }
+    }
+    templateComboBox.setItems(items);
+  }
+
+  /**
+   * Gets the config for the first currently selected server.
+   */
+  private LdapServerConfig getSelectedServerConfig() {
+    Set<String> names = MainLayout.getSelectedServers();
+    if (names == null || names.isEmpty()) {
+      return null;
+    }
+    String firstName = names.iterator().next();
+    return configService.loadConfigurations().stream()
+        .filter(c -> firstName.equals(c.getName()))
+        .findFirst()
+        .orElse(null);
+  }
+
+  /**
+   * Shows or hides the manual parent DN field vs combo.
+   */
+  private void showManualParentDn(boolean showManual) {
+    parentDnField.getParent().ifPresent(
+        p -> p.setVisible(showManual));
+    parentDnBrowseButton.setVisible(showManual);
+    parentDnCombo.setVisible(!showManual);
+  }
+
+  /**
+   * Resolves parent DN candidates from an LDAP filter.
+   */
+  private void resolveParentDnCandidates(String filter) {
+    Set<String> selectedServerNames = MainLayout.getSelectedServers();
+    if (selectedServerNames == null || selectedServerNames.isEmpty()) {
+      return;
+    }
+    List<LdapServerConfig> configs =
+        configService.loadConfigurations().stream()
+            .filter(c -> selectedServerNames.contains(c.getName()))
+            .toList();
+
+    List<String> candidates = new ArrayList<>();
+    for (LdapServerConfig cfg : configs) {
+      try {
+        List<String> bases = ldapService.getNamingContexts(cfg);
+        for (String base : bases) {
+          List<LdapEntry> results =
+              ldapService.search(cfg, base, filter,
+                  SearchScope.SUB, "dn");
+          for (LdapEntry entry : results) {
+            candidates.add(entry.getDn());
+          }
+        }
+      } catch (Exception e) {
+        // skip servers that fail
+      }
+    }
+    parentDnCombo.setItems(candidates);
+    if (candidates.size() == 1) {
+      parentDnCombo.setValue(candidates.get(0));
+    }
   }
 
   private void addTemplateAttribute(String name, String value) {
@@ -404,6 +566,18 @@ public class CreateView extends VerticalLayout {
 
     if (!exists) {
       attributeRows.add(new AttributeRow(name, value));
+    }
+  }
+
+  private void addTemplateAttributeWithType(String name, String value,
+      FieldType fieldType, List<String> selectValues) {
+    boolean exists = attributeRows.stream()
+        .anyMatch(row -> name.equals(row.getAttributeName()));
+    if (!exists) {
+      AttributeRow row = new AttributeRow(name, value);
+      row.setFieldType(fieldType);
+      row.setSelectValues(selectValues);
+      attributeRows.add(row);
     }
   }
 
@@ -469,7 +643,10 @@ public class CreateView extends VerticalLayout {
   private void clearAll() {
     rdnField.clear();
     parentDnField.clear();
+    parentDnCombo.clear();
+    showManualParentDn(true);
     templateComboBox.setValue("None");
+    activeTemplate = null;
     attributeRows.clear();
     addEmptyRow(); // Add one empty row
   }
@@ -480,6 +657,8 @@ public class CreateView extends VerticalLayout {
   public static class AttributeRow {
     private String attributeName;
     private String attributeValue;
+    private FieldType fieldType;
+    private List<String> selectValues;
 
     public AttributeRow() {
     }
@@ -503,6 +682,22 @@ public class CreateView extends VerticalLayout {
 
     public void setAttributeValue(String attributeValue) {
       this.attributeValue = attributeValue;
+    }
+
+    public FieldType getFieldType() {
+      return fieldType;
+    }
+
+    public void setFieldType(FieldType fieldType) {
+      this.fieldType = fieldType;
+    }
+
+    public List<String> getSelectValues() {
+      return selectValues;
+    }
+
+    public void setSelectValues(List<String> selectValues) {
+      this.selectValues = selectValues;
     }
   }
 }

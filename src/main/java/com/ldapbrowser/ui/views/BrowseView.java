@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.EntryEditor;
@@ -48,6 +49,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
   private final LdapService ldapService;
   private final ConfigurationService configService;
   private final TruststoreService truststoreService;
+  private final TemplateService templateService;
 
   private LdapTreeBrowser treeBrowser;
   private EntryEditor entryEditor;
@@ -61,12 +63,16 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
    * @param ldapService LDAP service
    * @param configService configuration service
    * @param truststoreService truststore service
+   * @param templateService template service
    */
-  public BrowseView(LdapService ldapService, ConfigurationService configService,
-      TruststoreService truststoreService) {
+  public BrowseView(LdapService ldapService,
+      ConfigurationService configService,
+      TruststoreService truststoreService,
+      TemplateService templateService) {
     this.ldapService = ldapService;
     this.configService = configService;
     this.truststoreService = truststoreService;
+    this.templateService = templateService;
 
     setSizeFull();
     setPadding(false);
@@ -131,7 +137,8 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
     });
 
     // Create attribute editor
-    entryEditor = new EntryEditor(ldapService, configService);
+    entryEditor = new EntryEditor(ldapService, configService,
+        templateService);
     entryEditor.setExpandListener(this::showExpandedEntryDialog);
   }
 
@@ -224,7 +231,8 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
     dialog.setModal(true);
 
     // Create a new entry editor for the dialog
-    EntryEditor dialogEditor = new EntryEditor(ldapService, configService);
+    EntryEditor dialogEditor = new EntryEditor(ldapService,
+        configService, templateService);
     dialogEditor.setServerConfig(currentConfig);
     dialogEditor.editEntry(currentEntry);
     dialogEditor.setSizeFull();

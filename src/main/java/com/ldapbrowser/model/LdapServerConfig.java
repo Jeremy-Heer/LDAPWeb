@@ -24,6 +24,8 @@ public class LdapServerConfig implements Serializable {
   private boolean useSsl;
   private boolean useStartTls;
   private boolean validateCertificate = true;
+  private List<String> allowedTemplates =
+      new ArrayList<>(List.of("LDAP"));
 
   /**
    * Default constructor.
@@ -129,6 +131,15 @@ public class LdapServerConfig implements Serializable {
     this.validateCertificate = validateCertificate;
   }
 
+  public List<String> getAllowedTemplates() {
+    return allowedTemplates;
+  }
+
+  public void setAllowedTemplates(List<String> allowedTemplates) {
+    this.allowedTemplates =
+        allowedTemplates != null ? allowedTemplates : new ArrayList<>();
+  }
+
   /**
    * Validates this configuration before a connection attempt.
    *
@@ -184,6 +195,8 @@ public class LdapServerConfig implements Serializable {
         this.useStartTls
     );
     copied.setValidateCertificate(this.validateCertificate);
+    copied.setAllowedTemplates(
+        new ArrayList<>(this.allowedTemplates));
     return copied;
   }
 

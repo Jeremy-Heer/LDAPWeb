@@ -4,6 +4,7 @@ import com.ldapbrowser.exception.CertificateValidationException;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
@@ -11,6 +12,7 @@ import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
+import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -29,6 +31,7 @@ import com.vaadin.flow.router.Route;
 import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -49,6 +52,7 @@ public class ServerView extends VerticalLayout {
   private final ConfigurationService configService;
   private final LdapService ldapService;
   private final TruststoreService truststoreService;
+  private final TemplateService templateService;
 
   private Grid<LdapServerConfig> serverGrid;
   private TextField searchField;
@@ -65,12 +69,14 @@ public class ServerView extends VerticalLayout {
    * @param configService configuration service
    * @param ldapService LDAP service
    * @param truststoreService truststore service
+   * @param templateService template service
    */
   public ServerView(ConfigurationService configService, LdapService ldapService,
-      TruststoreService truststoreService) {
+      TruststoreService truststoreService, TemplateService templateService) {
     this.configService = configService;
     this.ldapService = ldapService;
     this.truststoreService = truststoreService;
+    this.templateService = templateService;
 
     setSpacing(true);
     setPadding(true);
@@ -341,6 +347,21 @@ public class ServerView extends VerticalLayout {
     formLayout.add(useSslCheckbox, useStartTlsCheckbox);
     formLayout.add(validateCertificateCheckbox, viewCertButton);
 
+    // Template filtering
+    MultiSelectComboBox<String> templatesCombo =
+        new MultiSelectComboBox<>("Allowed Templates");
+    templatesCombo.setPlaceholder(
+        "Leave empty to allow all templates");
+    List<String> allTemplateNames = new ArrayList<>();
+    allTemplateNames.add("LDAP");
+    templateService.loadTemplates().stream()
+        .map(t -> t.getName())
+        .filter(name -> !"LDAP".equals(name))
+        .forEach(allTemplateNames::add);
+    templatesCombo.setItems(allTemplateNames);
+    templatesCombo.setWidthFull();
+    formLayout.add(templatesCombo, 2);
+
     // Create binder
     Binder<LdapServerConfig> binder = new Binder<>(LdapServerConfig.class);
     binder.forField(nameField)
@@ -361,6 +382,11 @@ public class ServerView extends VerticalLayout {
         LdapServerConfig::isUseStartTls, LdapServerConfig::setUseStartTls);
     binder.bind(validateCertificateCheckbox,
         LdapServerConfig::isValidateCertificate, LdapServerConfig::setValidateCertificate);
+    binder.forField(templatesCombo)
+        .bind(
+            cfg -> new java.util.HashSet<>(cfg.getAllowedTemplates()),
+            (cfg, selected) -> cfg.setAllowedTemplates(
+                new java.util.ArrayList<>(selected)));
 
     // Load existing config or create new
     LdapServerConfig editConfig = config != null ? config : new LdapServerConfig();

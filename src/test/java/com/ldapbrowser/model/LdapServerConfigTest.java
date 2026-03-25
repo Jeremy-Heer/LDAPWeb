@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -211,6 +213,60 @@ class LdapServerConfigTest {
       LdapServerConfig b = valid();
       b.setPort(636);
       assertThat(a.hashCode()).isNotEqualTo(b.hashCode());
+    }
+  }
+
+  // ---- allowedTemplates -----------------------------------------------
+
+  @Nested
+  @DisplayName("AllowedTemplates field")
+  class AllowedTemplates {
+
+    @Test
+    @DisplayName("defaults to LDAP")
+    void defaultsToLdap() {
+      LdapServerConfig cfg = new LdapServerConfig();
+      assertThat(cfg.getAllowedTemplates())
+          .isNotNull().containsExactly("LDAP");
+    }
+
+    @Test
+    @DisplayName("getter returns set values")
+    void setAndGet() {
+      LdapServerConfig cfg = valid();
+      cfg.setAllowedTemplates(List.of("User", "Group"));
+      assertThat(cfg.getAllowedTemplates())
+          .containsExactly("User", "Group");
+    }
+
+    @Test
+    @DisplayName("null setter normalises to empty list")
+    void nullNormalisesToEmpty() {
+      LdapServerConfig cfg = valid();
+      cfg.setAllowedTemplates(null);
+      assertThat(cfg.getAllowedTemplates()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("copy preserves allowedTemplates")
+    void copyPreserves() {
+      LdapServerConfig cfg = valid();
+      cfg.setAllowedTemplates(
+          new ArrayList<>(List.of("T1", "T2")));
+      LdapServerConfig copied = cfg.copy();
+      assertThat(copied.getAllowedTemplates())
+          .containsExactly("T1", "T2");
+    }
+
+    @Test
+    @DisplayName("copy creates independent list")
+    void copyIsIndependent() {
+      LdapServerConfig cfg = valid();
+      cfg.setAllowedTemplates(
+          new ArrayList<>(List.of("T1")));
+      LdapServerConfig copied = cfg.copy();
+      copied.getAllowedTemplates().add("T2");
+      assertThat(cfg.getAllowedTemplates()).containsExactly("T1");
     }
   }
 }

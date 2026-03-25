@@ -1,11 +1,17 @@
 package com.ldapbrowser.ui.components;
 
+import com.ldapbrowser.model.EntryTemplate;
+import com.ldapbrowser.model.EntryTemplate.TemplateAttribute;
+import com.ldapbrowser.model.EntryTemplate.ViewEditTemplateSection;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.ui.utils.SchemaDetailDialogHelper;
+import com.unboundid.ldap.sdk.Entry;
+import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.Modification;
 import com.unboundid.ldap.sdk.ModificationType;
 import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
@@ -57,6 +63,7 @@ public class EntryEditor extends VerticalLayout {
 
   private final LdapService ldapService;
   private final ConfigurationService configService;
+  private final TemplateService templateService;
 
   private LdapServerConfig serverConfig;
   private LdapEntry currentEntry;
@@ -99,6 +106,9 @@ public class EntryEditor extends VerticalLayout {
   private boolean showOperationalAttributes = false;
   private Grid<AttributeRow> attributeGrid;
   private ListDataProvider<AttributeRow> attributeDataProvider;
+  private ComboBox<String> templateComboBox;
+  private List<EntryTemplate> viewEditTemplates = new ArrayList<>();
+  private EntryTemplate activeViewEditTemplate;
   
   // Listener for expand action
   private Runnable expandListener;
@@ -108,10 +118,14 @@ public class EntryEditor extends VerticalLayout {
    *
    * @param ldapService LDAP service
    * @param configService configuration service
+   * @param templateService template service
    */
-  public EntryEditor(LdapService ldapService, ConfigurationService configService) {
+  public EntryEditor(LdapService ldapService,
+      ConfigurationService configService,
+      TemplateService templateService) {
     this.ldapService = ldapService;
     this.configService = configService;
+    this.templateService = templateService;
     
     initializeComponents();
     setupLayout();
@@ -338,12 +352,31 @@ public class EntryEditor extends VerticalLayout {
     dnRow.add(dnPrefix, dnLabel, expandButton, searchField);
     dnRow.setFlexGrow(1, dnLabel);
 
+    // Template combo
+    templateComboBox = new ComboBox<>();
+    templateComboBox.setPlaceholder("Template");
+    templateComboBox.setWidth("180px");
+    templateComboBox.setClearButtonVisible(true);
+    loadViewEditTemplates();
+    templateComboBox.addValueChangeListener(e -> {
+      String name = e.getValue();
+      if (name == null || "LDAP".equals(name)) {
+        activeViewEditTemplate = null;
+      } else {
+        activeViewEditTemplate = viewEditTemplates.stream()
+            .filter(t -> t.getName().equals(name))
+            .findFirst().orElse(null);
+      }
+      refreshAttributeDisplay();
+    });
+
     // Action buttons
     HorizontalLayout buttonLayout = new HorizontalLayout();
     buttonLayout.setDefaultVerticalComponentAlignment(Alignment.CENTER);
     buttonLayout.setPadding(false);
     buttonLayout.setSpacing(true);
     buttonLayout.add(
+        templateComboBox,
         addAttributeButton,
         pendingChangesButton,
         testLoginButton,
@@ -365,6 +398,7 @@ public class EntryEditor extends VerticalLayout {
    */
   public void setServerConfig(LdapServerConfig serverConfig) {
     this.serverConfig = serverConfig;
+    loadViewEditTemplates();
   }
 
   /**
@@ -431,6 +465,9 @@ public class EntryEditor extends VerticalLayout {
       setButtonsEnabled(true);
       expandButton.setEnabled(true);
       showOperationalAttributesButton.setEnabled(true);
+
+      // Auto-detect matching template
+      autoMatchTemplate(entry);
     } else {
       clear();
     }
@@ -459,12 +496,131 @@ public class EntryEditor extends VerticalLayout {
     searchField.clear();
   }
 
+  /**
+   * Loads templates that have a View/Edit section.
+   */
+  private void loadViewEditTemplates() {
+    List<String> items = new ArrayList<>();
+    items.add("LDAP");
+    try {
+      List<EntryTemplate> all =
+          (serverConfig != null)
+              ? templateService.getTemplatesForServer(serverConfig)
+              : templateService.loadTemplates();
+      viewEditTemplates = all.stream()
+          .filter(t -> t.getViewEditSection() != null)
+          .toList();
+      for (EntryTemplate t : viewEditTemplates) {
+        items.add(t.getName());
+      }
+    } catch (Exception e) {
+      // templates file may not exist yet
+    }
+    templateComboBox.setItems(items);
+    templateComboBox.setValue("LDAP");
+  }
+
+  /**
+   * Auto-detects a matching View/Edit template for the entry.
+   */
+  private void autoMatchTemplate(LdapEntry entry) {
+    if (entry == null || viewEditTemplates.isEmpty()) {
+      return;
+    }
+    // Build an UnboundID Entry for filter matching
+    Entry sdkEntry = new Entry(entry.getDn());
+    for (Map.Entry<String, List<String>> attr
+        : entry.getAttributes().entrySet()) {
+      sdkEntry.addAttribute(attr.getKey(),
+          attr.getValue().toArray(new String[0]));
+    }
+    for (EntryTemplate tmpl : viewEditTemplates) {
+      ViewEditTemplateSection ves = tmpl.getViewEditSection();
+      if (ves == null || ves.getMatchingFilter() == null
+          || ves.getMatchingFilter().isEmpty()) {
+        continue;
+      }
+      try {
+        Filter f = Filter.create(ves.getMatchingFilter());
+        if (f.matchesEntry(sdkEntry)) {
+          activeViewEditTemplate = tmpl;
+          templateComboBox.setValue(tmpl.getName());
+          refreshAttributeDisplay();
+          return;
+        }
+      } catch (Exception e) {
+        logger.debug("Invalid matching filter for template {}: {}",
+            tmpl.getName(), e.getMessage());
+      }
+    }
+  }
+
   private void refreshAttributeDisplay() {
     if (currentEntry == null) {
       attributeGrid.setItems(Collections.emptyList());
       return;
     }
 
+    List<AttributeRow> rows;
+    if (activeViewEditTemplate != null) {
+      rows = buildTemplateRows();
+    } else {
+      rows = buildDefaultRows();
+    }
+
+    attributeDataProvider = new ListDataProvider<>(rows);
+    attributeGrid.setDataProvider(attributeDataProvider);
+    applyAttributeFilter();
+  }
+
+  /**
+   * Builds attribute rows using the active View/Edit template.
+   * Only shows attributes defined in the template, in template order,
+   * using the template's display names.
+   */
+  private List<AttributeRow> buildTemplateRows() {
+    List<AttributeRow> rows = new ArrayList<>();
+    ViewEditTemplateSection section =
+        activeViewEditTemplate.getViewEditSection();
+    if (section == null || section.getAttributes() == null) {
+      return buildDefaultRows();
+    }
+
+    for (TemplateAttribute ta : section.getAttributes()) {
+      String ldapAttr = ta.getLdapAttributeName();
+      String displayName = ta.getDisplayName();
+      if (displayName == null || displayName.isEmpty()) {
+        displayName = ldapAttr;
+      }
+
+      List<String> values = currentEntry.getAttributes().get(ldapAttr);
+      if (values == null || values.isEmpty()) {
+        // Show an empty row so the user can add a value
+        AttributeRow row =
+            new AttributeRow(ldapAttr, "", 0, true);
+        row.setDisplayName(displayName);
+        row.setFieldType(ta.getFieldType());
+        row.setSelectValues(ta.getValues());
+        rows.add(row);
+      } else {
+        for (int i = 0; i < values.size(); i++) {
+          AttributeRow row =
+              new AttributeRow(ldapAttr, values.get(i), i, i == 0);
+          row.setDisplayName(displayName);
+          row.setFieldType(ta.getFieldType());
+          row.setSelectValues(ta.getValues());
+          rows.add(row);
+        }
+      }
+    }
+    return rows;
+  }
+
+  /**
+   * Builds attribute rows using the default (LDAP) display.
+   * Shows all attributes sorted by classification.
+   */
+  private List<AttributeRow> buildDefaultRows() {
     List<AttributeRow> rows = new ArrayList<>();
     boolean showOperational = showOperationalAttributes;
 
@@ -528,10 +684,7 @@ public class EntryEditor extends VerticalLayout {
         rows.add(new AttributeRow(attrName, values.get(i), i, isFirst));
       }
     }
-
-    attributeDataProvider = new ListDataProvider<>(rows);
-    attributeGrid.setDataProvider(attributeDataProvider);
-    applyAttributeFilter();
+    return rows;
   }
 
   /**
@@ -617,7 +770,9 @@ public class EntryEditor extends VerticalLayout {
       return new Span();
     }
     
-    Span nameSpan = new Span(row.getName());
+    String label = row.getDisplayName() != null
+        ? row.getDisplayName() : row.getName();
+    Span nameSpan = new Span(label);
     nameSpan.getStyle().set("font-weight", "500");
 
     // Get attribute classification from schema
@@ -734,7 +889,9 @@ public class EntryEditor extends VerticalLayout {
   }
 
   private Span createValueComponent(AttributeRow row) {
-    Span valueSpan = new Span(row.getValue());
+    String displayValue = TemplateFieldFactory.maskIfPassword(
+        row.getValue(), row.getFieldType());
+    Span valueSpan = new Span(displayValue);
     
     if (row.getValue().length() > 50) {
       valueSpan.getStyle().set("font-size", "smaller");
@@ -903,12 +1060,16 @@ public class EntryEditor extends VerticalLayout {
     Dialog dialog = new Dialog();
     dialog.setHeaderTitle("Edit Value: " + row.getName());
 
-    TextField valueField = new TextField("Value");
-    valueField.setWidthFull();
-    valueField.setValue(row.getValue() != null ? row.getValue() : "");
+    com.vaadin.flow.component.Component inputField =
+        TemplateFieldFactory.createField(
+            row.getFieldType(), row.getValue(),
+            row.getSelectValues());
+    if (inputField instanceof com.vaadin.flow.component.HasSize hs) {
+      hs.setWidthFull();
+    }
 
     Button saveButton = new Button("Save", e -> {
-      String newValue = valueField.getValue();
+      String newValue = TemplateFieldFactory.getValue(inputField);
       
       if (newValue == null || newValue.trim().isEmpty()) {
         NotificationHelper.showError("Value cannot be empty.");
@@ -945,7 +1106,8 @@ public class EntryEditor extends VerticalLayout {
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
 
-    VerticalLayout layout = new VerticalLayout(valueField);
+    VerticalLayout layout = new VerticalLayout(
+        (com.vaadin.flow.component.Component) inputField);
     layout.setWidth("400px");
     dialog.add(layout);
     dialog.getFooter().add(cancelButton, saveButton);
@@ -956,12 +1118,16 @@ public class EntryEditor extends VerticalLayout {
     Dialog dialog = new Dialog();
     dialog.setHeaderTitle("Add Value: " + row.getName());
 
-    TextField valueField = new TextField("New Value");
-    valueField.setWidthFull();
-    valueField.setPlaceholder("Enter new value...");
+    com.vaadin.flow.component.Component inputField =
+        TemplateFieldFactory.createField(
+            row.getFieldType(), "",
+            row.getSelectValues());
+    if (inputField instanceof com.vaadin.flow.component.HasSize hs) {
+      hs.setWidthFull();
+    }
 
     Button addButton = new Button("Add", e -> {
-      String newValue = valueField.getValue();
+      String newValue = TemplateFieldFactory.getValue(inputField);
       
       if (newValue == null || newValue.trim().isEmpty()) {
         NotificationHelper.showError("Value cannot be empty.");
@@ -998,7 +1164,7 @@ public class EntryEditor extends VerticalLayout {
 
     Button cancelButton = new Button("Cancel", e -> dialog.close());
 
-    VerticalLayout layout = new VerticalLayout(valueField);
+    VerticalLayout layout = new VerticalLayout(inputField);
     layout.setWidth("400px");
     dialog.add(layout);
     dialog.getFooter().add(cancelButton, addButton);
@@ -2310,9 +2476,12 @@ public class EntryEditor extends VerticalLayout {
    */
   public static class AttributeRow {
     private String name;
+    private String displayName;
     private String value;
     private int valueIndex;
     private boolean isFirstValueOfAttribute;
+    private EntryTemplate.FieldType fieldType;
+    private List<String> selectValues;
 
     /**
      * Creates attribute row for a single value.
@@ -2360,6 +2529,30 @@ public class EntryEditor extends VerticalLayout {
 
     public void setFirstValueOfAttribute(boolean isFirstValueOfAttribute) {
       this.isFirstValueOfAttribute = isFirstValueOfAttribute;
+    }
+
+    public String getDisplayName() {
+      return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+      this.displayName = displayName;
+    }
+
+    public EntryTemplate.FieldType getFieldType() {
+      return fieldType;
+    }
+
+    public void setFieldType(EntryTemplate.FieldType fieldType) {
+      this.fieldType = fieldType;
+    }
+
+    public List<String> getSelectValues() {
+      return selectValues;
+    }
+
+    public void setSelectValues(List<String> selectValues) {
+      this.selectValues = selectValues;
     }
   }
 }

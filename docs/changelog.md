@@ -1,5 +1,129 @@
 # LDAP Web Browser
 
+## v0.72 - Entry Templates - Enhancement
+
+### Type-Aware Template UI Elements
+- Template-defined field types now drive UI component rendering
+  across Create View, Entry Editor, and Search View
+- PASSWORD fields render as masked `PasswordField` components;
+  existing values display as bullet characters (••••••••)
+- SELECT_LIST fields render as `ComboBox` dropdowns populated
+  with the template-defined values list
+- BOOLEAN fields render as `ComboBox` with True/False options
+- MULTI_VALUED_TEXT fields render as `TextArea` for multi-line input
+- TEXT fields (and null/unknown types) render as `TextField` (default)
+- `TemplateFieldFactory` utility centralizes FieldType-to-Component
+  mapping, value extraction, and password masking
+
+### Server-Level Template Filtering
+- `LdapServerConfig` gains an `allowedTemplates` list field
+  (persisted in connections.json)
+- Server Configuration dialog includes a multi-select "Allowed
+  Templates" combo box populated from the template store
+- When `allowedTemplates` is empty, all templates are available
+  (backward-compatible default)
+- Create View, Entry Editor, and Search View filter their template
+  dropdowns using `TemplateService.getTemplatesForServer()`
+
+### New Files
+- `TemplateFieldFactory.java` — factory mapping FieldType to Vaadin
+  components with value extraction and password masking
+- `TemplateFieldFactoryTest.java` — 13 unit tests covering all
+  field type rendering, value extraction, and masking
+
+### Modified Files
+- `CreateView.java` — delegates field rendering to TemplateFieldFactory;
+  filters templates by server
+- `EntryEditor.java` — delegates field rendering to TemplateFieldFactory;
+  masks PASSWORD values in read mode; filters templates by server
+- `SearchView.java` — filters templates by server
+- `LdapServerConfig.java` — added `allowedTemplates` field with
+  getter/setter and `copy()` support
+- `TemplateService.java` — added `getTemplatesForServer()` method
+- `ServerView.java` — added TemplateService injection and allowed
+  templates multi-select combo box in server dialog
+
+
+## v0.71 - Entry Templates
+- Entry Templates provide user-configurable templates for creating,
+  viewing/editing, and searching LDAP entries
+- Templates are managed in the Settings view under a new "Templates" tab
+  with full CRUD support (Add, Edit, Duplicate, Delete)
+- Templates are stored locally in a `templates.json` file in the
+  settings directory
+- Each template has a unique name and up to 3 optional sections:
+  1. **Create** — defines fields and layout for creating entries
+  2. **View/Edit** — defines fields and layout for viewing/editing entries
+  3. **Search** — defines a simplified search form
+- Template Editor dialog with tabbed sections for each template type,
+  each with an enable/disable checkbox
+- Template attributes support 5 field types: Text, Multi Valued Text,
+  Boolean, Select List, and Password
+
+### Create View
+- Dropdown at the top selects available Create templates
+- Selecting "LDAP" displays the existing Create view (no template)
+- When a Create template is selected:
+  - Template-defined fields are rendered with appropriate input controls
+  - Parent DN is resolved via LDAP search using the template's parent
+    filter, displayed as a dropdown of matching DNs
+  - RDN is constructed from the template's RDN pattern using
+    `{FIELD}` placeholders (e.g., `uid={UID}`)
+  - Hidden attributes are applied silently using their configured values
+
+### Create Template Section
+- **RDN** — pattern with `{FIELD}` placeholders to construct the RDN
+- **Parent Filter** — LDAP filter to find parent DN candidates
+  (e.g., `(&(objectClass=organizationalUnit)(ou=people))`)
+- **Attributes** — editable grid with columns: Display Name,
+  LDAP Attribute Name, Required, Field Type, Hidden, Values
+
+### Entry Editor (Browse/Search Views)
+- Template dropdown at the top displays matching View/Edit templates
+- Auto-matching: when an entry is loaded, templates are evaluated
+  using their matching filter via `Filter.matchesEntry()` and the
+  best match is auto-selected
+- Selecting "LDAP" displays the existing attribute grid unchanged
+- When a template is selected, attributes are rendered using
+  the template-defined fields and layout
+
+### View/Edit Template Section
+- **Matching Filter** — LDAP filter used with `Filter.matchesEntry()`
+  to auto-detect applicable templates for the displayed entry
+- **Attributes** — editable grid with columns: Display Name,
+  LDAP Attribute Name, Required, Field Type, Values
+
+### Search View
+- Dropdown at the top selects available Search templates
+- Selecting "LDAP" displays the existing search form unchanged
+- When a Search template is selected:
+  - A simplified search field and search button are displayed
+  - The template's search filter replaces `{SEARCH}` with user input
+  - Base DNs are resolved via the template's base filter
+  - All resolved base DNs are searched
+  - Results display in the existing search results grid
+
+### Search Template Section
+- **Search Filter** — LDAP filter with `{SEARCH}` placeholder
+  (e.g., `(&(objectClass=inetOrgPerson)(uid={SEARCH}))`)
+- **Base Filter** — LDAP filter to find search base DNs
+- **Scope** — search scope (base/one/sub)
+- **Return Attributes** — attributes to return in search results
+
+### New Files
+- `EntryTemplate.java` — model with nested section classes
+- `TemplateService.java` — CRUD service for templates.json
+- `TemplateEditorDialog.java` — template editor dialog
+- `EntryTemplateTest.java` — model unit tests
+- `TemplateServiceTest.java` — service unit tests
+
+### Modified Files
+- `SettingsView.java` — added Templates tab with CRUD toolbar
+- `CreateView.java` — dynamic template selection and form rendering
+- `EntryEditor.java` — template selector with auto-matching
+- `SearchView.java` — template-driven simplified search
+- `BrowseView.java` — passes TemplateService to EntryEditor
+
 ## v0.70 - Included Github Spotbugs
 
 ## v0.69 - Entry editor bug fix

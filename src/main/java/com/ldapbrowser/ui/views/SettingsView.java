@@ -1,12 +1,15 @@
 package com.ldapbrowser.ui.views;
 
 import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.model.EntryTemplate;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.EncryptionService;
 import com.ldapbrowser.service.KeystoreService;
+import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.service.UserService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.dialogs.TemplateEditorDialog;
 import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
@@ -24,6 +27,8 @@ import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.PageTitle;
@@ -56,9 +61,11 @@ public class SettingsView extends VerticalLayout {
   private final KeystoreService keystoreService;
   private final EncryptionService encryptionService;
   private final ConfigurationService configurationService;
+  private final TemplateService templateService;
   private final UserService userService;
   private Grid<String> certificateGrid;
   private Grid<UserService.UserRecord> userGrid;
+  private Grid<EntryTemplate> templateGrid;
   private TabSheet tabSheet;
 
   /**
@@ -68,14 +75,7 @@ public class SettingsView extends VerticalLayout {
    * @param keystoreService keystore service
    * @param encryptionService encryption service
    * @param configurationService configuration service
-   */
-  /**
-   * Creates the Settings view.
-   *
-   * @param truststoreService truststore service
-   * @param keystoreService keystore service
-   * @param encryptionService encryption service
-   * @param configurationService configuration service
+   * @param templateService template service
    * @param userService optional user service (local auth only)
    */
   public SettingsView(
@@ -83,11 +83,13 @@ public class SettingsView extends VerticalLayout {
       KeystoreService keystoreService,
       EncryptionService encryptionService,
       ConfigurationService configurationService,
+      TemplateService templateService,
       Optional<UserService> userService) {
     this.truststoreService = truststoreService;
     this.keystoreService = keystoreService;
     this.encryptionService = encryptionService;
     this.configurationService = configurationService;
+    this.templateService = templateService;
     this.userService = userService.orElse(null);
 
     setSpacing(true);
@@ -108,6 +110,7 @@ public class SettingsView extends VerticalLayout {
     tabSheet.add("Truststore", createTruststoreTab());
     tabSheet.add("Keystore", createKeystoreTab());
     tabSheet.add("Encryption", createEncryptionTab());
+    tabSheet.add("Templates", createTemplatesTab());
 
     add(tabSheet);
     expand(tabSheet);
@@ -972,6 +975,145 @@ public class SettingsView extends VerticalLayout {
         })
     );
     confirmDialog.open();
+  }
+
+  // ---- Templates tab --------------------------------------------------
+
+  /**
+   * Creates the Templates management tab.
+   *
+   * @return templates tab content
+   */
+  private VerticalLayout createTemplatesTab() {
+    VerticalLayout layout = new VerticalLayout();
+    layout.setPadding(true);
+    layout.setSpacing(true);
+    layout.setSizeFull();
+
+    // Toolbar
+    Button addBtn = new Button("Add",
+        new Icon(VaadinIcon.PLUS), e -> openTemplateEditor(null));
+    addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY,
+        ButtonVariant.LUMO_SMALL);
+
+    Button editBtn = new Button("Edit",
+        new Icon(VaadinIcon.EDIT), e -> {
+          EntryTemplate sel =
+              templateGrid.asSingleSelect().getValue();
+          if (sel != null) {
+            openTemplateEditor(sel);
+          }
+        });
+    editBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+    Button dupBtn = new Button("Duplicate",
+        new Icon(VaadinIcon.COPY), e -> duplicateTemplate());
+    dupBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+    Button delBtn = new Button("Delete",
+        new Icon(VaadinIcon.TRASH), e -> deleteTemplate());
+    delBtn.addThemeVariants(ButtonVariant.LUMO_SMALL,
+        ButtonVariant.LUMO_ERROR);
+
+    Button refreshBtn = new Button("Refresh",
+        new Icon(VaadinIcon.REFRESH), e -> refreshTemplateGrid());
+    refreshBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+    HorizontalLayout toolbar = new HorizontalLayout(
+        addBtn, editBtn, dupBtn, delBtn, refreshBtn);
+    toolbar.setSpacing(true);
+
+    // Grid
+    templateGrid = new Grid<>(EntryTemplate.class, false);
+    templateGrid.addColumn(EntryTemplate::getName)
+        .setHeader("Name").setFlexGrow(2);
+    templateGrid.addColumn(t ->
+        t.getCreateSection() != null ? "Yes" : "")
+        .setHeader("Create").setFlexGrow(0).setWidth("80px");
+    templateGrid.addColumn(t ->
+        t.getViewEditSection() != null ? "Yes" : "")
+        .setHeader("View/Edit").setFlexGrow(0).setWidth("90px");
+    templateGrid.addColumn(t ->
+        t.getSearchSection() != null ? "Yes" : "")
+        .setHeader("Search").setFlexGrow(0).setWidth("80px");
+    templateGrid.setSizeFull();
+
+    templateGrid.addItemDoubleClickListener(e ->
+        openTemplateEditor(e.getItem()));
+
+    layout.add(toolbar, templateGrid);
+    layout.expand(templateGrid);
+
+    refreshTemplateGrid();
+    return layout;
+  }
+
+  private void refreshTemplateGrid() {
+    try {
+      templateGrid.setItems(templateService.loadTemplates());
+    } catch (Exception e) {
+      NotificationHelper.showError(
+          "Failed to load templates: " + e.getMessage());
+    }
+  }
+
+  private void openTemplateEditor(EntryTemplate template) {
+    new TemplateEditorDialog(templateService, template)
+        .onSave(t -> refreshTemplateGrid())
+        .open();
+  }
+
+  private void duplicateTemplate() {
+    EntryTemplate sel = templateGrid.asSingleSelect().getValue();
+    if (sel == null) {
+      return;
+    }
+    String baseName = sel.getName() + " (Copy)";
+    String newName = baseName;
+    int i = 2;
+    while (templateService.templateExists(newName)) {
+      newName = baseName + " " + i++;
+    }
+    EntryTemplate copy = new EntryTemplate(newName);
+    copy.setCreateSection(sel.getCreateSection());
+    copy.setViewEditSection(sel.getViewEditSection());
+    copy.setSearchSection(sel.getSearchSection());
+    try {
+      templateService.saveTemplate(copy);
+      refreshTemplateGrid();
+      NotificationHelper.showSuccess(
+          "Template duplicated as '" + newName + "'");
+    } catch (Exception e) {
+      NotificationHelper.showError(
+          "Failed to duplicate: " + e.getMessage());
+    }
+  }
+
+  private void deleteTemplate() {
+    EntryTemplate sel = templateGrid.asSingleSelect().getValue();
+    if (sel == null) {
+      return;
+    }
+    Dialog confirm = new Dialog();
+    confirm.setHeaderTitle("Delete Template");
+    confirm.add(new Span("Delete template '"
+        + sel.getName() + "'? This cannot be undone."));
+    confirm.getFooter().add(
+        new Button("Cancel", e -> confirm.close()),
+        new Button("Delete", e -> {
+          try {
+            templateService.deleteTemplate(sel.getName());
+            NotificationHelper.showSuccess(
+                "Template '" + sel.getName() + "' deleted");
+            refreshTemplateGrid();
+          } catch (Exception ex) {
+            NotificationHelper.showError(
+                "Failed to delete: " + ex.getMessage());
+          }
+          confirm.close();
+        })
+    );
+    confirm.open();
   }
 }
 

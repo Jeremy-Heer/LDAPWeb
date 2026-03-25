@@ -1,9 +1,12 @@
 package com.ldapbrowser.ui.views;
 
+import com.ldapbrowser.model.EntryTemplate;
+import com.ldapbrowser.model.EntryTemplate.SearchTemplateSection;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
+import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
@@ -19,6 +22,7 @@ import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.HeaderRow;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
@@ -59,6 +63,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   private final ConfigurationService configService;
   private final LdapService ldapService;
   private final TruststoreService truststoreService;
+  private final TemplateService templateService;
 
   private TextField searchBaseField;
   private TextField filterField;
@@ -69,6 +74,9 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   private Button searchButton;
   private Grid<LdapEntry> resultsGrid;
   private EntryEditor entryEditor;
+  private ComboBox<String> searchTemplateCombo;
+  private TextField templateSearchField;
+  private List<EntryTemplate> searchTemplates = new ArrayList<>();
   private List<LdapEntry> currentResults;
   private Map<String, TextField> columnFilters;
 
@@ -78,12 +86,16 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
    * @param configService configuration service
    * @param ldapService LDAP service
    * @param truststoreService truststore service
+   * @param templateService template service
    */
-  public SearchView(ConfigurationService configService, LdapService ldapService,
-      TruststoreService truststoreService) {
+  public SearchView(ConfigurationService configService,
+      LdapService ldapService,
+      TruststoreService truststoreService,
+      TemplateService templateService) {
     this.configService = configService;
     this.ldapService = ldapService;
     this.truststoreService = truststoreService;
+    this.templateService = templateService;
     this.currentResults = new ArrayList<>();
     this.columnFilters = new HashMap<>();
 
@@ -110,7 +122,8 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     resultsLayout.setPadding(false);
 
     // Entry editor
-    entryEditor = new EntryEditor(ldapService, configService);
+    entryEditor = new EntryEditor(ldapService, configService,
+        templateService);
     entryEditor.setExpandListener(this::showExpandedEntryDialog);
 
     splitLayout.addToPrimary(resultsLayout);
@@ -271,7 +284,39 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     compactSearchRow.setFlexGrow(0, scopeSelect);
     compactSearchRow.setFlexGrow(1, returnAttributesField);
 
-    formLayout.add(compactSearchRow);
+    // Template search row
+    HorizontalLayout templateRow = new HorizontalLayout();
+    templateRow.setWidthFull();
+    templateRow.setDefaultVerticalComponentAlignment(Alignment.END);
+    templateRow.setSpacing(true);
+
+    searchTemplateCombo = new ComboBox<>("Search Template");
+    searchTemplateCombo.setWidth("200px");
+    searchTemplateCombo.setClearButtonVisible(true);
+    loadSearchTemplates();
+    searchTemplateCombo.addValueChangeListener(e -> {
+      boolean isTemplate = e.getValue() != null
+          && !"LDAP".equals(e.getValue());
+      templateSearchField.setVisible(isTemplate);
+      compactSearchRow.setVisible(!isTemplate);
+    });
+
+    templateSearchField = new TextField("Search");
+    templateSearchField.setWidthFull();
+    templateSearchField.setPlaceholder(
+        "Enter search text (used in template filter)");
+    templateSearchField.setVisible(false);
+
+    Button templateSearchButton = new Button("Search",
+        VaadinIcon.SEARCH.create(),
+        e -> performTemplateSearch());
+    templateSearchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+    templateRow.add(searchTemplateCombo, templateSearchField,
+        templateSearchButton);
+    templateRow.setFlexGrow(1, templateSearchField);
+
+    formLayout.add(templateRow, compactSearchRow);
     return formLayout;
   }
 
@@ -510,7 +555,8 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     dialog.setModal(true);
 
     // Create a new entry editor for the dialog
-    EntryEditor dialogEditor = new EntryEditor(ldapService, configService);
+    EntryEditor dialogEditor = new EntryEditor(ldapService,
+        configService, templateService);
     dialogEditor.setServerConfig(currentConfig);
     dialogEditor.editEntry(currentEntry);
     dialogEditor.setSizeFull();
@@ -723,4 +769,180 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     }
   }
 
+  /**
+   * Loads templates that have a Search section.
+   */
+  private void loadSearchTemplates() {
+    List<String> items = new ArrayList<>();
+    items.add("LDAP");
+    try {
+      LdapServerConfig serverCfg = getSelectedServerConfig();
+      List<EntryTemplate> all =
+          (serverCfg != null)
+              ? templateService.getTemplatesForServer(serverCfg)
+              : templateService.loadTemplates();
+      searchTemplates = all.stream()
+          .filter(t -> t.getSearchSection() != null)
+          .toList();
+      for (EntryTemplate t : searchTemplates) {
+        items.add(t.getName());
+      }
+    } catch (Exception e) {
+      // templates file may not exist yet
+    }
+    searchTemplateCombo.setItems(items);
+    searchTemplateCombo.setValue("LDAP");
+  }
+
+  /**
+   * Gets the config for the first currently selected server.
+   */
+  private LdapServerConfig getSelectedServerConfig() {
+    Set<String> names = MainLayout.getSelectedServers();
+    if (names == null || names.isEmpty()) {
+      return null;
+    }
+    String firstName = names.iterator().next();
+    return configService.loadConfigurations().stream()
+        .filter(c -> firstName.equals(c.getName()))
+        .findFirst()
+        .orElse(null);
+  }
+
+  /**
+   * Performs a search using the selected search template.
+   */
+  private void performTemplateSearch() {
+    String templateName = searchTemplateCombo.getValue();
+    if (templateName == null || "LDAP".equals(templateName)) {
+      performSearch();
+      return;
+    }
+    EntryTemplate tmpl = searchTemplates.stream()
+        .filter(t -> t.getName().equals(templateName))
+        .findFirst().orElse(null);
+    if (tmpl == null || tmpl.getSearchSection() == null) {
+      NotificationHelper.showError("Template not found");
+      return;
+    }
+
+    SearchTemplateSection ss = tmpl.getSearchSection();
+    String searchText = templateSearchField.getValue();
+    if (searchText == null) {
+      searchText = "";
+    }
+
+    // Build filter by replacing {SEARCH} placeholder
+    String filter = ss.getSearchFilter();
+    if (filter == null || filter.isEmpty()) {
+      NotificationHelper.showError("Template has no search filter");
+      return;
+    }
+    filter = filter.replace("{SEARCH}", searchText);
+
+    // Parse scope
+    SearchScope scope = SearchScope.SUB;
+    if ("base".equals(ss.getScope())) {
+      scope = SearchScope.BASE;
+    } else if ("one".equals(ss.getScope())) {
+      scope = SearchScope.ONE;
+    }
+
+    // Get return attributes
+    String[] returnAttrs = null;
+    if (ss.getReturnAttributes() != null
+        && !ss.getReturnAttributes().isEmpty()) {
+      returnAttrs = ss.getReturnAttributes().toArray(new String[0]);
+    }
+
+    // Get selected servers
+    Set<String> selectedServers = MainLayout.getSelectedServers();
+    if (selectedServers.isEmpty()) {
+      NotificationHelper.showError(
+          "Please select at least one server");
+      return;
+    }
+
+    currentResults.clear();
+    List<LdapServerConfig> configs =
+        configService.loadConfigurations();
+
+    String finalFilter = filter;
+    SearchScope finalScope = scope;
+    String[] finalReturnAttrs = returnAttrs;
+
+    for (String serverName : selectedServers) {
+      configs.stream()
+          .filter(c -> c.getName().equals(serverName))
+          .findFirst()
+          .ifPresent(config -> {
+            try {
+              // Resolve base DNs from baseFilter
+              List<String> baseDns = resolveBaseDns(
+                  config, ss.getBaseFilter());
+              for (String base : baseDns) {
+                List<LdapEntry> results;
+                if (finalReturnAttrs != null) {
+                  results = ldapService.search(config, base,
+                      finalFilter, finalScope, finalReturnAttrs);
+                } else {
+                  results = ldapService.search(config, base,
+                      finalFilter, finalScope);
+                }
+                currentResults.addAll(results);
+              }
+            } catch (Exception e) {
+              NotificationHelper.showError(
+                  "Search failed on " + serverName + ": "
+                      + e.getMessage());
+              logger.error("Template search failed on {}",
+                  serverName, e);
+            }
+          });
+    }
+
+    // Update grid columns
+    List<String> attrList = ss.getReturnAttributes() != null
+        ? new ArrayList<>(ss.getReturnAttributes())
+        : new ArrayList<>();
+    updateGridColumns(resultsGrid, attrList);
+
+    resultsGrid.setItems(currentResults);
+    NotificationHelper.showSuccess(
+        "Search complete: " + currentResults.size()
+            + " entries found", 3000);
+  }
+
+  /**
+   * Resolves base DNs by searching with the given filter.
+   */
+  private List<String> resolveBaseDns(LdapServerConfig config,
+      String baseFilter) throws Exception {
+    if (baseFilter == null || baseFilter.isEmpty()) {
+      // Use the server's default base DN
+      String defaultBase = config.getBaseDn();
+      if (defaultBase != null && !defaultBase.isEmpty()) {
+        return List.of(defaultBase);
+      }
+      return ldapService.getNamingContexts(config);
+    }
+    List<String> bases = new ArrayList<>();
+    List<String> namingContexts =
+        ldapService.getNamingContexts(config);
+    for (String nc : namingContexts) {
+      List<LdapEntry> results = ldapService.search(
+          config, nc, baseFilter, SearchScope.SUB, "dn");
+      for (LdapEntry entry : results) {
+        bases.add(entry.getDn());
+      }
+    }
+    if (bases.isEmpty()) {
+      // Fallback to default base
+      String defaultBase = config.getBaseDn();
+      if (defaultBase != null && !defaultBase.isEmpty()) {
+        return List.of(defaultBase);
+      }
+    }
+    return bases;
+  }
 }
