@@ -129,7 +129,7 @@ public class CreateView extends VerticalLayout {
     dnField.setReadOnly(true);
 
     // Template dropdown
-    templateComboBox = new ComboBox<>("Entry Template (Optional)");
+    templateComboBox = new ComboBox<>("Create Template");
     templateComboBox.setWidthFull();
     loadTemplateItems();
     templateComboBox.setValue("None");
@@ -205,12 +205,16 @@ public class CreateView extends VerticalLayout {
         "At minimum, you need to specify the objectClass attribute.");
     infoText.getStyle().set("color", "#666").set("font-style", "italic").set("margin-bottom", "16px");
 
-    // RDN and Parent DN layout
+    // Template + RDN + Parent DN layout on the same row
     HorizontalLayout dnCompositionLayout = new HorizontalLayout();
     dnCompositionLayout.setWidthFull();
     dnCompositionLayout.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
     dnCompositionLayout.setSpacing(false);
-    
+
+    // Template dropdown (to the left)
+    templateComboBox.setWidth("200px");
+    templateComboBox.setClearButtonVisible(true);
+
     // RDN field
     rdnField.setWidth("300px");
     
@@ -230,7 +234,14 @@ public class CreateView extends VerticalLayout {
     parentDnLayout.setFlexGrow(1, parentDnField);
     parentDnLayout.add(parentDnField, parentDnBrowseButton);
     
-    dnCompositionLayout.add(rdnField, commaSeparator, parentDnLayout,
+    // Spacer between template dropdown and RDN
+    Span templateSpacer = new Span();
+    templateSpacer.getStyle()
+        .set("min-width", "var(--lumo-space-l)");
+
+    dnCompositionLayout.add(templateComboBox,
+        templateSpacer,
+        rdnField, commaSeparator, parentDnLayout,
         parentDnCombo);
     dnCompositionLayout.setFlexGrow(1, parentDnLayout);
     dnCompositionLayout.setFlexGrow(1, parentDnCombo);
@@ -241,7 +252,7 @@ public class CreateView extends VerticalLayout {
     buttonLayout.add(addRowButton, clearButton, createButton);
 
     add(titleLayout, infoText, dnCompositionLayout,
-        dnField, templateComboBox, attributeGrid, buttonLayout);
+        dnField, attributeGrid, buttonLayout);
     setFlexGrow(1, attributeGrid);
   }
 
@@ -365,13 +376,18 @@ public class CreateView extends VerticalLayout {
       String name = row.getAttributeName();
       String value = row.getAttributeValue();
 
-      if (name != null && !name.trim().isEmpty() && value != null && !value.trim().isEmpty()) {
-        name = name.trim();
+      if (name != null && !name.trim().isEmpty()
+          && value != null && !value.trim().isEmpty()) {
         value = value.trim();
-
-        // Add to attributes map (supporting multi-valued attributes)
-        attributes.computeIfAbsent(name, k -> new ArrayList<>()).add(value);
-        hasValidAttributes = true;
+        // Support comma-separated attribute names
+        for (String singleName : name.split(",")) {
+          singleName = singleName.trim();
+          if (!singleName.isEmpty()) {
+            attributes.computeIfAbsent(
+                singleName, k -> new ArrayList<>()).add(value);
+            hasValidAttributes = true;
+          }
+        }
       }
     }
 
@@ -381,9 +397,15 @@ public class CreateView extends VerticalLayout {
       String value = row.getAttributeValue();
       if (name != null && !name.trim().isEmpty()
           && value != null && !value.trim().isEmpty()) {
-        attributes.computeIfAbsent(name.trim(),
-            k -> new ArrayList<>()).add(value.trim());
-        hasValidAttributes = true;
+        value = value.trim();
+        for (String singleName : name.split(",")) {
+          singleName = singleName.trim();
+          if (!singleName.isEmpty()) {
+            attributes.computeIfAbsent(
+                singleName, k -> new ArrayList<>()).add(value);
+            hasValidAttributes = true;
+          }
+        }
       }
     }
 
@@ -493,6 +515,14 @@ public class CreateView extends VerticalLayout {
             attr.getLdapAttributeName(), firstVal,
             attr.getFieldType(), values,
             attr.getDisplayName());
+      } else if (attr.getFieldType() == FieldType.TEXT
+          || attr.getFieldType() == null) {
+        // TEXT type: use joined values as a single placeholder
+        String joined = String.join(",", values);
+        addTemplateAttributeWithType(
+            attr.getLdapAttributeName(), joined,
+            attr.getFieldType(), values,
+            attr.getDisplayName());
       } else {
         addTemplateAttributeWithType(
             attr.getLdapAttributeName(), firstVal,
@@ -530,13 +560,6 @@ public class CreateView extends VerticalLayout {
       }
     } catch (Exception e) {
       // templates file may not exist yet
-    }
-    // Keep legacy hardcoded templates for backwards compatibility
-    for (String legacy : List.of(
-        "User", "Group", "Dynamic Group", "OU")) {
-      if (!items.contains(legacy)) {
-        items.add(legacy);
-      }
     }
     templateComboBox.setItems(items);
   }

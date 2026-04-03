@@ -92,15 +92,17 @@ public class MainLayout extends AppLayout {
     createDrawer();
     
     // Register for log updates to show badge count
-    loggingService.addListener(entry -> {
+    LoggingService.LogUpdateListener logListener = entry -> {
       getUI().ifPresent(ui -> ui.access(() -> {
         unreadLogCount++;
         updateLogsBadge();
       }));
-    });
+    };
+    loggingService.addListener(logListener);
     
     // Clean up UI-scoped state on detach
     UI.getCurrent().addDetachListener(event -> {
+      loggingService.removeListener(logListener);
       String uiKey = getSelectedServersKey();
       VaadinSession.getCurrent().setAttribute(uiKey, null);
     });

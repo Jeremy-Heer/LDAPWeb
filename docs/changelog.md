@@ -1,5 +1,21 @@
 # LDAP Web Browser
 
+## v0.74 - Entry Templates - Enhancement
+- Create templates attributes
+  - Settings - Templates - Edit Template dialog - "Create" tab.
+  - The Attributes grid
+    - Allow the LDAP Attribute column to be comma seperated list of multiple attributes.
+      - When used, the value captured by this field will be added to all attributes specified
+    - When using a "Text" type attribute, the "values" column should be added as place holder values
+      as is.
+        - A bug is found when using a "Text" type attribute row and place holder value that contains
+          a comman, the create form is rendered with multiple values. This is not desired. "Text" type should
+          display the "Values" as is.
+- Create View
+  - Move the "Entry Template" dropdown up and place on the same row as "RDN" and "Parent DN".
+    - To the Left of these other fields
+
+
 ## v0.73 - Entry Templates - Enhancement
 - The Edit Template dialog compresses the attribute table into only 2 visable rows
   Template attributes could be many. Need to be able to see more attributes and if possible

@@ -278,6 +278,9 @@ public class LoggingService {
     for (LogUpdateListener listener : listeners) {
       try {
         listener.onLogAdded(entry);
+      } catch (
+          com.vaadin.flow.component.UIDetachedException e) {
+        listeners.remove(listener);
       } catch (Exception e) {
         logger.error("Error notifying listener about log update", e);
       }
