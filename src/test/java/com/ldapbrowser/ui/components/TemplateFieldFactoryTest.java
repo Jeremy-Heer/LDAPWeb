@@ -24,12 +24,14 @@ class TemplateFieldFactoryTest {
   class CreateField {
 
     @Test
-    @DisplayName("TEXT produces TextField")
+    @DisplayName("TEXT produces TextField with tooltip")
     void textField() {
       Component c = TemplateFieldFactory.createField(
           FieldType.TEXT, "hello", null);
       assertThat(c).isInstanceOf(TextField.class);
       assertThat(((TextField) c).getValue()).isEqualTo("hello");
+      assertThat(((TextField) c).getTooltip().getText())
+          .isEqualTo("Enter a single value");
     }
 
     @Test
@@ -50,12 +52,14 @@ class TemplateFieldFactoryTest {
     }
 
     @Test
-    @DisplayName("MULTI_VALUED_TEXT produces TextArea")
+    @DisplayName("MULTI_VALUED_TEXT produces TextArea with tooltip")
     void multiValuedText() {
       Component c = TemplateFieldFactory.createField(
           FieldType.MULTI_VALUED_TEXT, "line", null);
       assertThat(c).isInstanceOf(TextArea.class);
       assertThat(((TextArea) c).getValue()).isEqualTo("line");
+      assertThat(((TextArea) c).getTooltip().getText())
+          .isEqualTo("Enter multiples one per line");
     }
 
     @Test
@@ -144,6 +148,56 @@ class TemplateFieldFactoryTest {
       String result = TemplateFieldFactory.maskIfPassword(
           "hello", null);
       assertThat(result).isEqualTo("hello");
+    }
+  }
+
+  @Nested
+  @DisplayName("getMultiValues")
+  class GetMultiValues {
+
+    @Test
+    @DisplayName("splits lines into separate values")
+    void splitsLines() {
+      assertThat(TemplateFieldFactory.getMultiValues(
+          "admin\nuser\nguest"))
+          .containsExactly("admin", "user", "guest");
+    }
+
+    @Test
+    @DisplayName("trims whitespace from each line")
+    void trimsLines() {
+      assertThat(TemplateFieldFactory.getMultiValues(
+          "  admin \n user  "))
+          .containsExactly("admin", "user");
+    }
+
+    @Test
+    @DisplayName("discards blank lines")
+    void discardsBlankLines() {
+      assertThat(TemplateFieldFactory.getMultiValues(
+          "admin\n\n\nuser"))
+          .containsExactly("admin", "user");
+    }
+
+    @Test
+    @DisplayName("returns empty list for null input")
+    void nullInput() {
+      assertThat(TemplateFieldFactory.getMultiValues(null))
+          .isEmpty();
+    }
+
+    @Test
+    @DisplayName("returns empty list for empty input")
+    void emptyInput() {
+      assertThat(TemplateFieldFactory.getMultiValues(""))
+          .isEmpty();
+    }
+
+    @Test
+    @DisplayName("single line returns single-element list")
+    void singleLine() {
+      assertThat(TemplateFieldFactory.getMultiValues("admin"))
+          .containsExactly("admin");
     }
   }
 }

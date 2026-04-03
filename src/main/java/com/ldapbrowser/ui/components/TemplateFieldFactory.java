@@ -7,6 +7,7 @@ import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -41,6 +42,27 @@ public final class TemplateFieldFactory {
       case MULTI_VALUED_TEXT -> createMultiValuedField(currentValue);
       default -> createTextField(currentValue);
     };
+  }
+
+  /**
+   * Splits a multi-valued text value into individual lines,
+   * trimming whitespace and discarding blank entries.
+   *
+   * @param value the raw multi-line text
+   * @return list of non-blank line values
+   */
+  public static List<String> getMultiValues(String value) {
+    List<String> result = new ArrayList<>();
+    if (value == null || value.isEmpty()) {
+      return result;
+    }
+    for (String line : value.split("\n")) {
+      String trimmed = line.trim();
+      if (!trimmed.isEmpty()) {
+        result.add(trimmed);
+      }
+    }
+    return result;
   }
 
   /**
@@ -79,6 +101,7 @@ public final class TemplateFieldFactory {
     TextField field = new TextField();
     field.setWidthFull();
     field.setPlaceholder("Enter attribute value");
+    field.setTooltipText("Enter a single value");
     field.setValue(currentValue != null ? currentValue : "");
     return field;
   }
@@ -121,6 +144,7 @@ public final class TemplateFieldFactory {
     TextArea area = new TextArea();
     area.setWidthFull();
     area.setPlaceholder("Enter value");
+    area.setTooltipText("Enter multiples one per line");
     area.setValue(currentValue != null ? currentValue : "");
     area.setMaxHeight("100px");
     return area;

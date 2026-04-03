@@ -1,5 +1,16 @@
 # LDAP Web Browser
 
+## v0.75 - Engry Templates - Enhancement
+- Create templates - Attribute type "Multi"
+  - Each value seperated by a new line entred into the form should be treated as a 
+    seperate attribute value. Allowing the user to supply multiple values in the text
+    area delimited by new line. A text area with multiple rows = multiple ldap attribute values.
+
+- On the Create view and when rendering a create template, add tooltips when mouse hovering over the input fields based on fields types:
+  - "Multi" type fields = "Enter multiples one per line"
+  - "Text" type fields = "Enter a single value"
+
+
 ## v0.74 - Entry Templates - Enhancement
 - Create templates attributes
   - Settings - Templates - Edit Template dialog - "Create" tab.

@@ -296,6 +296,10 @@ public class CreateView extends VerticalLayout {
     TextField valueField = new TextField();
     valueField.setWidthFull();
     valueField.setPlaceholder("Enter attribute value");
+    if (row.getDisplayName() != null
+        && !row.getDisplayName().isEmpty()) {
+      valueField.setTooltipText("Enter a single value");
+    }
     valueField.setValue(
         row.getAttributeValue() != null
             ? row.getAttributeValue() : "");
@@ -378,14 +382,23 @@ public class CreateView extends VerticalLayout {
 
       if (name != null && !name.trim().isEmpty()
           && value != null && !value.trim().isEmpty()) {
-        value = value.trim();
+        // MULTI_VALUED_TEXT: split by newline into separate values
+        List<String> vals;
+        if (row.getFieldType() == FieldType.MULTI_VALUED_TEXT) {
+          vals = com.ldapbrowser.ui.components
+              .TemplateFieldFactory.getMultiValues(value);
+        } else {
+          vals = List.of(value.trim());
+        }
         // Support comma-separated attribute names
         for (String singleName : name.split(",")) {
           singleName = singleName.trim();
           if (!singleName.isEmpty()) {
-            attributes.computeIfAbsent(
-                singleName, k -> new ArrayList<>()).add(value);
-            hasValidAttributes = true;
+            for (String v : vals) {
+              attributes.computeIfAbsent(
+                  singleName, k -> new ArrayList<>()).add(v);
+              hasValidAttributes = true;
+            }
           }
         }
       }

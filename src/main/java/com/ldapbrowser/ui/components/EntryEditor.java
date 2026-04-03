@@ -1233,7 +1233,10 @@ public class EntryEditor extends VerticalLayout {
 
       List<Modification> modifications = createModifications(originalEntry, currentEntry);
 
-      // Add hidden template attributes as additional modifications
+      // Add template attribute values as additional modifications.
+      // Hidden attributes are always injected. Non-hidden TEXT and
+      // MULTI_VALUED_TEXT attributes with pre-defined values are also
+      // injected so that required objectClasses (etc.) are present.
       if (activeViewEditTemplate != null
           && activeViewEditTemplate.getViewEditSection() != null
           && activeViewEditTemplate.getViewEditSection()
@@ -1241,29 +1244,52 @@ public class EntryEditor extends VerticalLayout {
         for (TemplateAttribute ta
             : activeViewEditTemplate.getViewEditSection()
                 .getAttributes()) {
-          if (!ta.isHidden()) {
+          if (!ta.isHidden()
+              && ta.getFieldType() != EntryTemplate.FieldType.TEXT
+              && ta.getFieldType()
+                  != EntryTemplate.FieldType.MULTI_VALUED_TEXT) {
             continue;
           }
-          String attrName = ta.getLdapAttributeName();
+          String rawAttrName = ta.getLdapAttributeName();
           List<String> templateValues = ta.getValues();
-          if (attrName == null || attrName.isEmpty()
+          if (rawAttrName == null || rawAttrName.isEmpty()
               || templateValues == null
               || templateValues.isEmpty()) {
             continue;
           }
-          // Merge with existing values to avoid duplicates
-          List<String> existing =
-              originalEntry.getAttributeValues(attrName);
-          List<String> toAdd = new ArrayList<>();
-          for (String v : templateValues) {
-            if (!existing.contains(v)) {
-              toAdd.add(v);
+          // Support comma-separated attribute names
+          for (String attrName : rawAttrName.split(",")) {
+            attrName = attrName.trim();
+            if (attrName.isEmpty()) {
+              continue;
             }
-          }
-          if (!toAdd.isEmpty()) {
-            modifications.add(new Modification(
-                ModificationType.ADD, attrName,
-                toAdd.toArray(new String[0])));
+            // Build effective values: original + queued mods
+            Set<String> effective = new HashSet<>(
+                originalEntry.getAttributeValues(attrName));
+            for (Modification m : modifications) {
+              if (m.getAttributeName()
+                  .equalsIgnoreCase(attrName)
+                  && m.getValues() != null) {
+                if (m.getModificationType()
+                    == ModificationType.REPLACE
+                    || m.getModificationType()
+                    == ModificationType.ADD) {
+                  effective.addAll(
+                      Arrays.asList(m.getValues()));
+                }
+              }
+            }
+            List<String> toAdd = new ArrayList<>();
+            for (String v : templateValues) {
+              if (!effective.contains(v)) {
+                toAdd.add(v);
+              }
+            }
+            if (!toAdd.isEmpty()) {
+              modifications.add(new Modification(
+                  ModificationType.ADD, attrName,
+                  toAdd.toArray(new String[0])));
+            }
           }
         }
       }
@@ -1273,26 +1299,11 @@ public class EntryEditor extends VerticalLayout {
         return;
       }
 
-      // Apply modifications
-      for (Modification mod : modifications) {
-        if (mod.getModificationType() == ModificationType.DELETE) {
-          ldapService.deleteAttribute(serverConfig, currentEntry.getDn(), mod.getAttributeName());
-        } else if (mod.getModificationType() == ModificationType.ADD) {
-          ldapService.addAttribute(
-              serverConfig,
-              currentEntry.getDn(),
-              mod.getAttributeName(),
-              Arrays.asList(mod.getValues())
-          );
-        } else if (mod.getModificationType() == ModificationType.REPLACE) {
-          ldapService.modifyAttribute(
-              serverConfig,
-              currentEntry.getDn(),
-              mod.getAttributeName(),
-              Arrays.asList(mod.getValues())
-          );
-        }
-      }
+      // Apply all modifications in a single atomic LDAP modify
+      // request so that objectClass additions and their associated
+      // mandatory attributes are processed together.
+      ldapService.modifyEntry(
+          serverConfig, currentEntry.getDn(), modifications);
 
       clearPendingChanges();
       NotificationHelper.showModifySuccess("Entry saved successfully.");
