@@ -1,5 +1,17 @@
 # LDAP Web Browser
 
+## v0.73 - Entry Templates - Enhancement
+- The Edit Template dialog compresses the attribute table into only 2 visable rows
+  Template attributes could be many. Need to be able to see more attributes and if possible
+  allow the edit template dialog to grow in size allowing the main scrow bar to pull up the
+  attribute table
+- for View / Edit templates, add an column for "Hidden" (similar to the create template).
+  - These hidden attribute, values are added during edit operations.
+  - A primary use case would be to add required objectClasses, but
+    customizedable to add other attribute name / values without displaying them.
+- When selecting a Create template, the Attribute name column displays the LDAP attribute names
+  not the 'display name' from the template
+
 ## v0.72 - Entry Templates - Enhancement
 
 ### Type-Aware Template UI Elements

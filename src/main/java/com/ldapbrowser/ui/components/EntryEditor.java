@@ -587,6 +587,10 @@ public class EntryEditor extends VerticalLayout {
     }
 
     for (TemplateAttribute ta : section.getAttributes()) {
+      // Skip hidden attributes; they are applied during save
+      if (ta.isHidden()) {
+        continue;
+      }
       String ldapAttr = ta.getLdapAttributeName();
       String displayName = ta.getDisplayName();
       if (displayName == null || displayName.isEmpty()) {
@@ -1228,6 +1232,42 @@ public class EntryEditor extends VerticalLayout {
       }
 
       List<Modification> modifications = createModifications(originalEntry, currentEntry);
+
+      // Add hidden template attributes as additional modifications
+      if (activeViewEditTemplate != null
+          && activeViewEditTemplate.getViewEditSection() != null
+          && activeViewEditTemplate.getViewEditSection()
+              .getAttributes() != null) {
+        for (TemplateAttribute ta
+            : activeViewEditTemplate.getViewEditSection()
+                .getAttributes()) {
+          if (!ta.isHidden()) {
+            continue;
+          }
+          String attrName = ta.getLdapAttributeName();
+          List<String> templateValues = ta.getValues();
+          if (attrName == null || attrName.isEmpty()
+              || templateValues == null
+              || templateValues.isEmpty()) {
+            continue;
+          }
+          // Merge with existing values to avoid duplicates
+          List<String> existing =
+              originalEntry.getAttributeValues(attrName);
+          List<String> toAdd = new ArrayList<>();
+          for (String v : templateValues) {
+            if (!existing.contains(v)) {
+              toAdd.add(v);
+            }
+          }
+          if (!toAdd.isEmpty()) {
+            modifications.add(new Modification(
+                ModificationType.ADD, attrName,
+                toAdd.toArray(new String[0])));
+          }
+        }
+      }
+
       if (modifications.isEmpty()) {
         NotificationHelper.showInfo("No changes to save.");
         return;

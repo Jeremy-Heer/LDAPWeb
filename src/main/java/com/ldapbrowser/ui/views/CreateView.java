@@ -70,6 +70,7 @@ public class CreateView extends VerticalLayout {
   private List<AttributeRow> attributeRows;
   private List<EntryTemplate> createTemplates = new ArrayList<>();
   private EntryTemplate activeTemplate;
+  private List<AttributeRow> hiddenAttributeRows = new ArrayList<>();
 
   /**
    * Creates the Create view.
@@ -229,14 +230,17 @@ public class CreateView extends VerticalLayout {
     parentDnLayout.setFlexGrow(1, parentDnField);
     parentDnLayout.add(parentDnField, parentDnBrowseButton);
     
-    dnCompositionLayout.add(rdnField, commaSeparator, parentDnLayout);
+    dnCompositionLayout.add(rdnField, commaSeparator, parentDnLayout,
+        parentDnCombo);
+    dnCompositionLayout.setFlexGrow(1, parentDnLayout);
+    dnCompositionLayout.setFlexGrow(1, parentDnCombo);
 
     // Button layout
     HorizontalLayout buttonLayout = new HorizontalLayout();
     buttonLayout.setSpacing(true);
     buttonLayout.add(addRowButton, clearButton, createButton);
 
-    add(titleLayout, infoText, dnCompositionLayout, parentDnCombo,
+    add(titleLayout, infoText, dnCompositionLayout,
         dnField, templateComboBox, attributeGrid, buttonLayout);
     setFlexGrow(1, attributeGrid);
   }
@@ -245,8 +249,18 @@ public class CreateView extends VerticalLayout {
     TextField nameField = new TextField();
     nameField.setWidthFull();
     nameField.setPlaceholder("e.g., objectClass, cn, mail");
-    nameField.setValue(row.getAttributeName() != null ? row.getAttributeName() : "");
-    nameField.addValueChangeListener(e -> row.setAttributeName(e.getValue()));
+    if (row.getDisplayName() != null
+        && !row.getDisplayName().isEmpty()) {
+      nameField.setValue(row.getDisplayName());
+      nameField.setReadOnly(true);
+      nameField.setTooltipText(row.getAttributeName());
+    } else {
+      nameField.setValue(
+          row.getAttributeName() != null
+              ? row.getAttributeName() : "");
+      nameField.addValueChangeListener(
+          e -> row.setAttributeName(e.getValue()));
+    }
     return nameField;
   }
 
@@ -361,6 +375,18 @@ public class CreateView extends VerticalLayout {
       }
     }
 
+    // Include hidden template attributes
+    for (AttributeRow row : hiddenAttributeRows) {
+      String name = row.getAttributeName();
+      String value = row.getAttributeValue();
+      if (name != null && !name.trim().isEmpty()
+          && value != null && !value.trim().isEmpty()) {
+        attributes.computeIfAbsent(name.trim(),
+            k -> new ArrayList<>()).add(value.trim());
+        hasValidAttributes = true;
+      }
+    }
+
     if (!hasValidAttributes) {
       NotificationHelper.showError("At least one attribute with a valid name and value is required");
       return;
@@ -396,6 +422,7 @@ public class CreateView extends VerticalLayout {
   private void applyTemplate(String templateName) {
     if (templateName == null || "None".equals(templateName)) {
       activeTemplate = null;
+      hiddenAttributeRows.clear();
       showManualParentDn(true);
       return;
     }
@@ -418,6 +445,7 @@ public class CreateView extends VerticalLayout {
       }
     }
     attributeRows.clear();
+    hiddenAttributeRows.clear();
     attributeRows.addAll(existingRows);
 
     if (tmpl == null || tmpl.getCreateSection() == null) {
@@ -454,16 +482,30 @@ public class CreateView extends VerticalLayout {
       List<String> values = attr.getValues();
       String firstVal = values.isEmpty() ? "" : values.get(0);
       if (attr.isHidden()) {
-        addTemplateAttribute(attr.getLdapAttributeName(), firstVal);
+        // Hidden: store separately, injected at create time
+        for (String v : values) {
+          hiddenAttributeRows.add(
+              new AttributeRow(attr.getLdapAttributeName(), v));
+        }
+      } else if (attr.getFieldType() == FieldType.SELECT_LIST) {
+        // SELECT_LIST: single row with dropdown, values are options
+        addTemplateAttributeWithType(
+            attr.getLdapAttributeName(), firstVal,
+            attr.getFieldType(), values,
+            attr.getDisplayName());
       } else {
         addTemplateAttributeWithType(
             attr.getLdapAttributeName(), firstVal,
-            attr.getFieldType(), values);
-      }
-      // Add remaining values as additional rows for multi-valued attrs
-      for (int i = 1; i < values.size(); i++) {
-        attributeRows.add(
-            new AttributeRow(attr.getLdapAttributeName(), values.get(i)));
+            attr.getFieldType(), values,
+            attr.getDisplayName());
+        // Extra rows for multi-valued attrs
+        for (int i = 1; i < values.size(); i++) {
+          AttributeRow extraRow =
+              new AttributeRow(attr.getLdapAttributeName(),
+                  values.get(i));
+          extraRow.setDisplayName(attr.getDisplayName());
+          attributeRows.add(extraRow);
+        }
       }
     }
 
@@ -570,13 +612,15 @@ public class CreateView extends VerticalLayout {
   }
 
   private void addTemplateAttributeWithType(String name, String value,
-      FieldType fieldType, List<String> selectValues) {
+      FieldType fieldType, List<String> selectValues,
+      String displayName) {
     boolean exists = attributeRows.stream()
         .anyMatch(row -> name.equals(row.getAttributeName()));
     if (!exists) {
       AttributeRow row = new AttributeRow(name, value);
       row.setFieldType(fieldType);
       row.setSelectValues(selectValues);
+      row.setDisplayName(displayName);
       attributeRows.add(row);
     }
   }
@@ -648,6 +692,7 @@ public class CreateView extends VerticalLayout {
     templateComboBox.setValue("None");
     activeTemplate = null;
     attributeRows.clear();
+    hiddenAttributeRows.clear();
     addEmptyRow(); // Add one empty row
   }
 
@@ -657,6 +702,7 @@ public class CreateView extends VerticalLayout {
   public static class AttributeRow {
     private String attributeName;
     private String attributeValue;
+    private String displayName;
     private FieldType fieldType;
     private List<String> selectValues;
 
@@ -682,6 +728,14 @@ public class CreateView extends VerticalLayout {
 
     public void setAttributeValue(String attributeValue) {
       this.attributeValue = attributeValue;
+    }
+
+    public String getDisplayName() {
+      return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+      this.displayName = displayName;
     }
 
     public FieldType getFieldType() {

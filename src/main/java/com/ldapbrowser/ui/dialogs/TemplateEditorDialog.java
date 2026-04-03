@@ -87,6 +87,7 @@ public class TemplateEditorDialog extends Dialog {
     setHeight("700px");
     setModal(true);
     setDraggable(true);
+    setResizable(true);
 
     VerticalLayout content = new VerticalLayout();
     content.setSizeFull();
@@ -146,17 +147,24 @@ public class TemplateEditorDialog extends Dialog {
     createEnabled.setValue(false);
 
     rdnField = new TextField("RDN Pattern");
-    rdnField.setWidthFull();
     rdnField.setPlaceholder("uid={UID}");
     rdnField.setHelperText(
         "Use {FIELD} placeholders matching attribute names");
 
     parentFilterField = new TextField("Parent Filter");
-    parentFilterField.setWidthFull();
     parentFilterField.setPlaceholder(
         "(&(objectClass=organizationalUnit)(ou=people))");
     parentFilterField.setHelperText(
         "LDAP filter to find parent DN candidates");
+
+    HorizontalLayout rdnParentRow = new HorizontalLayout();
+    rdnParentRow.setWidthFull();
+    rdnParentRow.setDefaultVerticalComponentAlignment(
+        com.vaadin.flow.component.orderedlayout.FlexComponent
+            .Alignment.BASELINE);
+    rdnParentRow.add(rdnField, parentFilterField);
+    rdnParentRow.setFlexGrow(1, rdnField);
+    rdnParentRow.setFlexGrow(2, parentFilterField);
 
     createAttributeGrid = buildAttributeGrid(createAttributes, true);
 
@@ -174,7 +182,7 @@ public class TemplateEditorDialog extends Dialog {
     parentFilterField.setEnabled(false);
     createAttributeGrid.setEnabled(false);
 
-    layout.add(createEnabled, rdnField, parentFilterField,
+    layout.add(createEnabled, rdnParentRow,
         gridButtons, createAttributeGrid);
     layout.expand(createAttributeGrid);
     return layout;
@@ -199,7 +207,7 @@ public class TemplateEditorDialog extends Dialog {
         "LDAP filter to match entries for this template");
 
     viewEditAttributeGrid =
-        buildAttributeGrid(viewEditAttributes, false);
+        buildAttributeGrid(viewEditAttributes, true);
 
     HorizontalLayout gridButtons = buildGridButtons(
         viewEditAttributes, viewEditAttributeGrid);
@@ -278,7 +286,6 @@ public class TemplateEditorDialog extends Dialog {
     Grid<TemplateAttribute> grid =
         new Grid<>(TemplateAttribute.class, false);
     grid.setSizeFull();
-    grid.setHeight("250px");
 
     grid.addColumn(new ComponentRenderer<>(attr -> {
       TextField tf = new TextField();
