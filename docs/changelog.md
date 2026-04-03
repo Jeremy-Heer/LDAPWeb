@@ -1,6 +1,26 @@
 # LDAP Web Browser
 
-## v0.75 - Engry Templates - Enhancement
+## v0.76 - Entry Template - Enhancement
+- View / Edit template render issue with "Multi" type fields
+  - When a View/Edit template defined an attribute as `MULTI_VALUED_TEXT`,
+    each LDAP value was rendered as a separate grid row instead of being
+    combined into a single row with newline-separated values in a TextArea.
+  - `buildTemplateRows()` now joins all values with `\n` into one
+    `AttributeRow` for `MULTI_VALUED_TEXT` fields.
+  - `openEditValueDialog()` now splits the TextArea content back into
+    individual LDAP values using `TemplateFieldFactory.getMultiValues()`
+    when saving edits to multi-valued fields.
+  - Grid value column uses `white-space: pre-line` for multi-valued
+    fields so newlines are visible in view mode.
+- Case-insensitive LDAP attribute name matching
+  - `LdapEntry` now uses a case-insensitive `TreeMap` for attribute
+    storage, matching RFC 4512 semantics where LDAP attribute names
+    are case-insensitive.
+  - Fixes template attribute lookups when the template attribute name
+    casing differs from the server-returned name (e.g. `memberUID`
+    vs `memberUid`).
+
+## v0.75 - Entry Templates - Enhancement
 - Create templates - Attribute type "Multi"
   - Each value seperated by a new line entred into the form should be treated as a 
     seperate attribute value. Allowing the user to supply multiple values in the text

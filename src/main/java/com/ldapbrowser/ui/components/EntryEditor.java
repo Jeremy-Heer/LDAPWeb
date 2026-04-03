@@ -606,6 +606,17 @@ public class EntryEditor extends VerticalLayout {
         row.setFieldType(ta.getFieldType());
         row.setSelectValues(ta.getValues());
         rows.add(row);
+      } else if (ta.getFieldType()
+          == EntryTemplate.FieldType.MULTI_VALUED_TEXT) {
+        // Combine all values into a single newline-separated row
+        // so the TextArea field displays them together.
+        String combined = String.join("\n", values);
+        AttributeRow row =
+            new AttributeRow(ldapAttr, combined, 0, true);
+        row.setDisplayName(displayName);
+        row.setFieldType(ta.getFieldType());
+        row.setSelectValues(ta.getValues());
+        rows.add(row);
       } else {
         for (int i = 0; i < values.size(); i++) {
           AttributeRow row =
@@ -896,6 +907,12 @@ public class EntryEditor extends VerticalLayout {
     String displayValue = TemplateFieldFactory.maskIfPassword(
         row.getValue(), row.getFieldType());
     Span valueSpan = new Span(displayValue);
+
+    // Preserve newlines for multi-valued text fields
+    if (row.getFieldType()
+        == EntryTemplate.FieldType.MULTI_VALUED_TEXT) {
+      valueSpan.getStyle().set("white-space", "pre-line");
+    }
     
     if (row.getValue().length() > 50) {
       valueSpan.getStyle().set("font-size", "smaller");
@@ -1087,9 +1104,19 @@ public class EntryEditor extends VerticalLayout {
           originalAttributeValues.put(
               row.getName(), new ArrayList<>(allValues));
         }
-        allValues.set(row.getValueIndex(), newValue.trim());
-        currentEntry.setAttribute(
-            row.getName(), new ArrayList<>(allValues));
+
+        if (row.getFieldType()
+            == EntryTemplate.FieldType.MULTI_VALUED_TEXT) {
+          // Replace all values with the newline-split entries
+          List<String> newValues =
+              TemplateFieldFactory.getMultiValues(newValue);
+          currentEntry.setAttribute(
+              row.getName(), newValues);
+        } else {
+          allValues.set(row.getValueIndex(), newValue.trim());
+          currentEntry.setAttribute(
+              row.getName(), new ArrayList<>(allValues));
+        }
 
         // Track the new value as MODIFIED for highlighting
         String changeKey = row.getName() + ":" + newValue.trim();

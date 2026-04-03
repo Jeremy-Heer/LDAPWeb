@@ -1,10 +1,10 @@
 package com.ldapbrowser.model;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * Represents an LDAP entry with its attributes.
@@ -22,8 +22,10 @@ public class LdapEntry {
    * Creates a new LDAP entry.
    */
   public LdapEntry() {
-    this.attributes = new HashMap<>();
-    this.operationalAttributes = new HashMap<>();
+    this.attributes =
+        new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    this.operationalAttributes =
+        new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
   }
   
   /**
@@ -58,16 +60,27 @@ public class LdapEntry {
     return java.util.Collections.unmodifiableMap(attributes);
   }
   
-  public void setAttributes(Map<String, List<String>> attributes) {
-    this.attributes = attributes;
+  public void setAttributes(
+      Map<String, List<String>> attributes) {
+    this.attributes =
+        new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    if (attributes != null) {
+      this.attributes.putAll(attributes);
+    }
   }
   
   public Map<String, List<String>> getOperationalAttributes() {
     return java.util.Collections.unmodifiableMap(operationalAttributes);
   }
   
-  public void setOperationalAttributes(Map<String, List<String>> operationalAttributes) {
-    this.operationalAttributes = operationalAttributes;
+  public void setOperationalAttributes(
+      Map<String, List<String>> operationalAttributes) {
+    this.operationalAttributes =
+        new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    if (operationalAttributes != null) {
+      this.operationalAttributes.putAll(
+          operationalAttributes);
+    }
   }
   
   /**
