@@ -506,7 +506,8 @@ public class CreateView extends VerticalLayout {
     // Apply parent filter
     if (cs.getParentFilter() != null
         && !cs.getParentFilter().isEmpty()) {
-      resolveParentDnCandidates(cs.getParentFilter());
+      resolveParentDnCandidates(
+          cs.getParentFilter(), cs.getBaseDn());
       showManualParentDn(false);
     } else {
       showManualParentDn(true);
@@ -604,8 +605,11 @@ public class CreateView extends VerticalLayout {
 
   /**
    * Resolves parent DN candidates from an LDAP filter.
+   * If templateBaseDn names a key in the server's otherBases,
+   * that DN is used as the search base instead of naming contexts.
    */
-  private void resolveParentDnCandidates(String filter) {
+  private void resolveParentDnCandidates(
+      String filter, String templateBaseDn) {
     Set<String> selectedServerNames = MainLayout.getSelectedServers();
     if (selectedServerNames == null || selectedServerNames.isEmpty()) {
       return;
@@ -615,10 +619,26 @@ public class CreateView extends VerticalLayout {
             .filter(c -> selectedServerNames.contains(c.getName()))
             .toList();
 
+    boolean useNamedBase = templateBaseDn != null
+        && !templateBaseDn.trim().isEmpty()
+        && !"Default".equalsIgnoreCase(templateBaseDn.trim());
+
     List<String> candidates = new ArrayList<>();
     for (LdapServerConfig cfg : configs) {
       try {
-        List<String> bases = ldapService.getNamingContexts(cfg);
+        List<String> bases;
+        if (useNamedBase) {
+          String namedDn = cfg.getOtherBases() != null
+              ? cfg.getOtherBases().get(templateBaseDn.trim())
+              : null;
+          if (namedDn != null && !namedDn.isEmpty()) {
+            bases = List.of(namedDn);
+          } else {
+            bases = ldapService.getNamingContexts(cfg);
+          }
+        } else {
+          bases = ldapService.getNamingContexts(cfg);
+        }
         for (String base : bases) {
           List<LdapEntry> results =
               ldapService.search(cfg, base, filter,

@@ -1,5 +1,29 @@
 # LDAP Web Browser
 
+## v0.77 - Custom Base DNs and Templates
+- Server view / Edit / Add server dialogs
+  - Move Default Base to bottom just below "Allowed Templates"
+  - Add a "Other Bases" grid below the Default Base field with columns of:
+    - Name - the name of the base
+    - Value - The LDAP DN for the named base. This fild has a DN helper to populate.
+      - same DN helper used already in the app. For example the Default Base DN uses this.
+  - "Other Bases" grid has "Add Row" buttom to add rows and the ability to delete rows.
+- Settings View / Templates
+  - For both the "Create", and "Search" tabs
+    - add a "Base DN" selection. With values of either "Default" or user provided value.
+- Templates use of custom base DNs.
+  - Prior to this enhancment, both the Create and Search tabs define operations that use only
+    the "Default Base" value from server config.
+  - This enhancment allows other search bases to be used that are customizalbe to the templates.
+  - When a Server config has a "Other" base entry with a name for example "kerberos"
+  - And and when the templates are have populated the Base of "kerberos"
+    - then the search operaions will use the DN value from the server config with the lable of "kerberos"
+  - If a template uses the "Default Base" selected, then the behavor works as it does now,
+    using the default base defined on the server.
+  - Of course "kerberos" is just an example and a server's Other Bases can have any value
+    and the templates can use these bases from the server that match the name.
+
+
 ## v0.76 - Entry Template - Enhancement
 - View / Edit template render issue with "Multi" type fields
   - When a View/Edit template defined an attribute as `MULTI_VALUED_TEXT`,

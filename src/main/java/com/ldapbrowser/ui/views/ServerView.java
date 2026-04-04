@@ -17,6 +17,9 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -25,6 +28,7 @@ import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.data.provider.ListDataProvider;
+import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
@@ -32,7 +36,9 @@ import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
@@ -342,7 +348,6 @@ public class ServerView extends VerticalLayout {
     // Add fields to form
     formLayout.add(nameField, hostField);
     formLayout.add(portField);
-    formLayout.add(baseDnLayout, 2);
     formLayout.add(bindDnField, bindPasswordField);
     formLayout.add(useSslCheckbox, useStartTlsCheckbox);
     formLayout.add(validateCertificateCheckbox, viewCertButton);
@@ -361,6 +366,96 @@ public class ServerView extends VerticalLayout {
     templatesCombo.setItems(allTemplateNames);
     templatesCombo.setWidthFull();
     formLayout.add(templatesCombo, 2);
+    formLayout.add(baseDnLayout, 2);
+
+    // Other Bases grid
+    List<NamedBase> otherBasesList = new ArrayList<>();
+    Grid<NamedBase> otherBasesGrid = new Grid<>();
+    otherBasesGrid.setWidthFull();
+    otherBasesGrid.setAllRowsVisible(true);
+
+    otherBasesGrid.addColumn(new ComponentRenderer<>(nb -> {
+      TextField tf = new TextField();
+      tf.setWidthFull();
+      tf.setValue(nb.getName() != null ? nb.getName() : "");
+      tf.setPlaceholder("Name");
+      tf.addValueChangeListener(ev -> nb.setName(ev.getValue()));
+      return tf;
+    })).setHeader("Name").setFlexGrow(1);
+
+    otherBasesGrid.addColumn(new ComponentRenderer<>(nb -> {
+      TextField tf = new TextField();
+      tf.setWidthFull();
+      tf.setValue(nb.getValue() != null ? nb.getValue() : "");
+      tf.setPlaceholder("DN value");
+      tf.addValueChangeListener(ev -> nb.setValue(ev.getValue()));
+
+      Button browse = new Button(VaadinIcon.FOLDER_OPEN.create());
+      browse.addThemeVariants(
+          ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+      browse.setTooltipText("Select DN from Directory");
+      browse.addClickListener(ev -> {
+        if (hostField.getValue() != null
+            && !hostField.getValue().trim().isEmpty()) {
+          showBaseDnBrowseDialog(tf, nameField.getValue(),
+              hostField.getValue(),
+              portField.getValue() != null
+                  ? portField.getValue() : 389,
+              bindDnField.getValue(),
+              bindPasswordField.getValue(),
+              useSslCheckbox.getValue(),
+              useStartTlsCheckbox.getValue());
+        } else {
+          NotificationHelper.showError(
+              "Please enter a host before browsing for DN");
+        }
+      });
+
+      HorizontalLayout row = new HorizontalLayout(tf, browse);
+      row.setWidthFull();
+      row.expand(tf);
+      row.setSpacing(false);
+      row.getStyle().set("gap", "var(--lumo-space-xs)");
+      row.setDefaultVerticalComponentAlignment(
+          FlexComponent.Alignment.CENTER);
+      return row;
+    })).setHeader("Value").setFlexGrow(2);
+
+    otherBasesGrid.addColumn(new ComponentRenderer<>(nb -> {
+      Button del = new Button(new Icon(VaadinIcon.TRASH));
+      del.addThemeVariants(ButtonVariant.LUMO_SMALL,
+          ButtonVariant.LUMO_TERTIARY,
+          ButtonVariant.LUMO_ERROR);
+      del.addClickListener(ev -> {
+        otherBasesList.remove(nb);
+        otherBasesGrid.setItems(otherBasesList);
+      });
+      return del;
+    })).setFlexGrow(0).setWidth("60px");
+
+    otherBasesGrid.setItems(otherBasesList);
+
+    Button addBaseRow = new Button("Add Row",
+        VaadinIcon.PLUS.create());
+    addBaseRow.addThemeVariants(ButtonVariant.LUMO_SMALL);
+    addBaseRow.addClickListener(ev -> {
+      otherBasesList.add(new NamedBase("", ""));
+      otherBasesGrid.setItems(otherBasesList);
+    });
+
+    Span otherBasesLabel = new Span("Other Bases");
+    otherBasesLabel.getStyle().set("font-weight", "500");
+
+    HorizontalLayout otherBasesHeader = new HorizontalLayout(
+        otherBasesLabel, addBaseRow);
+    otherBasesHeader.setDefaultVerticalComponentAlignment(
+        FlexComponent.Alignment.CENTER);
+
+    VerticalLayout otherBasesSection = new VerticalLayout(
+        otherBasesHeader, otherBasesGrid);
+    otherBasesSection.setPadding(false);
+    otherBasesSection.setSpacing(true);
+    formLayout.add(otherBasesSection, 2);
 
     // Create binder
     Binder<LdapServerConfig> binder = new Binder<>(LdapServerConfig.class);
@@ -392,6 +487,13 @@ public class ServerView extends VerticalLayout {
     LdapServerConfig editConfig = config != null ? config : new LdapServerConfig();
     binder.readBean(editConfig);
     
+    // Populate other bases grid from existing config
+    if (editConfig.getOtherBases() != null) {
+      editConfig.getOtherBases().forEach((k, v) ->
+          otherBasesList.add(new NamedBase(k, v)));
+      otherBasesGrid.setItems(otherBasesList);
+    }
+
     // Update validate certificate checkbox state after loading config
     updateValidateCertState.run();
 
@@ -420,6 +522,16 @@ public class ServerView extends VerticalLayout {
         try {
           LdapServerConfig saveConfig = new LdapServerConfig();
           binder.writeBean(saveConfig);
+          // Collect other bases from grid
+          LinkedHashMap<String, String> bases = new LinkedHashMap<>();
+          for (NamedBase nb : otherBasesList) {
+            String n = nb.getName();
+            String v = nb.getValue();
+            if (n != null && !n.trim().isEmpty()) {
+              bases.put(n.trim(), v != null ? v.trim() : "");
+            }
+          }
+          saveConfig.setOtherBases(bases);
           configService.saveConfiguration(saveConfig);
           NotificationHelper.showSuccess("Configuration saved: " + saveConfig.getName());
           refreshServerGrid();
@@ -704,4 +816,32 @@ public class ServerView extends VerticalLayout {
     });
   }
 
+  /**
+   * Simple bean for other-bases grid rows.
+   */
+  static class NamedBase {
+    private String name;
+    private String value;
+
+    NamedBase(String name, String value) {
+      this.name = name;
+      this.value = value;
+    }
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public String getValue() {
+      return value;
+    }
+
+    public void setValue(String value) {
+      this.value = value;
+    }
+  }
 }

@@ -45,6 +45,7 @@ public class TemplateEditorDialog extends Dialog {
   private Checkbox createEnabled;
   private TextField rdnField;
   private TextField parentFilterField;
+  private TextField createBaseDnField;
   private Grid<TemplateAttribute> createAttributeGrid;
   private List<TemplateAttribute> createAttributes = new ArrayList<>();
 
@@ -58,6 +59,7 @@ public class TemplateEditorDialog extends Dialog {
   private Checkbox searchEnabled;
   private TextField searchFilterField;
   private TextField baseFilterField;
+  private TextField searchBaseDnField;
   private Select<String> scopeSelect;
   private TextField returnAttributesField;
 
@@ -157,14 +159,20 @@ public class TemplateEditorDialog extends Dialog {
     parentFilterField.setHelperText(
         "LDAP filter to find parent DN candidates");
 
+    createBaseDnField = new TextField("Base DN");
+    createBaseDnField.setPlaceholder("Default");
+    createBaseDnField.setHelperText(
+        "'Default' or a named base from server config");
+
     HorizontalLayout rdnParentRow = new HorizontalLayout();
     rdnParentRow.setWidthFull();
     rdnParentRow.setDefaultVerticalComponentAlignment(
         com.vaadin.flow.component.orderedlayout.FlexComponent
             .Alignment.BASELINE);
-    rdnParentRow.add(rdnField, parentFilterField);
+    rdnParentRow.add(rdnField, parentFilterField, createBaseDnField);
     rdnParentRow.setFlexGrow(1, rdnField);
     rdnParentRow.setFlexGrow(2, parentFilterField);
+    rdnParentRow.setFlexGrow(1, createBaseDnField);
 
     createAttributeGrid = buildAttributeGrid(createAttributes, true);
 
@@ -175,11 +183,13 @@ public class TemplateEditorDialog extends Dialog {
       boolean enabled = Boolean.TRUE.equals(e.getValue());
       rdnField.setEnabled(enabled);
       parentFilterField.setEnabled(enabled);
+      createBaseDnField.setEnabled(enabled);
       createAttributeGrid.setEnabled(enabled);
     });
     // Start disabled
     rdnField.setEnabled(false);
     parentFilterField.setEnabled(false);
+    createBaseDnField.setEnabled(false);
     createAttributeGrid.setEnabled(false);
 
     layout.add(createEnabled, rdnParentRow,
@@ -250,6 +260,11 @@ public class TemplateEditorDialog extends Dialog {
     baseFilterField.setHelperText(
         "LDAP filter to find base DNs for the search");
 
+    searchBaseDnField = new TextField("Base DN");
+    searchBaseDnField.setPlaceholder("Default");
+    searchBaseDnField.setHelperText(
+        "'Default' or a named base from server config");
+
     scopeSelect = new Select<>();
     scopeSelect.setLabel("Scope");
     scopeSelect.setItems("base", "one", "sub");
@@ -266,16 +281,18 @@ public class TemplateEditorDialog extends Dialog {
       boolean enabled = Boolean.TRUE.equals(e.getValue());
       searchFilterField.setEnabled(enabled);
       baseFilterField.setEnabled(enabled);
+      searchBaseDnField.setEnabled(enabled);
       scopeSelect.setEnabled(enabled);
       returnAttributesField.setEnabled(enabled);
     });
     searchFilterField.setEnabled(false);
     baseFilterField.setEnabled(false);
+    searchBaseDnField.setEnabled(false);
     scopeSelect.setEnabled(false);
     returnAttributesField.setEnabled(false);
 
     layout.add(searchEnabled, searchFilterField, baseFilterField,
-        scopeSelect, returnAttributesField);
+        searchBaseDnField, scopeSelect, returnAttributesField);
     return layout;
   }
 
@@ -411,6 +428,8 @@ public class TemplateEditorDialog extends Dialog {
           cs.getRdn() != null ? cs.getRdn() : "");
       parentFilterField.setValue(
           cs.getParentFilter() != null ? cs.getParentFilter() : "");
+      createBaseDnField.setValue(
+          cs.getBaseDn() != null ? cs.getBaseDn() : "");
       createAttributes.addAll(deepCopyAttributes(cs.getAttributes()));
       createAttributeGrid.setItems(createAttributes);
     }
@@ -434,6 +453,8 @@ public class TemplateEditorDialog extends Dialog {
               ? ss.getSearchFilter() : "");
       baseFilterField.setValue(
           ss.getBaseFilter() != null ? ss.getBaseFilter() : "");
+      searchBaseDnField.setValue(
+          ss.getBaseDn() != null ? ss.getBaseDn() : "");
       scopeSelect.setValue(
           ss.getScope() != null ? ss.getScope() : "sub");
       returnAttributesField.setValue(
@@ -486,6 +507,7 @@ public class TemplateEditorDialog extends Dialog {
       CreateTemplateSection cs = new CreateTemplateSection();
       cs.setRdn(rdnField.getValue());
       cs.setParentFilter(parentFilterField.getValue());
+      cs.setBaseDn(createBaseDnField.getValue());
       cs.setAttributes(new ArrayList<>(createAttributes));
       template.setCreateSection(cs);
     }
@@ -503,6 +525,7 @@ public class TemplateEditorDialog extends Dialog {
       SearchTemplateSection ss = new SearchTemplateSection();
       ss.setSearchFilter(searchFilterField.getValue());
       ss.setBaseFilter(baseFilterField.getValue());
+      ss.setBaseDn(searchBaseDnField.getValue());
       ss.setScope(scopeSelect.getValue());
       String retAttrs = returnAttributesField.getValue();
       if (retAttrs != null && !retAttrs.trim().isEmpty()) {

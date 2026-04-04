@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -267,6 +269,69 @@ class LdapServerConfigTest {
       LdapServerConfig copied = cfg.copy();
       copied.getAllowedTemplates().add("T2");
       assertThat(cfg.getAllowedTemplates()).containsExactly("T1");
+    }
+  }
+
+  // ---- otherBases -----------------------------------------------------
+
+  @Nested
+  @DisplayName("OtherBases field")
+  class OtherBases {
+
+    @Test
+    @DisplayName("defaults to empty map")
+    void defaultsToEmpty() {
+      LdapServerConfig cfg = new LdapServerConfig();
+      assertThat(cfg.getOtherBases()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("getter returns set values")
+    void setAndGet() {
+      LdapServerConfig cfg = valid();
+      Map<String, String> bases = new LinkedHashMap<>();
+      bases.put("kerberos", "ou=kerberos,dc=example,dc=com");
+      bases.put("dns", "ou=dns,dc=example,dc=com");
+      cfg.setOtherBases(bases);
+      assertThat(cfg.getOtherBases())
+          .containsEntry("kerberos",
+              "ou=kerberos,dc=example,dc=com")
+          .containsEntry("dns",
+              "ou=dns,dc=example,dc=com")
+          .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("null setter normalises to empty map")
+    void nullNormalisesToEmpty() {
+      LdapServerConfig cfg = valid();
+      cfg.setOtherBases(null);
+      assertThat(cfg.getOtherBases()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("copy preserves otherBases")
+    void copyPreserves() {
+      LdapServerConfig cfg = valid();
+      Map<String, String> bases = new LinkedHashMap<>();
+      bases.put("kerberos", "ou=kerberos,dc=example,dc=com");
+      cfg.setOtherBases(bases);
+      LdapServerConfig copied = cfg.copy();
+      assertThat(copied.getOtherBases())
+          .containsEntry("kerberos",
+              "ou=kerberos,dc=example,dc=com");
+    }
+
+    @Test
+    @DisplayName("copy creates independent map")
+    void copyIsIndependent() {
+      LdapServerConfig cfg = valid();
+      Map<String, String> bases = new LinkedHashMap<>();
+      bases.put("k1", "dn1");
+      cfg.setOtherBases(bases);
+      LdapServerConfig copied = cfg.copy();
+      copied.getOtherBases().put("k2", "dn2");
+      assertThat(cfg.getOtherBases()).hasSize(1);
     }
   }
 }

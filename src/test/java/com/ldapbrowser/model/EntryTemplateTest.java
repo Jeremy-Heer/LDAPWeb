@@ -280,5 +280,83 @@ class EntryTemplateTest {
       SearchTemplateSection search = new SearchTemplateSection();
       assertThat(search.getReturnAttributes()).isEmpty();
     }
+
+    @Test
+    @DisplayName("default baseDn is null")
+    void defaultBaseDn() {
+      SearchTemplateSection search = new SearchTemplateSection();
+      assertThat(search.getBaseDn()).isNull();
+    }
+  }
+
+  // ---- CreateTemplateSection baseDn -----------------------------------
+
+  @Nested
+  @DisplayName("CreateTemplateSection baseDn")
+  class CreateBaseDn {
+
+    @Test
+    @DisplayName("default baseDn is null")
+    void defaultBaseDn() {
+      CreateTemplateSection create = new CreateTemplateSection();
+      assertThat(create.getBaseDn()).isNull();
+    }
+
+    @Test
+    @DisplayName("set and get baseDn")
+    void setAndGet() {
+      CreateTemplateSection create = new CreateTemplateSection();
+      create.setBaseDn("kerberos");
+      assertThat(create.getBaseDn()).isEqualTo("kerberos");
+    }
+
+    @Test
+    @DisplayName("baseDn round-trips in JSON")
+    void jsonRoundTrip() throws Exception {
+      EntryTemplate template = makeTemplate("TestCreate");
+      CreateTemplateSection cs = new CreateTemplateSection();
+      cs.setRdn("uid={UID}");
+      cs.setBaseDn("kerberos");
+      cs.setAttributes(List.of(makeAttribute("Name", "cn")));
+      template.setCreateSection(cs);
+
+      String json = mapper.writeValueAsString(template);
+      EntryTemplate loaded =
+          mapper.readValue(json, EntryTemplate.class);
+      assertThat(loaded.getCreateSection().getBaseDn())
+          .isEqualTo("kerberos");
+    }
+  }
+
+  // ---- SearchTemplateSection baseDn -----------------------------------
+
+  @Nested
+  @DisplayName("SearchTemplateSection baseDn")
+  class SearchBaseDn {
+
+    @Test
+    @DisplayName("set and get baseDn")
+    void setAndGet() {
+      SearchTemplateSection search = new SearchTemplateSection();
+      search.setBaseDn("dns");
+      assertThat(search.getBaseDn()).isEqualTo("dns");
+    }
+
+    @Test
+    @DisplayName("baseDn round-trips in JSON")
+    void jsonRoundTrip() throws Exception {
+      EntryTemplate template = makeTemplate("TestSearch");
+      SearchTemplateSection ss = new SearchTemplateSection();
+      ss.setSearchFilter("(uid={SEARCH})");
+      ss.setBaseDn("kerberos");
+      ss.setScope("sub");
+      template.setSearchSection(ss);
+
+      String json = mapper.writeValueAsString(template);
+      EntryTemplate loaded =
+          mapper.readValue(json, EntryTemplate.class);
+      assertThat(loaded.getSearchSection().getBaseDn())
+          .isEqualTo("kerberos");
+    }
   }
 }

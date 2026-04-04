@@ -877,9 +877,10 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
           .findFirst()
           .ifPresent(config -> {
             try {
-              // Resolve base DNs from baseFilter
+              // Resolve base DNs from template config
               List<String> baseDns = resolveBaseDns(
-                  config, ss.getBaseFilter());
+                  config, ss.getBaseFilter(),
+                  ss.getBaseDn());
               for (String base : baseDns) {
                 List<LdapEntry> results;
                 if (finalReturnAttrs != null) {
@@ -915,9 +916,25 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
 
   /**
    * Resolves base DNs by searching with the given filter.
+   * If templateBaseDn names a key in the server's otherBases map,
+   * that DN is used directly. Otherwise falls back to baseFilter
+   * resolution or the server's default base DN.
    */
   private List<String> resolveBaseDns(LdapServerConfig config,
-      String baseFilter) throws Exception {
+      String baseFilter, String templateBaseDn) throws Exception {
+    // Check for named base from server config
+    if (templateBaseDn != null && !templateBaseDn.trim().isEmpty()
+        && !"Default".equalsIgnoreCase(templateBaseDn.trim())) {
+      String namedDn = config.getOtherBases() != null
+          ? config.getOtherBases().get(templateBaseDn.trim()) : null;
+      if (namedDn != null && !namedDn.isEmpty()) {
+        return List.of(namedDn);
+      }
+      // Named base not found on this server — warn and fall through
+      logger.warn("Named base '{}' not found on server '{}'",
+          templateBaseDn, config.getName());
+    }
+
     if (baseFilter == null || baseFilter.isEmpty()) {
       // Use the server's default base DN
       String defaultBase = config.getBaseDn();

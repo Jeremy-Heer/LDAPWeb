@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.unboundid.ldap.sdk.DN;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -26,6 +28,7 @@ public class LdapServerConfig implements Serializable {
   private boolean validateCertificate = true;
   private List<String> allowedTemplates =
       new ArrayList<>(List.of("LDAP"));
+  private Map<String, String> otherBases = new LinkedHashMap<>();
 
   /**
    * Default constructor.
@@ -140,6 +143,15 @@ public class LdapServerConfig implements Serializable {
         allowedTemplates != null ? allowedTemplates : new ArrayList<>();
   }
 
+  public Map<String, String> getOtherBases() {
+    return otherBases;
+  }
+
+  public void setOtherBases(Map<String, String> otherBases) {
+    this.otherBases =
+        otherBases != null ? otherBases : new LinkedHashMap<>();
+  }
+
   /**
    * Validates this configuration before a connection attempt.
    *
@@ -197,6 +209,8 @@ public class LdapServerConfig implements Serializable {
     copied.setValidateCertificate(this.validateCertificate);
     copied.setAllowedTemplates(
         new ArrayList<>(this.allowedTemplates));
+    copied.setOtherBases(
+        new LinkedHashMap<>(this.otherBases));
     return copied;
   }
 

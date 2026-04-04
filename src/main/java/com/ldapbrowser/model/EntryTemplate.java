@@ -189,6 +189,7 @@ public class EntryTemplate implements Serializable {
 
     private String rdn;
     private String parentFilter;
+    private String baseDn;
     private List<TemplateAttribute> attributes = new ArrayList<>();
 
     /**
@@ -211,6 +212,14 @@ public class EntryTemplate implements Serializable {
 
     public void setParentFilter(String parentFilter) {
       this.parentFilter = parentFilter;
+    }
+
+    public String getBaseDn() {
+      return baseDn;
+    }
+
+    public void setBaseDn(String baseDn) {
+      this.baseDn = baseDn;
     }
 
     public List<TemplateAttribute> getAttributes() {
@@ -266,6 +275,7 @@ public class EntryTemplate implements Serializable {
 
     private String searchFilter;
     private String baseFilter;
+    private String baseDn;
     private String scope = "sub";
     private List<String> returnAttributes = new ArrayList<>();
 
@@ -289,6 +299,14 @@ public class EntryTemplate implements Serializable {
 
     public void setBaseFilter(String baseFilter) {
       this.baseFilter = baseFilter;
+    }
+
+    public String getBaseDn() {
+      return baseDn;
+    }
+
+    public void setBaseDn(String baseDn) {
+      this.baseDn = baseDn;
     }
 
     public String getScope() {
