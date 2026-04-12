@@ -11,6 +11,7 @@ import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.components.TemplateFieldFactory;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
@@ -529,6 +530,16 @@ public class CreateView extends VerticalLayout {
             attr.getLdapAttributeName(), firstVal,
             attr.getFieldType(), values,
             attr.getDisplayName());
+      } else if (attr.getFieldType() == FieldType.SEARCH) {
+        // SEARCH: resolve base/filter to list of DNs
+        // Rejoin values in case commas in DN caused incorrect split
+        String baseFilter = String.join(",", values);
+        List<String> dnResults =
+            resolveSearchDnCandidates(baseFilter);
+        addTemplateAttributeWithType(
+            attr.getLdapAttributeName(), "",
+            attr.getFieldType(), dnResults,
+            attr.getDisplayName());
       } else if (attr.getFieldType() == FieldType.TEXT
           || attr.getFieldType() == null) {
         // TEXT type: use joined values as a single placeholder
@@ -655,6 +666,79 @@ public class CreateView extends VerticalLayout {
     if (candidates.size() == 1) {
       parentDnCombo.setValue(candidates.get(0));
     }
+  }
+
+  /**
+   * Resolves a SEARCH type attribute value containing a
+   * {@code <base>/<filter>} string into a list of DNs.
+   *
+   * <p>Base resolution rules:
+   * <ul>
+   *   <li>Blank base: uses server default search base
+   *   <li>Named base: looked up in server config Other Bases
+   *   <li>DN base: used directly as the search base
+   * </ul>
+   *
+   * @param baseFilter the value in the form {@code base/filter}
+   * @return list of DNs matching the search
+   */
+  private List<String> resolveSearchDnCandidates(
+      String baseFilter) {
+    List<String> results = new ArrayList<>();
+    if (baseFilter == null || baseFilter.isEmpty()) {
+      return results;
+    }
+
+    // Split on the first '/' to separate base from filter
+    int slashIdx = baseFilter.indexOf('/');
+    if (slashIdx < 0) {
+      return results;
+    }
+    String basePart = baseFilter.substring(0, slashIdx).trim();
+    String filterPart = baseFilter.substring(slashIdx + 1).trim();
+    if (filterPart.isEmpty()) {
+      return results;
+    }
+
+    LdapServerConfig serverCfg = getSelectedServerConfig();
+    if (serverCfg == null) {
+      return results;
+    }
+
+    try {
+      String searchBase;
+      if (basePart.isEmpty()) {
+        // Use server's default base DN
+        searchBase = serverCfg.getBaseDn();
+        if (searchBase == null || searchBase.isEmpty()) {
+          List<String> contexts =
+              ldapService.getNamingContexts(serverCfg);
+          searchBase = contexts.isEmpty() ? "" : contexts.get(0);
+        }
+      } else {
+        // Check if basePart is a named base from Other Bases
+        String namedDn = serverCfg.getOtherBases() != null
+            ? serverCfg.getOtherBases().get(basePart) : null;
+        if (namedDn != null && !namedDn.isEmpty()) {
+          searchBase = namedDn;
+        } else {
+          // Use as literal DN
+          searchBase = basePart;
+        }
+      }
+
+      // Search returning only DNs (1.1 = no attributes)
+      List<LdapEntry> entries = ldapService.search(
+          serverCfg, searchBase, filterPart,
+          SearchScope.SUB, "1.1");
+      for (LdapEntry entry : entries) {
+        results.add(entry.getDn());
+      }
+    } catch (Exception e) {
+      // silently return empty results on error
+    }
+
+    return results;
   }
 
   private void addTemplateAttribute(String name, String value) {

@@ -40,6 +40,7 @@ public final class TemplateFieldFactory {
       case BOOLEAN -> createBooleanField(currentValue);
       case SELECT_LIST -> createSelectField(currentValue, selectValues);
       case MULTI_VALUED_TEXT -> createMultiValuedField(currentValue);
+      case SEARCH -> createSearchField(currentValue, selectValues);
       default -> createTextField(currentValue);
     };
   }
@@ -148,5 +149,30 @@ public final class TemplateFieldFactory {
     area.setValue(currentValue != null ? currentValue : "");
     area.setMaxHeight("100px");
     return area;
+  }
+
+  /**
+   * Creates a ComboBox for SEARCH type fields. The selectable
+   * items are DNs returned by an LDAP search.
+   *
+   * @param currentValue currently selected value
+   * @param searchResults list of DN strings from the LDAP search
+   * @return ComboBox component
+   */
+  private static Component createSearchField(String currentValue,
+      List<String> searchResults) {
+    ComboBox<String> combo = new ComboBox<>();
+    if (searchResults != null && !searchResults.isEmpty()) {
+      combo.setItems(searchResults);
+    }
+    combo.setWidthFull();
+    combo.setPlaceholder("Select a DN");
+    combo.setTooltipText(
+        "Choose a DN from the search results");
+    combo.setClearButtonVisible(true);
+    if (currentValue != null && !currentValue.isEmpty()) {
+      combo.setValue(currentValue);
+    }
+    return combo;
   }
 }

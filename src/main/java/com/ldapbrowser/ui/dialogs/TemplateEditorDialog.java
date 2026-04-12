@@ -345,6 +345,7 @@ public class TemplateEditorDialog extends Dialog {
           case BOOLEAN: return "Bool";
           case SELECT_LIST: return "Select";
           case PASSWORD: return "Password";
+          case SEARCH: return "Search";
           default: return ft.name();
         }
       });
@@ -372,6 +373,9 @@ public class TemplateEditorDialog extends Dialog {
         String v = e.getValue();
         if (v == null || v.trim().isEmpty()) {
           attr.setValues(new ArrayList<>());
+        } else if (attr.getFieldType()
+            == EntryTemplate.FieldType.SEARCH) {
+          attr.setValues(new ArrayList<>(List.of(v)));
         } else {
           attr.setValues(new ArrayList<>(
               Arrays.asList(v.split(",", -1))));

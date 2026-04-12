@@ -96,7 +96,8 @@ public class EntryTemplate implements Serializable {
     MULTI_VALUED_TEXT,
     BOOLEAN,
     SELECT_LIST,
-    PASSWORD
+    PASSWORD,
+    SEARCH
   }
 
   /**

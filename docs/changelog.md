@@ -1,5 +1,27 @@
 # LDAP Web Browser
 
+## v0.78 - Template Attribute "Select Search" attribute type
+- Settings View - Create / Edit Template dialog
+  - Create and View / Edit Tabs
+    - Attributes grid - Type column
+      - New type - "Search"
+      - "Search" type will use the "Values" field to store a <base>/<filter> combination
+      - The results of the search performed using the provided base and filter
+        will be displayed as a dropdown allowing the user to choose one of the DNs
+      - When processig the <base>/<filter> string
+        - only the DN should be returned. (1.1)
+        - The search base
+          - if blank would use the LDAP servers default search base
+          - Could contain an LDAP search base to be used for the search
+          - Could also contain a named base from server config (Other Bases)
+        - Examples:
+          - dc=example,dc=com/(sn=Jensen)
+          - /(sn=Jensen)
+            - uses the Default Based defined in server config
+          - cn=Password Policies,cn=config/(objectClass=ds-cfg-password-policy)
+          - kerberos/(objectClass=krbPwdPolicy)
+            - relies on the "kerberos" base defined in the "Other Bases" of the server config
+
 ## v0.77 - Custom Base DNs and Templates
 - Server view / Edit / Add server dialogs
   - Move Default Base to bottom just below "Allowed Templates"

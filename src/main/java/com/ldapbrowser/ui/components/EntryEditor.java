@@ -366,6 +366,9 @@ public class EntryEditor extends VerticalLayout {
         activeViewEditTemplate = viewEditTemplates.stream()
             .filter(t -> t.getName().equals(name))
             .findFirst().orElse(null);
+        if (activeViewEditTemplate != null) {
+          ensureFullEntry();
+        }
       }
       refreshAttributeDisplay();
     });
@@ -545,6 +548,7 @@ public class EntryEditor extends VerticalLayout {
         if (f.matchesEntry(sdkEntry)) {
           activeViewEditTemplate = tmpl;
           templateComboBox.setValue(tmpl.getName());
+          ensureFullEntry();
           refreshAttributeDisplay();
           return;
         }
@@ -552,6 +556,32 @@ public class EntryEditor extends VerticalLayout {
         logger.debug("Invalid matching filter for template {}: {}",
             tmpl.getName(), e.getMessage());
       }
+    }
+  }
+
+  /**
+   * Ensures {@code fullEntry} contains operational attributes
+   * so template-defined attributes like
+   * {@code ds-pwp-password-policy-dn} are available.
+   */
+  private void ensureFullEntry() {
+    if (serverConfig == null || currentEntry == null) {
+      return;
+    }
+    if (fullEntry != null
+        && !fullEntry.getOperationalAttributes().isEmpty()) {
+      return; // already fetched
+    }
+    try {
+      LdapEntry entryWithOps = ldapService.readEntry(
+          serverConfig, currentEntry.getDn(), true);
+      if (entryWithOps != null) {
+        entryWithOps.setServerName(currentEntry.getServerName());
+        this.fullEntry = entryWithOps;
+      }
+    } catch (Exception e) {
+      logger.debug("Failed to fetch operational attributes "
+          + "for template: {}", e.getMessage());
     }
   }
 
@@ -597,14 +627,27 @@ public class EntryEditor extends VerticalLayout {
         displayName = ldapAttr;
       }
 
+      // For SEARCH type, resolve DN candidates from base/filter
+      List<String> effectiveValues = ta.getValues();
+      if (ta.getFieldType()
+          == EntryTemplate.FieldType.SEARCH) {
+        // Rejoin values in case commas in DN caused incorrect split
+        String baseFilter = String.join(",", effectiveValues);
+        effectiveValues = resolveSearchDnCandidates(baseFilter);
+      }
+
       List<String> values = currentEntry.getAttributes().get(ldapAttr);
+      // Also check operational attributes (e.g. ds-pwp-password-policy-dn)
+      if ((values == null || values.isEmpty()) && fullEntry != null) {
+        values = fullEntry.getOperationalAttributes().get(ldapAttr);
+      }
       if (values == null || values.isEmpty()) {
         // Show an empty row so the user can add a value
         AttributeRow row =
             new AttributeRow(ldapAttr, "", 0, true);
         row.setDisplayName(displayName);
         row.setFieldType(ta.getFieldType());
-        row.setSelectValues(ta.getValues());
+        row.setSelectValues(effectiveValues);
         rows.add(row);
       } else if (ta.getFieldType()
           == EntryTemplate.FieldType.MULTI_VALUED_TEXT) {
@@ -615,7 +658,7 @@ public class EntryEditor extends VerticalLayout {
             new AttributeRow(ldapAttr, combined, 0, true);
         row.setDisplayName(displayName);
         row.setFieldType(ta.getFieldType());
-        row.setSelectValues(ta.getValues());
+        row.setSelectValues(effectiveValues);
         rows.add(row);
       } else {
         for (int i = 0; i < values.size(); i++) {
@@ -623,12 +666,67 @@ public class EntryEditor extends VerticalLayout {
               new AttributeRow(ldapAttr, values.get(i), i, i == 0);
           row.setDisplayName(displayName);
           row.setFieldType(ta.getFieldType());
-          row.setSelectValues(ta.getValues());
+          row.setSelectValues(effectiveValues);
           rows.add(row);
         }
       }
     }
     return rows;
+  }
+
+  /**
+   * Resolves a SEARCH type attribute value containing a
+   * {@code <base>/<filter>} string into a list of DNs.
+   *
+   * @param baseFilter value in the form {@code base/filter}
+   * @return list of DNs matching the search
+   */
+  private List<String> resolveSearchDnCandidates(
+      String baseFilter) {
+    List<String> results = new ArrayList<>();
+    if (baseFilter == null || baseFilter.isEmpty()
+        || serverConfig == null) {
+      return results;
+    }
+    int slashIdx = baseFilter.indexOf('/');
+    if (slashIdx < 0) {
+      return results;
+    }
+    String basePart = baseFilter.substring(0, slashIdx).trim();
+    String filterPart = baseFilter.substring(slashIdx + 1).trim();
+    if (filterPart.isEmpty()) {
+      return results;
+    }
+    try {
+      String searchBase;
+      if (basePart.isEmpty()) {
+        searchBase = serverConfig.getBaseDn();
+        if (searchBase == null || searchBase.isEmpty()) {
+          List<String> contexts =
+              ldapService.getNamingContexts(serverConfig);
+          searchBase = contexts.isEmpty()
+              ? "" : contexts.get(0);
+        }
+      } else {
+        String namedDn = serverConfig.getOtherBases() != null
+            ? serverConfig.getOtherBases().get(basePart) : null;
+        if (namedDn != null && !namedDn.isEmpty()) {
+          searchBase = namedDn;
+        } else {
+          searchBase = basePart;
+        }
+      }
+      List<LdapEntry> entries = ldapService.search(
+          serverConfig, searchBase, filterPart,
+          com.unboundid.ldap.sdk.SearchScope.SUB, "1.1");
+      for (LdapEntry entry : entries) {
+        results.add(entry.getDn());
+      }
+    } catch (Exception e) {
+      logger.debug("Error resolving search DNs: {}",
+          e.getMessage());
+    }
+    return results;
   }
 
   /**
