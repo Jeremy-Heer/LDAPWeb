@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component;
  */
 @Route(value = "access", layout = MainLayout.class)
 @PageTitle("Access | LDAP Browser")
-@RolesAllowed("ADMIN")
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class AccessView extends VerticalLayout {

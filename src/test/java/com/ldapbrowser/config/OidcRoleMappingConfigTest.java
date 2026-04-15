@@ -1,7 +1,15 @@
 package com.ldapbrowser.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import com.ldapbrowser.model.Role;
+import com.ldapbrowser.service.RoleService;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +17,9 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
@@ -17,28 +28,19 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 
 /**
  * Unit tests for {@link OidcRoleMappingConfig}.
- * Verifies that OIDC token claims are correctly mapped to
- * {@code ROLE_ADMIN} and {@code ROLE_VIEWER}.
+ * Verifies that all OIDC users receive {@code ROLE_USER} and
+ * that new users are auto-assigned to the default role.
  */
+@ExtendWith(MockitoExtension.class)
 class OidcRoleMappingConfigTest {
 
-  private static final String ROLE_CLAIM = "roles";
-  private static final String ADMIN_CLAIM_VALUE = "ldap-admin";
-  private static final String VIEWER_CLAIM_VALUE = "ldap-viewer";
-  private static final String DEFAULT_ROLE = "VIEWER";
-
-  private final OidcRoleMappingConfig config = new OidcRoleMappingConfig(
-      ROLE_CLAIM, ADMIN_CLAIM_VALUE, VIEWER_CLAIM_VALUE, DEFAULT_ROLE);
-
-  private final GrantedAuthoritiesMapper mapper = config.oidcAuthoritiesMapper();
+  @Mock
+  private RoleService roleService;
 
   // ---------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------
 
-  /**
-   * Creates an OIDC authority with the given claims map.
-   */
   private OidcUserAuthority oidcAuthority(Map<String, Object> claims) {
     OidcIdToken token = new OidcIdToken(
         "token-value",
@@ -60,127 +62,93 @@ class OidcRoleMappingConfigTest {
   // ---------------------------------------------------------------
 
   @Nested
-  @DisplayName("Flat claim mapping")
-  class FlatClaim {
+  @DisplayName("Authority mapping")
+  class AuthorityMapping {
 
     @Test
-    @DisplayName("admin claim maps to ROLE_ADMIN")
-    void adminRole() {
+    @DisplayName("all OIDC users receive ROLE_USER")
+    void grantsRoleUser() {
+      when(roleService.isUserInAnyRole("user1")).thenReturn(true);
+      OidcRoleMappingConfig config =
+          new OidcRoleMappingConfig(roleService, "Admin");
+      GrantedAuthoritiesMapper mapper =
+          config.oidcAuthoritiesMapper();
+
       OidcUserAuthority auth = oidcAuthority(Map.of(
           "sub", "user1",
-          ROLE_CLAIM, List.of(ADMIN_CLAIM_VALUE)));
+          "preferred_username", "user1"));
       Collection<? extends GrantedAuthority> result =
           mapper.mapAuthorities(Set.of(auth));
 
-      assertThat(authorityStrings(result)).contains("ROLE_ADMIN");
+      assertThat(authorityStrings(result)).contains("ROLE_USER");
     }
 
     @Test
-    @DisplayName("viewer claim maps to ROLE_VIEWER")
-    void viewerRole() {
-      OidcUserAuthority auth = oidcAuthority(Map.of(
-          "sub", "user2",
-          ROLE_CLAIM, List.of(VIEWER_CLAIM_VALUE)));
-      Collection<? extends GrantedAuthority> result =
-          mapper.mapAuthorities(Set.of(auth));
+    @DisplayName("existing authorities are preserved alongside ROLE_USER")
+    void preservesExistingAuthorities() {
+      when(roleService.isUserInAnyRole("user2")).thenReturn(true);
+      OidcRoleMappingConfig config =
+          new OidcRoleMappingConfig(roleService, "Admin");
+      GrantedAuthoritiesMapper mapper =
+          config.oidcAuthoritiesMapper();
 
-      assertThat(authorityStrings(result)).contains("ROLE_VIEWER");
-    }
-
-    @Test
-    @DisplayName("both admin and viewer claims produce both roles")
-    void bothRoles() {
-      OidcUserAuthority auth = oidcAuthority(Map.of(
-          "sub", "user3",
-          ROLE_CLAIM, List.of(ADMIN_CLAIM_VALUE, VIEWER_CLAIM_VALUE)));
-      Collection<? extends GrantedAuthority> result =
-          mapper.mapAuthorities(Set.of(auth));
-
-      assertThat(authorityStrings(result))
-          .contains("ROLE_ADMIN", "ROLE_VIEWER");
-    }
-
-    @Test
-    @DisplayName("string claim value (not list) is handled")
-    void stringClaim() {
-      OidcUserAuthority auth = oidcAuthority(Map.of(
-          "sub", "user4",
-          ROLE_CLAIM, ADMIN_CLAIM_VALUE));
-      Collection<? extends GrantedAuthority> result =
-          mapper.mapAuthorities(Set.of(auth));
-
-      assertThat(authorityStrings(result)).contains("ROLE_ADMIN");
-    }
-  }
-
-  @Nested
-  @DisplayName("Default role")
-  class DefaultRole {
-
-    @Test
-    @DisplayName("missing role claim assigns default role")
-    void noClaimUsesDefault() {
-      OidcUserAuthority auth = oidcAuthority(Map.of("sub", "user5"));
-      Collection<? extends GrantedAuthority> result =
-          mapper.mapAuthorities(Set.of(auth));
-
-      assertThat(authorityStrings(result)).contains("ROLE_VIEWER");
-    }
-
-    @Test
-    @DisplayName("unrecognised claim value assigns default role")
-    void unknownClaimUsesDefault() {
-      OidcUserAuthority auth = oidcAuthority(Map.of(
-          "sub", "user6",
-          ROLE_CLAIM, List.of("some-other-role")));
-      Collection<? extends GrantedAuthority> result =
-          mapper.mapAuthorities(Set.of(auth));
-
-      assertThat(authorityStrings(result)).contains("ROLE_VIEWER");
-    }
-  }
-
-  @Nested
-  @DisplayName("Nested claim mapping")
-  class NestedClaim {
-
-    @Test
-    @DisplayName("dot-separated claim path extracts nested roles")
-    void nestedKeycloakStyle() {
-      OidcRoleMappingConfig nestedConfig = new OidcRoleMappingConfig(
-          "realm_access.roles", ADMIN_CLAIM_VALUE,
-          VIEWER_CLAIM_VALUE, DEFAULT_ROLE);
-      GrantedAuthoritiesMapper nestedMapper =
-          nestedConfig.oidcAuthoritiesMapper();
-
-      OidcUserAuthority auth = oidcAuthority(Map.of(
-          "sub", "user7",
-          "realm_access", Map.of("roles",
-              List.of(ADMIN_CLAIM_VALUE))));
-      Collection<? extends GrantedAuthority> result =
-          nestedMapper.mapAuthorities(Set.of(auth));
-
-      assertThat(authorityStrings(result)).contains("ROLE_ADMIN");
-    }
-  }
-
-  @Nested
-  @DisplayName("Original authorities preserved")
-  class OriginalAuthorities {
-
-    @Test
-    @DisplayName("existing authorities are kept alongside mapped roles")
-    void preservesExisting() {
       SimpleGrantedAuthority existing =
           new SimpleGrantedAuthority("OIDC_USER");
       OidcUserAuthority oidc = oidcAuthority(Map.of(
-          "sub", "user8",
-          ROLE_CLAIM, List.of(ADMIN_CLAIM_VALUE)));
+          "sub", "user2",
+          "preferred_username", "user2"));
       Collection<? extends GrantedAuthority> result =
           mapper.mapAuthorities(Set.of(existing, oidc));
 
       assertThat(authorityStrings(result))
-          .contains("OIDC_USER", "ROLE_ADMIN");
+          .contains("OIDC_USER", "ROLE_USER");
+    }
+  }
+
+  @Nested
+  @DisplayName("Auto-assignment to default role")
+  class AutoAssignment {
+
+    @Test
+    @DisplayName("new user is added to default role")
+    void newUserAddedToDefaultRole() throws IOException {
+      when(roleService.isUserInAnyRole("newuser")).thenReturn(false);
+      Role admin = new Role();
+      admin.setName("Admin");
+      admin.setUserMembers(new ArrayList<>());
+      when(roleService.loadRoles()).thenReturn(List.of(admin));
+
+      OidcRoleMappingConfig config =
+          new OidcRoleMappingConfig(roleService, "Admin");
+      GrantedAuthoritiesMapper mapper =
+          config.oidcAuthoritiesMapper();
+
+      OidcUserAuthority auth = oidcAuthority(Map.of(
+          "sub", "newuser",
+          "preferred_username", "newuser"));
+      mapper.mapAuthorities(Set.of(auth));
+
+      verify(roleService).saveRole(admin);
+      assertThat(admin.getUserMembers()).contains("newuser");
+    }
+
+    @Test
+    @DisplayName("existing user is not re-assigned")
+    void existingUserNotReassigned() throws IOException {
+      when(roleService.isUserInAnyRole("existing"))
+          .thenReturn(true);
+
+      OidcRoleMappingConfig config =
+          new OidcRoleMappingConfig(roleService, "Admin");
+      GrantedAuthoritiesMapper mapper =
+          config.oidcAuthoritiesMapper();
+
+      OidcUserAuthority auth = oidcAuthority(Map.of(
+          "sub", "existing",
+          "preferred_username", "existing"));
+      mapper.mapAuthorities(Set.of(auth));
+
+      verify(roleService, never()).saveRole(any());
     }
   }
 }

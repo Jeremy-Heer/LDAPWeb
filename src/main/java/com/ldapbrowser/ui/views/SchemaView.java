@@ -26,7 +26,7 @@ import java.util.Set;
  */
 @Route(value = "schema", layout = MainLayout.class)
 @PageTitle("Schema | LDAP Browser")
-@RolesAllowed({"ADMIN", "VIEWER"})
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class SchemaView extends VerticalLayout {

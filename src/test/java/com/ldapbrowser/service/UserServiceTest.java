@@ -34,7 +34,7 @@ class UserServiceTest {
   @BeforeEach
   void setUp() {
     encoder = new BCryptPasswordEncoder();
-    service = new UserService(tempDir.toString(), encoder);
+    service = new UserService(tempDir.toString(), encoder, null);
   }
 
   // ---------------------------------------------------------------
@@ -89,7 +89,7 @@ class UserServiceTest {
       String originalHash = original.get(0).passwordHash();
 
       // Second service should load existing users, not overwrite
-      UserService second = new UserService(tempDir.toString(), encoder);
+      UserService second = new UserService(tempDir.toString(), encoder, null);
       List<UserService.UserRecord> reloaded = second.loadUsers();
       assertThat(reloaded.get(0).passwordHash()).isEqualTo(originalHash);
     }
@@ -110,7 +110,7 @@ class UserServiceTest {
       assertThat(details.getUsername()).isEqualTo("admin");
       assertThat(details.getAuthorities())
           .extracting("authority")
-          .containsExactly("ROLE_ADMIN");
+          .containsExactly("ROLE_USER");
     }
 
     @Test

@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -47,17 +48,21 @@ public class UserService implements UserDetailsService {
   private final Path usersPath;
   private final ObjectMapper objectMapper;
   private final PasswordEncoder passwordEncoder;
+  private final RoleService roleService;
 
   /**
    * Creates the user service and initialises the users file.
    *
    * @param settingsDir application settings directory
    * @param passwordEncoder BCrypt password encoder
+   * @param roleService role service (lazy to break circular dependency)
    */
   public UserService(
       @Value("${ldapbrowser.settings.dir}") String settingsDir,
-      PasswordEncoder passwordEncoder) {
+      PasswordEncoder passwordEncoder,
+      @Lazy RoleService roleService) {
     this.passwordEncoder = passwordEncoder;
+    this.roleService = roleService;
     this.usersPath = Path.of(settingsDir).resolve(USERS_FILE);
     this.objectMapper = JsonMapper.builder()
         .enable(SerializationFeature.INDENT_OUTPUT)
@@ -75,9 +80,10 @@ public class UserService implements UserDetailsService {
         .orElseThrow(() -> new UsernameNotFoundException(
             "User not found: " + username));
 
-    List<SimpleGrantedAuthority> authorities = record.roles().stream()
-        .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-        .toList();
+    // All authenticated users receive ROLE_USER.
+    // Fine-grained view and server access is controlled by RoleService.
+    List<SimpleGrantedAuthority> authorities =
+        List.of(new SimpleGrantedAuthority("ROLE_USER"));
 
     return new User(record.username(), record.passwordHash(), authorities);
   }

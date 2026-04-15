@@ -1,14 +1,17 @@
 package com.ldapbrowser.ui.views;
 
-import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.model.EntryTemplate;
+import com.ldapbrowser.model.LdapServerConfig;
+import com.ldapbrowser.model.Role;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.EncryptionService;
 import com.ldapbrowser.service.KeystoreService;
+import com.ldapbrowser.service.RoleService;
 import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.service.UserService;
 import com.ldapbrowser.ui.MainLayout;
+import com.ldapbrowser.ui.dialogs.RoleEditorDialog;
 import com.ldapbrowser.ui.dialogs.TemplateEditorDialog;
 import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
@@ -52,7 +55,7 @@ import org.springframework.stereotype.Component;
  */
 @Route(value = "settings", layout = MainLayout.class)
 @PageTitle("Settings | LDAP Browser")
-@RolesAllowed("ADMIN")
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class SettingsView extends VerticalLayout {
@@ -62,10 +65,12 @@ public class SettingsView extends VerticalLayout {
   private final EncryptionService encryptionService;
   private final ConfigurationService configurationService;
   private final TemplateService templateService;
+  private final RoleService roleService;
   private final UserService userService;
   private Grid<String> certificateGrid;
   private Grid<UserService.UserRecord> userGrid;
   private Grid<EntryTemplate> templateGrid;
+  private Grid<Role> roleGrid;
   private TabSheet tabSheet;
 
   /**
@@ -84,12 +89,14 @@ public class SettingsView extends VerticalLayout {
       EncryptionService encryptionService,
       ConfigurationService configurationService,
       TemplateService templateService,
+      RoleService roleService,
       Optional<UserService> userService) {
     this.truststoreService = truststoreService;
     this.keystoreService = keystoreService;
     this.encryptionService = encryptionService;
     this.configurationService = configurationService;
     this.templateService = templateService;
+    this.roleService = roleService;
     this.userService = userService.orElse(null);
 
     setSpacing(true);
@@ -111,6 +118,7 @@ public class SettingsView extends VerticalLayout {
     tabSheet.add("Keystore", createKeystoreTab());
     tabSheet.add("Encryption", createEncryptionTab());
     tabSheet.add("Templates", createTemplatesTab());
+    tabSheet.add("Roles", createRolesTab());
 
     add(tabSheet);
     expand(tabSheet);
@@ -829,12 +837,14 @@ public class SettingsView extends VerticalLayout {
     confirmField.setWidthFull();
     confirmField.setRequired(true);
 
-    CheckboxGroup<String> rolesGroup = new CheckboxGroup<>("Roles");
-    rolesGroup.setItems("ADMIN", "VIEWER");
-    rolesGroup.select("VIEWER");
+    Span hint = new Span(
+        "Assign roles via the Roles tab after creating the user.");
+    hint.getStyle()
+        .set("font-size", "var(--lumo-font-size-s)")
+        .set("color", "var(--lumo-secondary-text-color)");
 
     VerticalLayout content = new VerticalLayout(
-        usernameField, passwordField, confirmField, rolesGroup);
+        usernameField, passwordField, confirmField, hint);
     content.setPadding(false);
     content.setSpacing(true);
     dialog.add(content);
@@ -843,7 +853,6 @@ public class SettingsView extends VerticalLayout {
       String username = usernameField.getValue().trim();
       String password = passwordField.getValue();
       String confirm = confirmField.getValue();
-      Set<String> roles = rolesGroup.getSelectedItems();
 
       if (username.isEmpty()) {
         NotificationHelper.showError("Username is required", 3000);
@@ -858,13 +867,8 @@ public class SettingsView extends VerticalLayout {
         NotificationHelper.showError("Passwords do not match", 3000);
         return;
       }
-      if (roles.isEmpty()) {
-        NotificationHelper.showError(
-            "At least one role is required", 3000);
-        return;
-      }
       try {
-        userService.addUser(username, password, roles);
+        userService.addUser(username, password, Set.of("USER"));
         NotificationHelper.showSuccess(
             "User '" + username + "' created", 3000);
         refreshUserGrid();
@@ -1106,6 +1110,131 @@ public class SettingsView extends VerticalLayout {
             NotificationHelper.showSuccess(
                 "Template '" + sel.getName() + "' deleted");
             refreshTemplateGrid();
+          } catch (Exception ex) {
+            NotificationHelper.showError(
+                "Failed to delete: " + ex.getMessage());
+          }
+          confirm.close();
+        })
+    );
+    confirm.open();
+  }
+
+  // ---- Roles tab ----------------------------------------------------
+
+  /**
+   * Creates the Roles management tab.
+   *
+   * @return roles tab content
+   */
+  private VerticalLayout createRolesTab() {
+    VerticalLayout layout = new VerticalLayout();
+    layout.setPadding(true);
+    layout.setSpacing(true);
+    layout.setSizeFull();
+
+    Span infoText = new Span(
+        "Manage application roles. Each role defines which "
+        + "servers, users, and views are accessible.");
+    infoText.getStyle()
+        .set("color", "var(--lumo-secondary-text-color)");
+
+    // Toolbar
+    Button addBtn = new Button("Add",
+        new Icon(VaadinIcon.PLUS), e -> openRoleEditor(null));
+    addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY,
+        ButtonVariant.LUMO_SMALL);
+
+    Button editBtn = new Button("Edit",
+        new Icon(VaadinIcon.EDIT), e -> {
+          Role sel = roleGrid.asSingleSelect().getValue();
+          if (sel != null) {
+            openRoleEditor(sel);
+          }
+        });
+    editBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+    Button delBtn = new Button("Delete",
+        new Icon(VaadinIcon.TRASH), e -> deleteRole());
+    delBtn.addThemeVariants(ButtonVariant.LUMO_SMALL,
+        ButtonVariant.LUMO_ERROR);
+
+    Button refreshBtn = new Button("Refresh",
+        new Icon(VaadinIcon.REFRESH), e -> refreshRoleGrid());
+    refreshBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+    HorizontalLayout toolbar = new HorizontalLayout(
+        addBtn, editBtn, delBtn, refreshBtn);
+    toolbar.setSpacing(true);
+
+    // Grid
+    roleGrid = new Grid<>(Role.class, false);
+    roleGrid.addColumn(Role::getName)
+        .setHeader("Name").setFlexGrow(2);
+    roleGrid.addColumn(r ->
+        String.join(", ", r.getServerMembers()))
+        .setHeader("Servers").setFlexGrow(1);
+    roleGrid.addColumn(r ->
+        String.join(", ", r.getUserMembers()))
+        .setHeader("Users").setFlexGrow(1);
+    roleGrid.addColumn(r ->
+        String.join(", ", r.getAllowedViews()))
+        .setHeader("Views").setFlexGrow(1);
+    roleGrid.setSizeFull();
+
+    roleGrid.addItemDoubleClickListener(e ->
+        openRoleEditor(e.getItem()));
+
+    layout.add(infoText, toolbar, roleGrid);
+    layout.expand(roleGrid);
+
+    refreshRoleGrid();
+    return layout;
+  }
+
+  private void refreshRoleGrid() {
+    try {
+      roleGrid.setItems(roleService.loadRoles());
+    } catch (Exception e) {
+      NotificationHelper.showError(
+          "Failed to load roles: " + e.getMessage());
+    }
+  }
+
+  private void openRoleEditor(Role role) {
+    new RoleEditorDialog(
+        roleService, configurationService, userService, role)
+        .onSave(r -> refreshRoleGrid())
+        .open();
+  }
+
+  private void deleteRole() {
+    Role sel = roleGrid.asSingleSelect().getValue();
+    if (sel == null) {
+      return;
+    }
+
+    // Check if deleting would leave users without any role
+    List<String> orphaned =
+        roleService.getUsersOnlyInRole(sel.getName());
+    String message = "Delete role '" + sel.getName()
+        + "'? This cannot be undone.";
+    if (!orphaned.isEmpty()) {
+      message += "\n\nWarning: the following users will have "
+          + "no role: " + String.join(", ", orphaned);
+    }
+
+    Dialog confirm = new Dialog();
+    confirm.setHeaderTitle("Delete Role");
+    confirm.add(new Span(message));
+    confirm.getFooter().add(
+        new Button("Cancel", e -> confirm.close()),
+        new Button("Delete", e -> {
+          try {
+            roleService.deleteRole(sel.getName());
+            NotificationHelper.showSuccess(
+                "Role '" + sel.getName() + "' deleted");
+            refreshRoleGrid();
           } catch (Exception ex) {
             NotificationHelper.showError(
                 "Failed to delete: " + ex.getMessage());

@@ -38,12 +38,19 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.annotation.PreDestroy;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 
 /**
@@ -91,6 +98,8 @@ public class LdapService {
   
   private final TruststoreService truststoreService;
   private final LoggingService loggingService;
+  private final RoleService roleService;
+  private final String authMode;
   
   // Track the last trust manager used for certificate validation
   private final Map<String, TrustStoreTrustManager> trustManagers = new ConcurrentHashMap<>();
@@ -100,10 +109,16 @@ public class LdapService {
    *
    * @param truststoreService service for managing trusted certificates
    * @param loggingService service for activity logging
+   * @param roleService service for role-based access control
+   * @param authMode authentication mode (none, local, oauth)
    */
-  public LdapService(TruststoreService truststoreService, LoggingService loggingService) {
+  public LdapService(TruststoreService truststoreService, LoggingService loggingService,
+      @Lazy RoleService roleService,
+      @Value("${ldapbrowser.auth.mode:none}") String authMode) {
     this.truststoreService = truststoreService;
     this.loggingService = loggingService;
+    this.roleService = roleService;
+    this.authMode = authMode;
   }
 
   /**
@@ -365,6 +380,52 @@ public class LdapService {
   }
 
   /**
+   * Checks whether the current user has access to the given server.
+   * When auth is disabled the check is skipped.
+   *
+   * @param serverName the server name to check
+   * @throws SecurityException if the user is not allowed
+   */
+  private void checkServerAccess(String serverName) {
+    if ("none".equalsIgnoreCase(authMode)) {
+      return;
+    }
+    String username = getCurrentUsername();
+    if (username == null || username.isEmpty()) {
+      return; // no principal – allow (pre-auth requests like testConnection)
+    }
+    Set<String> allowed = roleService.getAllowedServersForUser(username);
+    if (!allowed.contains(serverName)) {
+      logger.warn("User {} denied access to server {}", username, serverName);
+      throw new SecurityException(
+          "Access denied: you do not have permission to access server '"
+              + serverName + "'");
+    }
+  }
+
+  /**
+   * Returns the current authenticated username or null.
+   */
+  private String getCurrentUsername() {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth == null || !auth.isAuthenticated()) {
+      return null;
+    }
+    Object principal = auth.getPrincipal();
+    if (principal instanceof UserDetails ud) {
+      return ud.getUsername();
+    }
+    if (principal instanceof OidcUser oidc) {
+      return oidc.getPreferredUsername() != null
+          ? oidc.getPreferredUsername() : oidc.getEmail();
+    }
+    if ("anonymousUser".equals(principal.toString())) {
+      return null;
+    }
+    return principal.toString();
+  }
+
+  /**
    * Gets or creates a connection pool for the server.
    * When a new connection pool is created, the schema is automatically fetched and cached.
    * Includes health check validation to detect and recover from stale connections.
@@ -376,6 +437,7 @@ public class LdapService {
    */
   public LDAPConnectionPool getConnectionPool(LdapServerConfig config)
       throws LDAPException, GeneralSecurityException {
+    checkServerAccess(config.getName());
     String key = config.getName();
     boolean isNewConnection = !connectionPools.containsKey(key);
 

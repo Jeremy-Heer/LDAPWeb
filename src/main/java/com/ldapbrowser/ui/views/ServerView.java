@@ -47,7 +47,7 @@ import org.springframework.stereotype.Component;
  */
 @Route(value = "", layout = MainLayout.class)
 @PageTitle("Server | LDAP Browser")
-@RolesAllowed("ADMIN")
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class ServerView extends VerticalLayout {

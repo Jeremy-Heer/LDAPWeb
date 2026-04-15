@@ -53,7 +53,7 @@ import org.slf4j.LoggerFactory;
  */
 @Route(value = "search", layout = MainLayout.class)
 @PageTitle("Search | LDAP Browser")
-@RolesAllowed({"ADMIN", "VIEWER"})
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class SearchView extends VerticalLayout implements BeforeEnterObserver {

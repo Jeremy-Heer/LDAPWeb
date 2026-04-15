@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
  */
 @Route(value = "bulk", layout = MainLayout.class)
 @PageTitle("Bulk | LDAP Browser")
-@RolesAllowed("ADMIN")
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class BulkView extends VerticalLayout implements BeforeEnterObserver {

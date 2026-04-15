@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  */
 @Route(value = "export", layout = MainLayout.class)
 @PageTitle("Export | LDAP Browser")
-@RolesAllowed({"ADMIN", "VIEWER"})
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class ExportView extends VerticalLayout {

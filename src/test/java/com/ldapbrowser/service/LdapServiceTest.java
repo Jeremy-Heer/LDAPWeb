@@ -58,11 +58,15 @@ class LdapServiceTest {
   @Mock
   private LoggingService loggingService;
 
+  @Mock
+  private RoleService roleService;
+
   private LdapService service;
 
   @BeforeEach
   void setUp() {
-    service = new LdapService(truststoreService, loggingService);
+    service = new LdapService(truststoreService, loggingService,
+        roleService, "none");
   }
 
   // -------------------------------------------------------------------------
@@ -282,7 +286,8 @@ class LdapServiceTest {
       for (ResultCode retryable : new ResultCode[]{
           ResultCode.UNAVAILABLE, ResultCode.TIMEOUT, ResultCode.DECODING_ERROR}) {
 
-        LdapService localSpy = spy(new LdapService(truststoreService, loggingService));
+        LdapService localSpy = spy(new LdapService(truststoreService, loggingService,
+            roleService, "none"));
         LDAPConnectionPool p1 = mock(LDAPConnectionPool.class);
         LDAPConnectionPool p2 = mock(LDAPConnectionPool.class);
 

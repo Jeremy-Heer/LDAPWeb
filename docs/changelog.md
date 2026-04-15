@@ -1,5 +1,20 @@
 # LDAP Web Browser
 
+## v0.79 - Role Management
+- Settings View
+  - Add "Roles" tab
+  - Create CRUD operations dialog for Roles
+  - Roles should contain:
+    - Server Members
+      - The ability to add and remove servers from the role
+    - User Members
+      - The ability to add and remove users from the role
+    - Application Views
+      - Checkboxs for each view in the drawer (Access, Browse, Bulk, Create, Schema, Search, Server, Settings)
+      - Users will only see the views that are selected for the role they are a member of.
+    - User's must be a member of at least one role
+
+
 ## v0.78 - Template Attribute "Select Search" attribute type
 - Settings View - Create / Edit Template dialog
   - Create and View / Edit Tabs

@@ -4,6 +4,7 @@ import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.ConfigurationService;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
+import com.ldapbrowser.service.RoleService;
 import com.ldapbrowser.ui.components.LogsDrawer;
 import com.ldapbrowser.ui.dialogs.HelpDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
@@ -34,6 +35,7 @@ import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.server.VaadinSession;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -54,13 +56,28 @@ import org.springframework.security.core.context.SecurityContextHolder;
  * requirements via {@code @RolesAllowed} or {@code @PermitAll}.
  */
 @com.vaadin.flow.server.auth.AnonymousAllowed
-public class MainLayout extends AppLayout {
+public class MainLayout extends AppLayout
+    implements com.vaadin.flow.router.BeforeEnterObserver {
 
   private static final Logger logger = LoggerFactory.getLogger(MainLayout.class);
   private static final String SELECTED_SERVERS_KEY = "selectedServers";
+
+  /** Maps route paths to drawer view labels for role filtering. */
+  private static final Map<String, String> ROUTE_TO_VIEW = Map.of(
+      "", "Server",
+      "search", "Search",
+      "browse", "Browse",
+      "schema", "Schema",
+      "create", "Create",
+      "access", "Access",
+      "bulk", "Bulk",
+      "export", "Export",
+      "settings", "Settings");
+
   private final ConfigurationService configService;
   private final LdapService ldapService;
   private final LoggingService loggingService;
+  private final RoleService roleService;
   private final String authMode;
   private MultiSelectComboBox<String> serverSelect;
   private HorizontalLayout selectedServersContainer;
@@ -78,11 +95,12 @@ public class MainLayout extends AppLayout {
    * @param authMode active authentication mode
    */
   public MainLayout(ConfigurationService configService, LdapService ldapService, 
-      LoggingService loggingService,
+      LoggingService loggingService, RoleService roleService,
       @Value("${ldapbrowser.auth.mode:none}") String authMode) {
     this.configService = configService;
     this.ldapService = ldapService;
     this.loggingService = loggingService;
+    this.roleService = roleService;
     this.authMode = authMode;
     
     // Set the logging service for NotificationHelper to use
@@ -320,18 +338,24 @@ public class MainLayout extends AppLayout {
     SideNavItem settingsItem = new SideNavItem("Settings", SettingsView.class, settingsIcon);
     Tooltip.forComponent(settingsItem).setText("TLS and encryption");
 
-    // Add all items to SideNav
-    sideNav.addItem(
-        serverItem,
-        searchItem,
-        browseItem,
-        schemaItem,
-        createItem,
-        accessItem,
-        bulkItem,
-        exportItem,
-        settingsItem
-    );
+    // Build label-to-item map for role filtering
+    Map<String, SideNavItem> viewItems = new java.util.LinkedHashMap<>();
+    viewItems.put("Server", serverItem);
+    viewItems.put("Search", searchItem);
+    viewItems.put("Browse", browseItem);
+    viewItems.put("Schema", schemaItem);
+    viewItems.put("Create", createItem);
+    viewItems.put("Access", accessItem);
+    viewItems.put("Bulk", bulkItem);
+    viewItems.put("Export", exportItem);
+    viewItems.put("Settings", settingsItem);
+
+    Set<String> allowedViews = getAllowedViews();
+    for (Map.Entry<String, SideNavItem> entry : viewItems.entrySet()) {
+      if (allowedViews.contains(entry.getKey())) {
+        sideNav.addItem(entry.getValue());
+      }
+    }
 
     addToDrawer(sideNav);
   }
@@ -343,13 +367,19 @@ public class MainLayout extends AppLayout {
     List<LdapServerConfig> configs = configService.loadConfigurations();
     List<String> serverNames = configs.stream().map(LdapServerConfig::getName).toList();
     
+    // Filter by role when auth is enabled
+    Set<String> allowedServers = getAllowedServers();
+    List<String> filteredNames = serverNames.stream()
+        .filter(allowedServers::contains)
+        .toList();
+    
     // Store mapping for tooltips and details
     serverConfigMap.clear();
     for (LdapServerConfig config : configs) {
       serverConfigMap.put(config.getName(), config);
     }
     
-    serverSelect.setItems(serverNames);
+    serverSelect.setItems(filteredNames);
     
     // Set renderer to show server details in dropdown
     serverSelect.setRenderer(new ComponentRenderer<>(serverName -> {
@@ -375,7 +405,7 @@ public class MainLayout extends AppLayout {
       return container;
     }));
 
-    if (serverNames.isEmpty()) {
+    if (filteredNames.isEmpty()) {
       serverSelect.setEnabled(false);
     } else {
       serverSelect.setEnabled(true);
@@ -385,7 +415,7 @@ public class MainLayout extends AppLayout {
           .getAttribute(getSelectedServersKey());
       if (previousSelection != null) {
         serverSelect.select(previousSelection.stream()
-            .filter(serverNames::contains)
+            .filter(filteredNames::contains)
             .toArray(String[]::new));
       }
     }
@@ -501,6 +531,79 @@ public class MainLayout extends AppLayout {
     } else {
       logsButton.getElement().removeAttribute("badge");
       logsButton.getElement().getThemeList().remove("badge");
+    }
+  }
+
+  /**
+   * Returns the current authenticated username, or empty string if
+   * auth is disabled.
+   */
+  private String getCurrentUsername() {
+    if ("none".equalsIgnoreCase(authMode)) {
+      return "";
+    }
+    Object principal = org.springframework.security.core.context
+        .SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+    if (principal instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+      return ud.getUsername();
+    }
+    if (principal instanceof org.springframework.security.oauth2.core.oidc.user
+        .OidcUser oidc) {
+      return oidc.getPreferredUsername() != null
+          ? oidc.getPreferredUsername() : oidc.getEmail();
+    }
+    return principal.toString();
+  }
+
+  /**
+   * Returns the set of view labels the current user may access.
+   * When auth is disabled every view is allowed.
+   */
+  private Set<String> getAllowedViews() {
+    if ("none".equalsIgnoreCase(authMode)) {
+      return new HashSet<>(com.ldapbrowser.model.Role.ALL_VIEWS);
+    }
+    return roleService.getAllowedViewsForUser(getCurrentUsername());
+  }
+
+  /**
+   * Returns the set of server names the current user may access.
+   * When auth is disabled every server is allowed.
+   */
+  private Set<String> getAllowedServers() {
+    if ("none".equalsIgnoreCase(authMode)) {
+      List<LdapServerConfig> configs = configService.loadConfigurations();
+      Set<String> all = new HashSet<>();
+      for (LdapServerConfig c : configs) {
+        all.add(c.getName());
+      }
+      return all;
+    }
+    return roleService.getAllowedServersForUser(getCurrentUsername());
+  }
+
+  @Override
+  public void beforeEnter(
+      com.vaadin.flow.router.BeforeEnterEvent event) {
+    if ("none".equalsIgnoreCase(authMode)) {
+      return;
+    }
+    String path = event.getLocation().getPath();
+    String viewLabel = ROUTE_TO_VIEW.get(path);
+    if (viewLabel == null) {
+      return; // unknown route – let Vaadin handle it
+    }
+    Set<String> allowed = getAllowedViews();
+    if (!allowed.contains(viewLabel)) {
+      // Redirect to the first allowed view
+      String fallback = allowed.stream()
+          .map(v -> ROUTE_TO_VIEW.entrySet().stream()
+              .filter(e -> e.getValue().equals(v))
+              .map(Map.Entry::getKey)
+              .findFirst().orElse(null))
+          .filter(java.util.Objects::nonNull)
+          .findFirst().orElse("");
+      event.forwardTo(fallback);
     }
   }
 }

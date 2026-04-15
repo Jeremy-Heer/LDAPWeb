@@ -41,7 +41,7 @@ import org.springframework.stereotype.Component;
  */
 @Route(value = "browse", layout = MainLayout.class)
 @PageTitle("Browse | LDAP Browser")
-@RolesAllowed({"ADMIN", "VIEWER"})
+@RolesAllowed("USER")
 @UIScope
 @Component
 public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
