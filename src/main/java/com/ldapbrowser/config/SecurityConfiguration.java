@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 
 /**
  * Security configuration supporting three authentication modes.
@@ -88,7 +89,7 @@ public class SecurityConfiguration {
     http.with(VaadinSecurityConfigurer.vaadin(),
         vaadin -> vaadin.loginView(LoginView.class));
     http.logout(logout -> logout
-        .logoutUrl("/logout")
+        .logoutRequestMatcher(PathPatternRequestMatcher.pathPattern("/logout"))
         .logoutSuccessUrl("/login"));
   }
 
@@ -112,7 +113,7 @@ public class SecurityConfiguration {
     http.oauth2Login(oauth -> oauth
         .defaultSuccessUrl("/browse", true));
     http.logout(logout -> logout
-        .logoutUrl("/logout")
+        .logoutRequestMatcher(PathPatternRequestMatcher.pathPattern("/logout"))
         .logoutSuccessUrl("/login"));
   }
 

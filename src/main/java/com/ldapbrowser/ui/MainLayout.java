@@ -596,14 +596,20 @@ public class MainLayout extends AppLayout
     Set<String> allowed = getAllowedViews();
     if (!allowed.contains(viewLabel)) {
       // Redirect to the first allowed view
-      String fallback = allowed.stream()
+      java.util.Optional<String> fallback = allowed.stream()
           .map(v -> ROUTE_TO_VIEW.entrySet().stream()
               .filter(e -> e.getValue().equals(v))
               .map(Map.Entry::getKey)
               .findFirst().orElse(null))
           .filter(java.util.Objects::nonNull)
-          .findFirst().orElse("");
-      event.forwardTo(fallback);
+          .findFirst();
+      if (fallback.isPresent()) {
+        event.forwardTo(fallback.get());
+      } else {
+        // User has no allowed views – redirect to logout to avoid
+        // an infinite forwarding loop back to the same denied route.
+        event.getUI().getPage().setLocation("/logout");
+      }
     }
   }
 }

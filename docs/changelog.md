@@ -1,5 +1,8 @@
 # LDAP Web Browser
 
+## v0.80 - Role Management - logout bug
+- Unable to use the logout link "You don't have the user rights to view this page"
+
 ## v0.79 - Role Management
 - Settings View
   - Add "Roles" tab
