@@ -112,6 +112,7 @@ public class EntryTemplate implements Serializable {
     private boolean required;
     private FieldType fieldType = FieldType.TEXT;
     private boolean hidden;
+    private boolean naming;
     private List<String> values = new ArrayList<>();
 
     /**
@@ -170,6 +171,14 @@ public class EntryTemplate implements Serializable {
 
     public void setHidden(boolean hidden) {
       this.hidden = hidden;
+    }
+
+    public boolean isNaming() {
+      return naming;
+    }
+
+    public void setNaming(boolean naming) {
+      this.naming = naming;
     }
 
     public List<String> getValues() {

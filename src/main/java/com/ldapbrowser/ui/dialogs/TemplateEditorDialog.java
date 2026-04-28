@@ -43,7 +43,6 @@ public class TemplateEditorDialog extends Dialog {
 
   // Create section
   private Checkbox createEnabled;
-  private TextField rdnField;
   private TextField parentFilterField;
   private TextField createBaseDnField;
   private Grid<TemplateAttribute> createAttributeGrid;
@@ -148,11 +147,6 @@ public class TemplateEditorDialog extends Dialog {
     createEnabled = new Checkbox("Enable Create section");
     createEnabled.setValue(false);
 
-    rdnField = new TextField("RDN Pattern");
-    rdnField.setPlaceholder("uid={UID}");
-    rdnField.setHelperText(
-        "Use {FIELD} placeholders matching attribute names");
-
     parentFilterField = new TextField("Parent Filter");
     parentFilterField.setPlaceholder(
         "(&(objectClass=organizationalUnit)(ou=people))");
@@ -169,25 +163,22 @@ public class TemplateEditorDialog extends Dialog {
     rdnParentRow.setDefaultVerticalComponentAlignment(
         com.vaadin.flow.component.orderedlayout.FlexComponent
             .Alignment.BASELINE);
-    rdnParentRow.add(rdnField, parentFilterField, createBaseDnField);
-    rdnParentRow.setFlexGrow(1, rdnField);
+    rdnParentRow.add(parentFilterField, createBaseDnField);
     rdnParentRow.setFlexGrow(2, parentFilterField);
     rdnParentRow.setFlexGrow(1, createBaseDnField);
 
-    createAttributeGrid = buildAttributeGrid(createAttributes, true);
+    createAttributeGrid = buildAttributeGrid(createAttributes, true, true);
 
     HorizontalLayout gridButtons = buildGridButtons(
         createAttributes, createAttributeGrid);
 
     createEnabled.addValueChangeListener(e -> {
       boolean enabled = Boolean.TRUE.equals(e.getValue());
-      rdnField.setEnabled(enabled);
       parentFilterField.setEnabled(enabled);
       createBaseDnField.setEnabled(enabled);
       createAttributeGrid.setEnabled(enabled);
     });
     // Start disabled
-    rdnField.setEnabled(false);
     parentFilterField.setEnabled(false);
     createBaseDnField.setEnabled(false);
     createAttributeGrid.setEnabled(false);
@@ -217,7 +208,7 @@ public class TemplateEditorDialog extends Dialog {
         "LDAP filter to match entries for this template");
 
     viewEditAttributeGrid =
-        buildAttributeGrid(viewEditAttributes, true);
+        buildAttributeGrid(viewEditAttributes, true, false);
 
     HorizontalLayout gridButtons = buildGridButtons(
         viewEditAttributes, viewEditAttributeGrid);
@@ -299,7 +290,8 @@ public class TemplateEditorDialog extends Dialog {
   // ----- Shared attribute grid builder ---------------------------------
 
   private Grid<TemplateAttribute> buildAttributeGrid(
-      List<TemplateAttribute> dataList, boolean showHidden) {
+      List<TemplateAttribute> dataList, boolean showHidden,
+      boolean showNaming) {
     Grid<TemplateAttribute> grid =
         new Grid<>(TemplateAttribute.class, false);
     grid.setSizeFull();
@@ -362,6 +354,16 @@ public class TemplateEditorDialog extends Dialog {
             attr.setHidden(Boolean.TRUE.equals(e.getValue())));
         return cb;
       })).setHeader("Hidden").setFlexGrow(0).setWidth("70px");
+    }
+
+    if (showNaming) {
+      grid.addColumn(new ComponentRenderer<>(attr -> {
+        Checkbox cb = new Checkbox();
+        cb.setValue(attr.isNaming());
+        cb.addValueChangeListener(e ->
+            attr.setNaming(Boolean.TRUE.equals(e.getValue())));
+        return cb;
+      })).setHeader("Naming").setFlexGrow(0).setWidth("70px");
     }
 
     grid.addColumn(new ComponentRenderer<>(attr -> {
@@ -428,8 +430,6 @@ public class TemplateEditorDialog extends Dialog {
     if (template.getCreateSection() != null) {
       createEnabled.setValue(true);
       CreateTemplateSection cs = template.getCreateSection();
-      rdnField.setValue(
-          cs.getRdn() != null ? cs.getRdn() : "");
       parentFilterField.setValue(
           cs.getParentFilter() != null ? cs.getParentFilter() : "");
       createBaseDnField.setValue(
@@ -480,6 +480,7 @@ public class TemplateEditorDialog extends Dialog {
       c.setRequired(a.isRequired());
       c.setFieldType(a.getFieldType());
       c.setHidden(a.isHidden());
+      c.setNaming(a.isNaming());
       c.setValues(new ArrayList<>(a.getValues()));
       copy.add(c);
     }
@@ -509,7 +510,6 @@ public class TemplateEditorDialog extends Dialog {
     // Create section
     if (Boolean.TRUE.equals(createEnabled.getValue())) {
       CreateTemplateSection cs = new CreateTemplateSection();
-      cs.setRdn(rdnField.getValue());
       cs.setParentFilter(parentFilterField.getValue());
       cs.setBaseDn(createBaseDnField.getValue());
       cs.setAttributes(new ArrayList<>(createAttributes));

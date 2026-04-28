@@ -1,5 +1,20 @@
 # LDAP Web Browser
 
+## v0.82 - Create Enhancements
+- Create View
+  - Remove the "Relative Distinguished Name (RDN)" field and the "," to the left of the "Parent DN" field
+  - In the Attributes Grid, add a "Naming" checkbox
+    - At least one attribute must be selected for naming
+    - When selected, compute the "Distinguised Name (DN)" field using the value
+      - as an example, if this row:
+        "Attribute Name" = "uid", "Attribute Value" = "joe", "Naming" = checked
+        build the Distinguised name "uid=joe,..." and include the Parent DN field.
+    - Support multiple naming attributes as allowed by LDAP
+- Settings View - Create Template
+  - Remove the "RDN Pattern" field
+  - Add a "Naming" row in the attributes grid.
+  - Align the new Naming template value to the new Create View Naming feature described above
+
 ## v0.81 - Search Enhancements
 - Search view
   - when selecting "LDAP" template, there are two "SEARCH" buttons. Remove one.

@@ -56,7 +56,6 @@ public class CreateView extends VerticalLayout {
   private final TemplateService templateService;
 
   // UI Components
-  private TextField rdnField;
   private TextField parentDnField;
   private Button parentDnBrowseButton;
   private ComboBox<String> parentDnCombo;
@@ -103,13 +102,6 @@ public class CreateView extends VerticalLayout {
   }
 
   private void initializeComponents() {
-    // RDN field
-    rdnField = new TextField("Relative Distinguished Name (RDN)");
-    rdnField.setPlaceholder("cn=");
-    rdnField.setRequired(true);
-    rdnField.setRequiredIndicatorVisible(true);
-    rdnField.addValueChangeListener(e -> updateComputedDn());
-
     // Parent DN field
     parentDnField = new TextField("Parent DN");
     parentDnField.setPlaceholder("ou=people,dc=example,dc=com");
@@ -126,7 +118,8 @@ public class CreateView extends VerticalLayout {
     // DN field (computed/read-only)
     dnField = new TextField("Distinguished Name (DN)");
     dnField.setWidthFull();
-    dnField.setPlaceholder("Will be computed from RDN and Parent DN");
+    dnField.setPlaceholder(
+        "Will be computed from naming attributes and Parent DN");
     dnField.setReadOnly(true);
 
     // Template dropdown
@@ -163,6 +156,11 @@ public class CreateView extends VerticalLayout {
     attributeGrid.addColumn(new ComponentRenderer<>(this::createAttributeValueField))
         .setHeader("Attribute Value")
         .setFlexGrow(2);
+
+    attributeGrid.addColumn(new ComponentRenderer<>(this::createNamingCheckbox))
+        .setHeader("Naming")
+        .setFlexGrow(0)
+        .setWidth("80px");
 
     attributeGrid.addColumn(new ComponentRenderer<>(this::createActionButtons))
         .setHeader("Actions")
@@ -216,33 +214,16 @@ public class CreateView extends VerticalLayout {
     templateComboBox.setWidth("200px");
     templateComboBox.setClearButtonVisible(true);
 
-    // RDN field
-    rdnField.setWidth("300px");
-    
-    // Comma separator
-    Span commaSeparator = new Span(",");
-    commaSeparator.getStyle()
-        .set("font-size", "var(--lumo-font-size-xl)")
-        .set("font-weight", "bold")
-        .set("padding", "0 var(--lumo-space-s)")
-        .set("align-self", "flex-end")
-        .set("padding-bottom", "var(--lumo-space-s)");
-    
     // Parent DN field with browse button
     HorizontalLayout parentDnLayout = new HorizontalLayout();
     parentDnLayout.setSpacing(false);
     parentDnLayout.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
     parentDnLayout.setFlexGrow(1, parentDnField);
     parentDnLayout.add(parentDnField, parentDnBrowseButton);
-    
-    // Spacer between template dropdown and RDN
-    Span templateSpacer = new Span();
-    templateSpacer.getStyle()
-        .set("min-width", "var(--lumo-space-l)");
 
+    templateComboBox.getStyle().set("margin-right", "var(--lumo-space-m)");
     dnCompositionLayout.add(templateComboBox,
-        templateSpacer,
-        rdnField, commaSeparator, parentDnLayout,
+        parentDnLayout,
         parentDnCombo);
     dnCompositionLayout.setFlexGrow(1, parentDnLayout);
     dnCompositionLayout.setFlexGrow(1, parentDnCombo);
@@ -270,10 +251,24 @@ public class CreateView extends VerticalLayout {
       nameField.setValue(
           row.getAttributeName() != null
               ? row.getAttributeName() : "");
-      nameField.addValueChangeListener(
-          e -> row.setAttributeName(e.getValue()));
+      nameField.addValueChangeListener(e -> {
+        row.setAttributeName(e.getValue());
+        updateComputedDn();
+      });
     }
     return nameField;
+  }
+
+  private com.vaadin.flow.component.checkbox.Checkbox createNamingCheckbox(
+      AttributeRow row) {
+    com.vaadin.flow.component.checkbox.Checkbox cb =
+        new com.vaadin.flow.component.checkbox.Checkbox();
+    cb.setValue(row.isNaming());
+    cb.addValueChangeListener(e -> {
+      row.setNaming(Boolean.TRUE.equals(e.getValue()));
+      updateComputedDn();
+    });
+    return cb;
   }
 
   private com.vaadin.flow.component.Component createAttributeValueField(
@@ -288,9 +283,13 @@ public class CreateView extends VerticalLayout {
         @SuppressWarnings("unchecked")
         com.vaadin.flow.component.HasValue<?, String> typedHv =
             (com.vaadin.flow.component.HasValue<?, String>) hv;
-        typedHv.addValueChangeListener(
-            e -> row.setAttributeValue(
-                e.getValue() != null ? e.getValue().toString() : ""));
+        typedHv.addValueChangeListener(e -> {
+          row.setAttributeValue(
+              e.getValue() != null ? e.getValue().toString() : "");
+          if (row.isNaming()) {
+            updateComputedDn();
+          }
+        });
       }
       return field;
     }
@@ -304,8 +303,12 @@ public class CreateView extends VerticalLayout {
     valueField.setValue(
         row.getAttributeValue() != null
             ? row.getAttributeValue() : "");
-    valueField.addValueChangeListener(
-        e -> row.setAttributeValue(e.getValue()));
+    valueField.addValueChangeListener(e -> {
+      row.setAttributeValue(e.getValue());
+      if (row.isNaming()) {
+        updateComputedDn();
+      }
+    });
     return valueField;
   }
 
@@ -364,6 +367,14 @@ public class CreateView extends VerticalLayout {
 
     if (serverConfig == null) {
       NotificationHelper.showError("Selected server configuration not found");
+      return;
+    }
+
+    boolean hasNamingRow = attributeRows.stream()
+        .anyMatch(AttributeRow::isNaming);
+    if (!hasNamingRow) {
+      NotificationHelper.showError(
+          "At least one attribute must be selected for naming");
       return;
     }
 
@@ -493,17 +504,6 @@ public class CreateView extends VerticalLayout {
 
     CreateTemplateSection cs = tmpl.getCreateSection();
 
-    // Apply RDN pattern
-    if (cs.getRdn() != null && !cs.getRdn().isEmpty()) {
-      int braceIndex = cs.getRdn().indexOf('{');
-      if (braceIndex > 0) {
-        rdnField.setValue(cs.getRdn().substring(0, braceIndex));
-      } else {
-        rdnField.setValue(cs.getRdn());
-      }
-      rdnField.setPlaceholder(cs.getRdn());
-    }
-
     // Apply parent filter
     if (cs.getParentFilter() != null
         && !cs.getParentFilter().isEmpty()) {
@@ -529,7 +529,7 @@ public class CreateView extends VerticalLayout {
         addTemplateAttributeWithType(
             attr.getLdapAttributeName(), firstVal,
             attr.getFieldType(), values,
-            attr.getDisplayName());
+            attr.getDisplayName(), attr.isNaming());
       } else if (attr.getFieldType() == FieldType.SEARCH) {
         // SEARCH: resolve base/filter to list of DNs
         // Rejoin values in case commas in DN caused incorrect split
@@ -539,7 +539,7 @@ public class CreateView extends VerticalLayout {
         addTemplateAttributeWithType(
             attr.getLdapAttributeName(), "",
             attr.getFieldType(), dnResults,
-            attr.getDisplayName());
+            attr.getDisplayName(), attr.isNaming());
       } else if (attr.getFieldType() == FieldType.TEXT
           || attr.getFieldType() == null) {
         // TEXT type: use joined values as a single placeholder
@@ -547,12 +547,12 @@ public class CreateView extends VerticalLayout {
         addTemplateAttributeWithType(
             attr.getLdapAttributeName(), joined,
             attr.getFieldType(), values,
-            attr.getDisplayName());
+            attr.getDisplayName(), attr.isNaming());
       } else {
         addTemplateAttributeWithType(
             attr.getLdapAttributeName(), firstVal,
             attr.getFieldType(), values,
-            attr.getDisplayName());
+            attr.getDisplayName(), attr.isNaming());
         // Extra rows for multi-valued attrs
         for (int i = 1; i < values.size(); i++) {
           AttributeRow extraRow =
@@ -753,7 +753,7 @@ public class CreateView extends VerticalLayout {
 
   private void addTemplateAttributeWithType(String name, String value,
       FieldType fieldType, List<String> selectValues,
-      String displayName) {
+      String displayName, boolean naming) {
     boolean exists = attributeRows.stream()
         .anyMatch(row -> name.equals(row.getAttributeName()));
     if (!exists) {
@@ -761,23 +761,39 @@ public class CreateView extends VerticalLayout {
       row.setFieldType(fieldType);
       row.setSelectValues(selectValues);
       row.setDisplayName(displayName);
+      row.setNaming(naming);
       attributeRows.add(row);
     }
   }
 
   /**
-   * Updates the computed DN field based on RDN and Parent DN.
+   * Updates the computed DN field based on naming attributes and Parent DN.
    */
   private void updateComputedDn() {
-    String rdn = rdnField.getValue();
     String parentDn = parentDnField.getValue();
-    
-    if (rdn != null && !rdn.trim().isEmpty() && parentDn != null && !parentDn.trim().isEmpty()) {
-      dnField.setValue(rdn.trim() + "," + parentDn.trim());
-    } else if (rdn != null && !rdn.trim().isEmpty()) {
-      dnField.setValue(rdn.trim());
+
+    List<String> namingParts = attributeRows.stream()
+        .filter(row -> row.isNaming()
+            && row.getAttributeName() != null
+            && !row.getAttributeName().trim().isEmpty()
+            && row.getAttributeValue() != null
+            && !row.getAttributeValue().trim().isEmpty())
+        .map(row -> row.getAttributeName().trim()
+            + "=" + row.getAttributeValue().trim())
+        .collect(java.util.stream.Collectors.toList());
+
+    if (namingParts.isEmpty()) {
+      dnField.setValue(
+          parentDn != null && !parentDn.trim().isEmpty()
+              ? parentDn.trim() : "");
+      return;
+    }
+
+    String rdn = String.join("+", namingParts);
+    if (parentDn != null && !parentDn.trim().isEmpty()) {
+      dnField.setValue(rdn + "," + parentDn.trim());
     } else {
-      dnField.setValue("");
+      dnField.setValue(rdn);
     }
   }
 
@@ -825,7 +841,6 @@ public class CreateView extends VerticalLayout {
   }
 
   private void clearAll() {
-    rdnField.clear();
     parentDnField.clear();
     parentDnCombo.clear();
     showManualParentDn(true);
@@ -845,6 +860,7 @@ public class CreateView extends VerticalLayout {
     private String displayName;
     private FieldType fieldType;
     private List<String> selectValues;
+    private boolean naming;
 
     public AttributeRow() {
     }
@@ -892,6 +908,14 @@ public class CreateView extends VerticalLayout {
 
     public void setSelectValues(List<String> selectValues) {
       this.selectValues = selectValues;
+    }
+
+    public boolean isNaming() {
+      return naming;
+    }
+
+    public void setNaming(boolean naming) {
+      this.naming = naming;
     }
   }
 }

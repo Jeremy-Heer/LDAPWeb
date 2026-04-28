@@ -167,21 +167,101 @@ The Export view enables you to export LDAP data in various formats.
 
 ## Settings
 
-The Settings view provides application configuration and security management options.
+The Settings view provides application configuration, security management, and template
+customization. It is organized into tabs — which tabs appear depends on your authentication mode.
 
-### Features:
-- Manage application preferences
-- Configure truststore for SSL/TLS connections
-- Import and manage SSL certificates
-- View certificate details
-- Delete certificates from truststore
-- Future: Keystore management for client certificates
-- Future: Encryption settings for sensitive data
+### Users Tab
 
-### How to Use:
-- Navigate to the Settings view from the drawer
-- 'General': Configure application-wide preferences
-- 'Truststore': Manage trusted server certificates for SSL/TLS
-- Upload .crt or .pem certificate files to trust new servers
-- View certificate details by selecting entries in the grid
+Only shown when local-auth mode is active. Manage local user accounts:
+
+- Add, edit, and delete user accounts
+- Set and reset passwords
+- Assign roles to control which views each user can access
+
+### Truststore Tab
+
+Manage the trusted certificate store used for TLS connections to LDAP servers:
+
+- View all currently trusted certificates with subject, issuer, and expiry date
+- Upload `.crt` or `.pem` certificate files to add a new trusted certificate
+- Paste PEM text directly instead of uploading a file
 - Delete certificates that are no longer needed
+
+If a server uses a self-signed or private CA certificate, import that certificate here before
+connecting so the TLS handshake succeeds.
+
+### Keystore Tab
+
+Manage the application's internal encryption keystore. The keystore holds the symmetric key
+used to encrypt saved LDAP passwords at rest. You can rotate the key here, which re-encrypts
+all stored passwords automatically.
+
+### Encryption Tab
+
+Configure whether passwords stored in server configurations are encrypted. When enabled,
+passwords are encrypted using the key in the keystore before being written to disk.
+
+### Templates Tab
+
+**Templates** are the most powerful customization feature in LDAP Browser. A template defines
+how a particular type of LDAP entry behaves in the Create, View/Edit, and Search views. Each
+template can have up to three sections — enable only the sections you need.
+
+#### Managing Templates
+
+- **Add** — create a new template from scratch
+- **Edit** / double-click a row — open the template editor
+- **Duplicate** — copy an existing template as a starting point
+- **Delete** — permanently remove a template
+- **Refresh** — reload templates from disk
+
+The template grid shows at a glance which sections (Create, View/Edit, Search) are configured
+for each template.
+
+#### Template Editor — Create Section
+
+When enabled, this section customizes the **Create Entry** view for this type of entry.
+
+- **Parent Filter** — an LDAP filter used to populate the parent DN drop-down (e.g.
+  `(&(objectClass=organizationalUnit)(ou=people))`). Only matching entries are offered as
+  parent DN choices.
+- **Base DN** — limits the parent-DN search to a specific subtree. Use `Default` to search
+  from the server's default base, or enter a named base defined in the server config.
+- **Attribute rows** — define the fields shown in the Create view. Each row has:
+  - *Display Name* — a friendly label shown in the UI
+  - *LDAP Attribute* — the actual LDAP attribute name written to the directory
+  - *Req* — marks the attribute as required; the form will not submit without a value
+  - *Type* — field type: Text, Password, Multi-value, or TextArea
+  - *Hidden* — pre-populated attributes that are sent to the directory but not shown to the user
+  - **Naming** — when checked, this attribute's value is used to build the RDN of the new
+    entry (e.g. checking the `uid` row means the DN is formed as `uid=<value>,<parent DN>`).
+    You can check multiple attributes to create a multi-valued RDN joined with `+`.
+
+#### Template Editor — View/Edit Section
+
+When enabled, this section customizes the attribute panel when you open an existing entry in
+Browse or Search results.
+
+- **Matching Filter** — an LDAP filter (e.g. `(objectClass=inetOrgPerson)`) that determines
+  when this template is automatically applied to an entry. The first matching template is used.
+- **Attribute rows** — same columns as Create (Display Name, LDAP Attribute, Req, Type, Hidden)
+  but without the Naming column.
+
+#### Template Editor — Search Section
+
+When enabled, this section adds the template as a quick-search option in the Search view.
+
+- **Search Filter** — the base LDAP filter; use `{SEARCH}` as the placeholder for the user's
+  search text (e.g. `(&(objectClass=inetOrgPerson)(uid={SEARCH}))`).
+- **Base Filter** — an LDAP filter to find the base DN candidates for the search.
+- **Base DN** — starting point for the search; `Default` or a named base from server config.
+- **Scope** — `base`, `one`, or `sub` (subtree).
+- **Return Attributes** — comma-separated list of attributes to fetch (e.g. `cn,uid,mail`).
+
+### Roles Tab
+
+Define roles to control which views and servers each user can access. Roles are assigned to
+users in the Users tab. Each role specifies:
+
+- Which navigation views are accessible (Browse, Search, Create, Schema, etc.)
+- Which LDAP server configurations the role is allowed to connect to
