@@ -1,5 +1,10 @@
 # LDAP Web Browser
 
+## v0.81 - Search Enhancements
+- Search view
+  - when selecting "LDAP" template, there are two "SEARCH" buttons. Remove one.
+  - when selecting "LDAP" template, also include size and time limit fields. Add these in line with existing components
+
 ## v0.80 - Role Management - logout bug
 - Unable to use the logout link "You don't have the user rights to view this page"
 

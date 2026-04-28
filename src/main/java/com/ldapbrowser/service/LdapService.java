@@ -814,6 +814,73 @@ public class LdapService {
   }
 
   /**
+   * Searches for LDAP entries with specified attributes, size limit, and time limit.
+   *
+   * @param config server configuration
+   * @param baseDn base DN for search
+   * @param filter LDAP filter
+   * @param scope search scope
+   * @param sizeLimit maximum entries to return (0 for no limit)
+   * @param timeLimitSeconds maximum seconds for search (0 for no limit)
+   * @param attributes specific attributes to return (null for all user attributes)
+   * @return list of LDAP entries
+   * @throws LDAPException if search fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  public List<LdapEntry> search(
+      LdapServerConfig config,
+      String baseDn,
+      String filter,
+      SearchScope scope,
+      int sizeLimit,
+      int timeLimitSeconds,
+      String... attributes
+  ) throws LDAPException, GeneralSecurityException {
+    return executeWithRetry(config, pool -> {
+      SearchRequest searchRequest;
+      if (attributes != null && attributes.length > 0) {
+        searchRequest = new SearchRequest(baseDn, scope, filter, attributes);
+      } else {
+        searchRequest = new SearchRequest(baseDn, scope, filter);
+      }
+      if (sizeLimit > 0) {
+        searchRequest.setSizeLimit(sizeLimit);
+      }
+      if (timeLimitSeconds > 0) {
+        searchRequest.setTimeLimitSeconds(timeLimitSeconds);
+      }
+      SearchResult searchResult;
+      try {
+        searchResult = pool.search(searchRequest);
+      } catch (LDAPSearchException e) {
+        if (e.getResultCode() == ResultCode.SIZE_LIMIT_EXCEEDED
+            || e.getResultCode() == ResultCode.TIME_LIMIT_EXCEEDED) {
+          searchResult = e.getSearchResult();
+          if (searchResult == null) {
+            return new ArrayList<>();
+          }
+        } else {
+          throw e;
+        }
+      }
+
+      List<LdapEntry> entries = new ArrayList<>();
+      for (SearchResultEntry entry : searchResult.getSearchEntries()) {
+        LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
+        for (Attribute attr : entry.getAttributes()) {
+          for (String value : attr.getValues()) {
+            ldapEntry.addAttribute(attr.getName(), value);
+          }
+        }
+        entries.add(ldapEntry);
+      }
+
+      logger.info("Search on {} returned {} entries", config.getName(), entries.size());
+      return entries;
+    });
+  }
+
+  /**
    * Reads an LDAP entry with all attributes.
    * Uses automatic retry logic to recover from stale connections.
    *

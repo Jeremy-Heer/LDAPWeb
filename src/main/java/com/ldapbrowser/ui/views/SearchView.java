@@ -28,6 +28,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
+import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -76,6 +77,9 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
   private EntryEditor entryEditor;
   private ComboBox<String> searchTemplateCombo;
   private TextField templateSearchField;
+  private Button templateSearchButton;
+  private IntegerField sizeLimitField;
+  private IntegerField timeLimitField;
   private List<EntryTemplate> searchTemplates = new ArrayList<>();
   private List<LdapEntry> currentResults;
   private Map<String, TextField> columnFilters;
@@ -277,12 +281,26 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     filterWithButton.setPadding(false);
     filterWithButton.setSpacing(false);
 
+    sizeLimitField = new IntegerField("Size Limit");
+    sizeLimitField.setMin(0);
+    sizeLimitField.setValue(0);
+    sizeLimitField.setWidth("110px");
+    sizeLimitField.setTooltipText("Maximum entries to return (0 = no limit)");
+
+    timeLimitField = new IntegerField("Time Limit");
+    timeLimitField.setMin(0);
+    timeLimitField.setValue(0);
+    timeLimitField.setWidth("110px");
+    timeLimitField.setTooltipText("Search time limit in seconds (0 = no limit)");
+
     compactSearchRow.add(searchBaseWithRadio, filterWithButton,
-        scopeSelect, returnAttributesField);
+        scopeSelect, returnAttributesField, sizeLimitField, timeLimitField);
     compactSearchRow.setFlexGrow(2, searchBaseWithRadio);
     compactSearchRow.setFlexGrow(2, filterWithButton);
     compactSearchRow.setFlexGrow(0, scopeSelect);
     compactSearchRow.setFlexGrow(1, returnAttributesField);
+    compactSearchRow.setFlexGrow(0, sizeLimitField);
+    compactSearchRow.setFlexGrow(0, timeLimitField);
 
     // Template search row
     HorizontalLayout templateRow = new HorizontalLayout();
@@ -299,6 +317,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
           && !"LDAP".equals(e.getValue());
       templateSearchField.setVisible(isTemplate);
       compactSearchRow.setVisible(!isTemplate);
+      templateSearchButton.setVisible(isTemplate);
     });
 
     templateSearchField = new TextField("Search");
@@ -307,10 +326,11 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
         "Enter search text (used in template filter)");
     templateSearchField.setVisible(false);
 
-    Button templateSearchButton = new Button("Search",
+    templateSearchButton = new Button("Search",
         VaadinIcon.SEARCH.create(),
         e -> performTemplateSearch());
     templateSearchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    templateSearchButton.setVisible(false);
 
     templateRow.add(searchTemplateCombo, templateSearchField,
         templateSearchButton);
@@ -643,6 +663,10 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
 
     String finalFilter = filter;
     String[] finalAttributes = attributesToReturn;
+    int sizeLimit = sizeLimitField.getValue() != null
+        ? sizeLimitField.getValue() : 0;
+    int timeLimit = timeLimitField.getValue() != null
+        ? timeLimitField.getValue() : 0;
     for (String serverName : selectedServers) {
       configs.stream()
           .filter(c -> c.getName().equals(serverName))
@@ -651,15 +675,10 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
             try {
               String searchBase = useDefaultBase
                   ? config.getBaseDn() : baseDn;
-              List<LdapEntry> results;
-              if (finalAttributes != null) {
-                results = ldapService.search(
-                    config, searchBase, finalFilter, scope,
-                    finalAttributes);
-              } else {
-                results = ldapService.search(
-                    config, searchBase, finalFilter, scope);
-              }
+              List<LdapEntry> results = ldapService.search(
+                  config, searchBase, finalFilter, scope,
+                  sizeLimit, timeLimit,
+                  finalAttributes);
               currentResults.addAll(results);
               logger.info("Search on {} returned {} results",
                   serverName, results.size());
