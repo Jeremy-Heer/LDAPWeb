@@ -323,7 +323,7 @@ public class BulkGenerateTab extends VerticalLayout {
                       com.unboundid.ldif.LDIFModifyChangeRecord modifyRecord = 
                           (com.unboundid.ldif.LDIFModifyChangeRecord) changeRecord;
 
-                      ldapService.modifyEntry(config,
+                      ldapService.modifyEntryBulkFast(config,
                           modifyRecord.getDN(),
                           java.util.Arrays.asList(modifyRecord.getModifications()));
                     }

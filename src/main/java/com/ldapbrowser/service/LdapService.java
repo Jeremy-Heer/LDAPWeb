@@ -437,6 +437,22 @@ public class LdapService {
    */
   public LDAPConnectionPool getConnectionPool(LdapServerConfig config)
       throws LDAPException, GeneralSecurityException {
+    return getConnectionPoolForOperation(config, true);
+  }
+
+  /**
+   * Gets or creates a connection pool for LDAP operations.
+   *
+   * @param config server configuration
+   * @param validatePoolHealth whether to perform an explicit pool health probe
+   * @return connection pool
+   * @throws LDAPException if pool creation fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  LDAPConnectionPool getConnectionPoolForOperation(
+      LdapServerConfig config,
+      boolean validatePoolHealth
+  ) throws LDAPException, GeneralSecurityException {
     checkServerAccess(config.getName());
     String key = config.getName();
     boolean isNewConnection = !connectionPools.containsKey(key);
@@ -463,7 +479,7 @@ public class LdapService {
     }
     
     // Validate pool health and recreate if stale
-    if (!isNewConnection && !isPoolHealthy(pool)) {
+    if (!isNewConnection && validatePoolHealth && !isPoolHealthy(pool)) {
       logger.warn("Connection pool for {} is unhealthy, recreating", config.getName());
       pool.close();
       connectionPools.remove(key);
@@ -642,27 +658,14 @@ public class LdapService {
       return operation.execute(pool);
     } catch (LDAPException e) {
       // Check if this is a connection-related error that warrants a retry
-      ResultCode resultCode = e.getResultCode();
-      if (resultCode == ResultCode.SERVER_DOWN
-          || resultCode == ResultCode.CONNECT_ERROR
-          || resultCode == ResultCode.UNAVAILABLE
-          || resultCode == ResultCode.TIMEOUT
-          || resultCode == ResultCode.DECODING_ERROR) {
+      if (isConnectionRelatedError(e.getResultCode())) {
         
         logger.warn("LDAP operation failed with {}, attempting retry after pool recreation",
-            resultCode);
-        
-        // Force pool recreation
-        String key = config.getName();
-        LDAPConnectionPool oldPool = connectionPools.remove(key);
-        if (oldPool != null) {
-          oldPool.close();
-        }
-        schemaCache.remove(key);
+            e.getResultCode());
         
         // Retry the operation with a fresh pool
         try {
-          LDAPConnectionPool newPool = getConnectionPool(config);
+          LDAPConnectionPool newPool = recreateConnectionPool(config);
           T result = operation.execute(newPool);
           logger.info("LDAP operation succeeded after retry for {}", config.getName());
           return result;
@@ -676,6 +679,39 @@ public class LdapService {
       // Not a connection error, rethrow immediately
       throw e;
     }
+  }
+
+  /**
+   * Recreates a server connection pool and returns a fresh instance.
+   *
+   * @param config server configuration
+   * @return newly created connection pool
+   * @throws LDAPException if pool creation fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  LDAPConnectionPool recreateConnectionPool(LdapServerConfig config)
+      throws LDAPException, GeneralSecurityException {
+    String key = config.getName();
+    LDAPConnectionPool oldPool = connectionPools.remove(key);
+    if (oldPool != null) {
+      oldPool.close();
+    }
+    schemaCache.remove(key);
+    return getConnectionPoolForOperation(config, true);
+  }
+
+  /**
+   * Returns whether the result code indicates a connection-level failure.
+   *
+   * @param resultCode LDAP result code
+   * @return true if the error can be recovered by reconnecting
+   */
+  private boolean isConnectionRelatedError(ResultCode resultCode) {
+    return resultCode == ResultCode.SERVER_DOWN
+        || resultCode == ResultCode.CONNECT_ERROR
+        || resultCode == ResultCode.UNAVAILABLE
+        || resultCode == ResultCode.TIMEOUT
+        || resultCode == ResultCode.DECODING_ERROR;
   }
   
   /**
@@ -1139,6 +1175,56 @@ public class LdapService {
     }
     
     logger.info("Modified entry {} with {} modifications", dn, modifications.size());
+  }
+
+  /**
+   * Modifies an LDAP entry for bulk operations.
+   *
+   * <p>This path skips explicit pre-operation pool health probing to avoid a root DSE
+   * read before every change. If a connection-level error occurs, the pool is recreated
+   * and the modify is retried once.
+   *
+   * @param config server configuration
+   * @param dn distinguished name
+   * @param modifications list of modifications
+   * @param controls optional LDAP controls
+   * @throws LDAPException if modify fails
+   * @throws GeneralSecurityException if SSL/TLS setup fails
+   */
+  public void modifyEntryBulkFast(LdapServerConfig config, String dn,
+      List<com.unboundid.ldap.sdk.Modification> modifications, Control... controls)
+      throws LDAPException, GeneralSecurityException {
+    LDAPConnectionPool pool = getConnectionPoolForOperation(config, false);
+
+    try {
+      if (controls != null && controls.length > 0) {
+        com.unboundid.ldap.sdk.ModifyRequest modifyRequest =
+            new com.unboundid.ldap.sdk.ModifyRequest(dn, modifications, controls);
+        pool.modify(modifyRequest);
+      } else {
+        pool.modify(dn, modifications);
+      }
+
+      logger.info("Bulk-modified entry {} with {} modifications", dn, modifications.size());
+    } catch (LDAPException e) {
+      if (!isConnectionRelatedError(e.getResultCode())) {
+        throw e;
+      }
+
+      logger.warn("Bulk modify failed with {}, retrying once for {}",
+          e.getResultCode(), dn);
+
+      LDAPConnectionPool freshPool = recreateConnectionPool(config);
+      if (controls != null && controls.length > 0) {
+        com.unboundid.ldap.sdk.ModifyRequest modifyRequest =
+            new com.unboundid.ldap.sdk.ModifyRequest(dn, modifications, controls);
+        freshPool.modify(modifyRequest);
+      } else {
+        freshPool.modify(dn, modifications);
+      }
+
+      logger.info("Bulk-modified entry {} after retry", dn);
+    }
   }
 
   /**

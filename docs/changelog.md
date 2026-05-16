@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.84 - Cleanup extra searches when performing bulk operations.
+
 ## v0.83 - correct deprecated features
 
 ## v0.82 - Create Enhancements

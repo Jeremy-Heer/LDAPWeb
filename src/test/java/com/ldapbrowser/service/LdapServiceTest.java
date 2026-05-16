@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -19,6 +22,8 @@ import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.LDAPConnectionPool;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.LDAPSearchException;
+import com.unboundid.ldap.sdk.Modification;
+import com.unboundid.ldap.sdk.ModificationType;
 import com.unboundid.ldap.sdk.ResultCode;
 import com.unboundid.ldap.sdk.SearchRequest;
 import com.unboundid.ldap.sdk.SearchResult;
@@ -193,7 +198,7 @@ class LdapServiceTest {
 
   // -------------------------------------------------------------------------
   // executeWithRetry – exercised through the public search() method
-  // using a Mockito spy that stubs getConnectionPool()
+  // using a Mockito spy that stubs pool acquisition and recreation hooks.
   // -------------------------------------------------------------------------
   @Nested
   @DisplayName("executeWithRetry")
@@ -225,7 +230,8 @@ class LdapServiceTest {
       LdapServerConfig cfg = config("Retry");
 
       // First pool call returns firstPool (SERVER_DOWN), second returns freshPool (OK)
-      doReturn(firstPool).doReturn(freshPool).when(spy).getConnectionPool(any());
+      doReturn(firstPool).when(spy).getConnectionPool(any());
+      doReturn(freshPool).when(spy).recreateConnectionPool(any());
 
       when(firstPool.search(any(SearchRequest.class)))
           .thenThrow(new LDAPSearchException(ResultCode.SERVER_DOWN, "connection lost"));
@@ -238,8 +244,8 @@ class LdapServiceTest {
       assertThat(result).isEmpty();
       verify(firstPool).search(any(SearchRequest.class));
       verify(freshPool).search(any(SearchRequest.class));
-      // getConnectionPool was invoked twice: first attempt + retry
-      verify(spy, times(2)).getConnectionPool(any());
+      verify(spy, times(1)).getConnectionPool(any());
+      verify(spy, times(1)).recreateConnectionPool(any());
     }
 
     @Test
@@ -247,7 +253,8 @@ class LdapServiceTest {
     void serverDownRetryAlsoFails() throws Exception {
       LdapServerConfig cfg = config("RetryFail");
 
-      doReturn(firstPool).doReturn(freshPool).when(spy).getConnectionPool(any());
+      doReturn(firstPool).when(spy).getConnectionPool(any());
+      doReturn(freshPool).when(spy).recreateConnectionPool(any());
 
       when(firstPool.search(any(SearchRequest.class)))
           .thenThrow(new LDAPSearchException(ResultCode.SERVER_DOWN, "connection lost"));
@@ -258,7 +265,8 @@ class LdapServiceTest {
           spy.search(cfg, "dc=example,dc=com", "(objectClass=*)", SearchScope.SUB))
           .isInstanceOf(LDAPException.class);
 
-      verify(spy, times(2)).getConnectionPool(any());
+      verify(spy, times(1)).getConnectionPool(any());
+      verify(spy, times(1)).recreateConnectionPool(any());
     }
 
     @Test
@@ -277,6 +285,7 @@ class LdapServiceTest {
 
       // getConnectionPool called only once – no retry for non-connection errors
       verify(spy, times(1)).getConnectionPool(any());
+      verify(spy, never()).recreateConnectionPool(any());
       verify(freshPool, never()).search(any());
     }
 
@@ -291,7 +300,8 @@ class LdapServiceTest {
         LDAPConnectionPool p1 = mock(LDAPConnectionPool.class);
         LDAPConnectionPool p2 = mock(LDAPConnectionPool.class);
 
-        doReturn(p1).doReturn(p2).when(localSpy).getConnectionPool(any());
+        doReturn(p1).when(localSpy).getConnectionPool(any());
+        doReturn(p2).when(localSpy).recreateConnectionPool(any());
         when(p1.search(any(SearchRequest.class)))
             .thenThrow(new LDAPSearchException(retryable, retryable.getName()));
         SearchResult emptyResult = emptySearchResult();
@@ -302,7 +312,8 @@ class LdapServiceTest {
             "(objectClass=*)", SearchScope.SUB);
 
         assertThat(result).isEmpty();
-        verify(localSpy, times(2)).getConnectionPool(any());
+        verify(localSpy, times(1)).getConnectionPool(any());
+        verify(localSpy, times(1)).recreateConnectionPool(any());
       }
     }
   }
@@ -361,6 +372,73 @@ class LdapServiceTest {
           "(uid=nobody)", SearchScope.SUB);
 
       assertThat(results).isEmpty();
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // modifyEntryBulkFast – no explicit precheck + one retry on connection errors
+  // -------------------------------------------------------------------------
+  @Nested
+  @DisplayName("modifyEntryBulkFast")
+  class ModifyEntryBulkFast {
+
+    private static final String TEST_DN = "uid=user.1,ou=people,dc=example,dc=com";
+
+    private List<Modification> sampleMods() {
+      return List.of(new Modification(ModificationType.REPLACE, "description", "updated"));
+    }
+
+    @Test
+    @DisplayName("uses existing pool directly and does not call getConnectionPool")
+    void usesExistingPoolWithoutLegacyAccessor() throws Exception {
+      LdapService spy = spy(service);
+      LDAPConnectionPool pool = mock(LDAPConnectionPool.class);
+      LdapServerConfig cfg = config("BulkFastExisting");
+      getConnectionPoolsMap().put(cfg.getName(), pool);
+
+      spy.modifyEntryBulkFast(cfg, TEST_DN, sampleMods());
+
+      verify(pool).modify(eq(TEST_DN), anyList());
+      verify(spy, never()).getConnectionPool(any());
+      verify(spy, never()).recreateConnectionPool(any());
+    }
+
+    @Test
+    @DisplayName("connection error retries once with recreated pool")
+    void retriesOnceOnConnectionError() throws Exception {
+      LdapService spy = spy(service);
+      LDAPConnectionPool firstPool = mock(LDAPConnectionPool.class);
+      LDAPConnectionPool freshPool = mock(LDAPConnectionPool.class);
+      LdapServerConfig cfg = config("BulkFastRetry");
+      getConnectionPoolsMap().put(cfg.getName(), firstPool);
+
+      when(firstPool.modify(anyString(), anyList()))
+          .thenThrow(new LDAPException(ResultCode.SERVER_DOWN, "connection lost"));
+      doReturn(freshPool).when(spy).recreateConnectionPool(any());
+
+      spy.modifyEntryBulkFast(cfg, TEST_DN, sampleMods());
+
+      verify(firstPool, times(1)).modify(eq(TEST_DN), anyList());
+      verify(spy, times(1)).recreateConnectionPool(any());
+      verify(freshPool, times(1)).modify(eq(TEST_DN), anyList());
+    }
+
+    @Test
+    @DisplayName("non-connection error does not retry")
+    void nonConnectionErrorDoesNotRetry() throws Exception {
+      LdapService spy = spy(service);
+      LDAPConnectionPool pool = mock(LDAPConnectionPool.class);
+      LdapServerConfig cfg = config("BulkFastNoRetry");
+      getConnectionPoolsMap().put(cfg.getName(), pool);
+
+      when(pool.modify(anyString(), anyList()))
+          .thenThrow(new LDAPException(ResultCode.INVALID_CREDENTIALS, "bad creds"));
+
+      assertThatThrownBy(() -> spy.modifyEntryBulkFast(cfg, TEST_DN, sampleMods()))
+          .isInstanceOf(LDAPException.class);
+
+      verify(spy, never()).recreateConnectionPool(any());
+      verify(pool, times(1)).modify(eq(TEST_DN), anyList());
     }
   }
 
