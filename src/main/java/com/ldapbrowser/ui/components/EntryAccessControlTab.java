@@ -9,6 +9,7 @@ import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.ldapbrowser.util.AciParser;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Div;
@@ -755,7 +756,7 @@ public class EntryAccessControlTab extends VerticalLayout {
     private void initUI() {
       boolean isEditMode = editingAci != null;
       setHeaderTitle(isEditMode ? "Edit Access Control Instruction" : "Add Access Control Instruction");
-      setModal(true);
+      setModality(ModalityMode.VISUAL);
       setDraggable(true);
       setResizable(true);
       setWidth("600px");

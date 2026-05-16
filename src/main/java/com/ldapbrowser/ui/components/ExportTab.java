@@ -30,10 +30,9 @@ import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
-import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
-import com.vaadin.flow.server.StreamResource;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import com.vaadin.flow.server.streams.InMemoryUploadHandler;
 import com.vaadin.flow.theme.lumo.LumoUtility;
-import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.LocalDateTime;
@@ -95,7 +94,6 @@ public class ExportTab extends VerticalLayout {
   private Checkbox csvIncludeDnCheckbox;
   private Checkbox csvSurroundValuesCheckbox;
   private Upload csvUpload;
-  private MemoryBuffer csvBuffer;
   private VerticalLayout csvPreviewContainer;
   private Grid<Map<String, String>> csvPreviewGrid;
   private List<Map<String, String>> csvData;
@@ -242,20 +240,19 @@ public class ExportTab extends VerticalLayout {
     csvModeLayout.addClassName("export-field-group");
 
     // CSV Upload
-    csvBuffer = new MemoryBuffer();
-    csvUpload = new Upload(csvBuffer);
-    csvUpload.setAcceptedFileTypes("text/csv", ".csv");
-    csvUpload.setMaxFiles(1);
-    csvUpload.setWidthFull();
-    csvUpload.setDropLabel(new Span("Drop CSV file here or click to browse"));
-
-    csvUpload.addSucceededListener(event -> {
+    csvUpload = new Upload();
+    csvUpload.setUploadHandler(new InMemoryUploadHandler((metadata, data) -> {
       try {
+        rawCsvContent = new String(data, java.nio.charset.StandardCharsets.UTF_8);
         processCsvFile();
       } catch (Exception ex) {
         NotificationHelper.showError("Error processing CSV file: " + ex.getMessage());
       }
-    });
+    }));
+    csvUpload.setAcceptedFileTypes("text/csv", ".csv");
+    csvUpload.setMaxFiles(1);
+    csvUpload.setWidthFull();
+    csvUpload.setDropLabel(new Span("Drop CSV file here or click to browse"));
 
     // CSV Search fields
     csvSearchBaseField = new TextField("Search Base");
@@ -464,14 +461,11 @@ public class ExportTab extends VerticalLayout {
   private void processCsvFile() throws Exception {
     String content;
 
-    // If this is the first time processing, read from the input stream
+    // Use stored content (set by upload handler or text input)
     if (rawCsvContent == null) {
-      content = new String(csvBuffer.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-      rawCsvContent = content;
-    } else {
-      // Use stored content for reprocessing
-      content = rawCsvContent;
+      return;
     }
+    content = rawCsvContent;
 
     final String[] lines = content.split("\n");
 
@@ -1009,12 +1003,15 @@ public class ExportTab extends VerticalLayout {
       default -> "text/csv";
     };
 
-    StreamResource resource = new StreamResource(fileName,
-        () -> new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
-    resource.setContentType(mimeType);
+    DownloadHandler handler = event -> {
+      event.setFileName(fileName);
+      event.setContentType(mimeType);
+      try (java.io.OutputStream out = event.getOutputStream()) {
+        out.write(data.getBytes(StandardCharsets.UTF_8));
+      }
+    };
 
-    downloadLink.setHref(resource);
-    downloadLink.getElement().setAttribute("download", true);
+    downloadLink.setHref(handler);
     downloadLink.setText("Download " + fileName);
     downloadLink.setVisible(true);
   }

@@ -17,6 +17,7 @@ import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.HeaderRow;
@@ -572,7 +573,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     dialog.setHeaderTitle("Entry: " + currentEntry.getRdn());
     dialog.setWidth("90%");
     dialog.setHeight("90%");
-    dialog.setModal(true);
+    dialog.setModality(ModalityMode.VISUAL);
 
     // Create a new entry editor for the dialog
     EntryEditor dialogEditor = new EntryEditor(ldapService,

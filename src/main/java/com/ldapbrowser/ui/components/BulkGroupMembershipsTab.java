@@ -25,8 +25,8 @@ import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
-import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
-import com.vaadin.flow.server.StreamResource;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import com.vaadin.flow.server.streams.InMemoryUploadHandler;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.Modification;
@@ -64,7 +64,6 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
   private ComboBox<String> operationComboBox;
   private TextArea userListArea;
   private Upload fileUpload;
-  private MemoryBuffer memoryBuffer;
   private Checkbox continueOnErrorCheckbox;
   private Checkbox permissiveModifyCheckbox;
   private ComboBox<String> operationModeCombo;
@@ -122,27 +121,21 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
     userListArea.setHelperText("Enter user IDs (UIDs), one per line. You can also upload a text file.");
 
     // File upload
-    memoryBuffer = new MemoryBuffer();
-    fileUpload = new Upload(memoryBuffer);
+    fileUpload = new Upload();
+    fileUpload.setUploadHandler(new InMemoryUploadHandler((metadata, data) -> {
+      try {
+        String content = new String(data, StandardCharsets.UTF_8);
+        userListArea.setValue(content.trim());
+        NotificationHelper.showInfo("File uploaded successfully: " + metadata.fileName());
+      } catch (Exception e) {
+        NotificationHelper.showError("Failed to read file: " + e.getMessage());
+      }
+    }));
     fileUpload.setUploadButton(new Button("Upload User List", new Icon(VaadinIcon.UPLOAD)));
     fileUpload.setDropLabel(new Span("Drop text file here"));
     fileUpload.setAcceptedFileTypes(".txt", ".csv");
     fileUpload.setMaxFiles(1);
     fileUpload.setMaxFileSize(1024 * 1024); // 1MB limit
-
-    fileUpload.addSucceededListener(event -> {
-      try {
-        String content = new String(memoryBuffer.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        userListArea.setValue(content.trim());
-        NotificationHelper.showInfo("File uploaded successfully: " + event.getFileName());
-      } catch (Exception e) {
-        NotificationHelper.showError("Failed to read file: " + e.getMessage());
-      }
-    });
-
-    fileUpload.addFailedListener(event -> {
-      NotificationHelper.showError("File upload failed: " + event.getReason().getMessage());
-    });
 
     // Option checkboxes
     continueOnErrorCheckbox = new Checkbox("Continue on error");
@@ -912,16 +905,14 @@ public class BulkGroupMembershipsTab extends VerticalLayout {
   }
 
   private void createDownloadLink(String content, String fileName) {
-    StreamResource resource = new StreamResource(fileName,
-        (outputStream, vaadinSession) -> {
-          try {
-            outputStream.write(content.getBytes(StandardCharsets.UTF_8));
-          } catch (Exception e) {
-            loggingService.logError("BulkGroupMemberships", "Failed to write download content: " + e.getMessage());
-          }
-        });
+    DownloadHandler handler = event -> {
+      event.setFileName(fileName);
+      try (java.io.OutputStream out = event.getOutputStream()) {
+        out.write(content.getBytes(StandardCharsets.UTF_8));
+      }
+    };
 
-    downloadLink.setHref(resource);
+    downloadLink.setHref(handler);
     downloadLink.setText("Download " + fileName);
     downloadLink.setVisible(true);
   }

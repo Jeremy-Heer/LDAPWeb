@@ -20,7 +20,7 @@ import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.html.Anchor;
-import com.vaadin.flow.server.StreamResource;
+import com.vaadin.flow.server.streams.DownloadHandler;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -400,10 +400,14 @@ public class BulkGenerateTab extends VerticalLayout {
   }
 
   private void createDownloadLink(String content, String fileName) {
-    StreamResource resource = new StreamResource(fileName,
-        () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+    DownloadHandler handler = event -> {
+      event.setFileName(fileName);
+      try (java.io.OutputStream out = event.getOutputStream()) {
+        out.write(content.getBytes(StandardCharsets.UTF_8));
+      }
+    };
 
-    downloadLink.setHref(resource);
+    downloadLink.setHref(handler);
     downloadLink.setVisible(true);
   }
 

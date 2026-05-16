@@ -33,7 +33,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.server.StreamResource;
+import com.vaadin.flow.server.streams.DownloadHandler;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -614,9 +614,13 @@ public class BulkSearchTab extends VerticalLayout {
   }
 
   private void createDownloadLink(String content, String fileName) {
-    StreamResource resource = new StreamResource(fileName,
-        () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
-    downloadLink.setHref(resource);
+    DownloadHandler handler = event -> {
+      event.setFileName(fileName);
+      try (java.io.OutputStream out = event.getOutputStream()) {
+        out.write(content.getBytes(StandardCharsets.UTF_8));
+      }
+    };
+    downloadLink.setHref(handler);
     downloadLink.setVisible(true);
   }
 

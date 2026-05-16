@@ -1,5 +1,6 @@
 package com.ldapbrowser.ui.dialogs;
 
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.markdown.Markdown;
@@ -31,7 +32,7 @@ public class HelpDialog extends Dialog {
    */
   public HelpDialog() {
     setHeaderTitle("LDAP Browser Help");
-    setModal(false);
+    setModality(ModalityMode.MODELESS);
     setDraggable(true);
     setResizable(true);
     setWidth("800px");

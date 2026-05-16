@@ -29,8 +29,8 @@ import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
-import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
-import com.vaadin.flow.server.StreamResource;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import com.vaadin.flow.server.streams.InMemoryUploadHandler;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import java.io.ByteArrayInputStream;
@@ -67,7 +67,6 @@ public class ImportTab extends VerticalLayout {
   private VerticalLayout ldifModeLayout;
   private VerticalLayout ldifInputContainer;
   private Upload ldifUpload;
-  private MemoryBuffer ldifBuffer;
   private TextArea ldifTextArea;
   private Checkbox ldifContinueOnError;
   private Checkbox ldifPermissiveModify;
@@ -79,7 +78,6 @@ public class ImportTab extends VerticalLayout {
   private VerticalLayout csvModeLayout;
   private VerticalLayout csvInputContainer;
   private Upload csvUpload;
-  private MemoryBuffer csvBuffer;
   private TextArea csvTextArea;
   private Checkbox csvExcludeHeader;
   private Checkbox csvQuotedValues;
@@ -166,20 +164,19 @@ public class ImportTab extends VerticalLayout {
     ldifInputContainer.setSpacing(true);
 
     // LDIF Upload
-    ldifBuffer = new MemoryBuffer();
-    ldifUpload = new Upload(ldifBuffer);
-    ldifUpload.setAcceptedFileTypes("text/ldif", ".ldif", "text/plain", ".txt");
-    ldifUpload.setMaxFiles(1);
-    ldifUpload.setWidthFull();
-    ldifUpload.setDropLabel(new Span("Drop LDIF file here or click to browse"));
-
-    ldifUpload.addSucceededListener(event -> {
+    ldifUpload = new Upload();
+    ldifUpload.setUploadHandler(new InMemoryUploadHandler((metadata, data) -> {
       try {
+        rawLdifContent = new String(data, StandardCharsets.UTF_8);
         processLdifFile();
       } catch (Exception ex) {
         NotificationHelper.showError("Error processing LDIF file: " + ex.getMessage());
       }
-    });
+    }));
+    ldifUpload.setAcceptedFileTypes("text/ldif", ".ldif", "text/plain", ".txt");
+    ldifUpload.setMaxFiles(1);
+    ldifUpload.setWidthFull();
+    ldifUpload.setDropLabel(new Span("Drop LDIF file here or click to browse"));
 
     // LDIF Text Area
     ldifTextArea = new TextArea("LDIF Content");
@@ -247,20 +244,19 @@ public class ImportTab extends VerticalLayout {
     csvInputContainer.setSpacing(true);
 
     // CSV Upload
-    csvBuffer = new MemoryBuffer();
-    csvUpload = new Upload(csvBuffer);
-    csvUpload.setAcceptedFileTypes("text/csv", ".csv");
-    csvUpload.setMaxFiles(1);
-    csvUpload.setWidthFull();
-    csvUpload.setDropLabel(new Span("Drop CSV file here or click to browse"));
-
-    csvUpload.addSucceededListener(event -> {
+    csvUpload = new Upload();
+    csvUpload.setUploadHandler(new InMemoryUploadHandler((metadata, data) -> {
       try {
+        rawCsvContent = new String(data, StandardCharsets.UTF_8);
         processCsvFile();
       } catch (Exception ex) {
         NotificationHelper.showError("Error processing CSV file: " + ex.getMessage());
       }
-    });
+    }));
+    csvUpload.setAcceptedFileTypes("text/csv", ".csv");
+    csvUpload.setMaxFiles(1);
+    csvUpload.setWidthFull();
+    csvUpload.setDropLabel(new Span("Drop CSV file here or click to browse"));
 
     // CSV Text Area
     csvTextArea = new TextArea("CSV Content");
@@ -534,11 +530,10 @@ public class ImportTab extends VerticalLayout {
   }
 
   private void processLdifFile() throws Exception {
-    String content = new String(ldifBuffer.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-    rawLdifContent = content;
+    String content = rawLdifContent;
 
     // Basic LDIF validation
-    if (content.trim().isEmpty()) {
+    if (content == null || content.trim().isEmpty()) {
       NotificationHelper.showError("LDIF file is empty");
       return;
     }
@@ -561,9 +556,9 @@ public class ImportTab extends VerticalLayout {
       content = csvTextArea.getValue();
       rawCsvContent = content;
     } else if (rawCsvContent == null) {
-      // If this is the first time processing from upload, read from the input stream
-      content = new String(csvBuffer.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-      rawCsvContent = content;
+      // No uploaded content available
+      NotificationHelper.showError("No CSV file uploaded");
+      return;
     } else {
       // Use stored content for reprocessing
       content = rawCsvContent;
@@ -1179,18 +1174,26 @@ public class ImportTab extends VerticalLayout {
   }
 
   private void createLdifDownloadLink(String content, String fileName) {
-    StreamResource resource = new StreamResource(fileName,
-        () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+    DownloadHandler handler = event -> {
+      event.setFileName(fileName);
+      try (java.io.OutputStream out = event.getOutputStream()) {
+        out.write(content.getBytes(StandardCharsets.UTF_8));
+      }
+    };
 
-    ldifDownloadLink.setHref(resource);
+    ldifDownloadLink.setHref(handler);
     ldifDownloadLink.setVisible(true);
   }
 
   private void createCsvDownloadLink(String content, String fileName) {
-    StreamResource resource = new StreamResource(fileName,
-        () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+    DownloadHandler handler = event -> {
+      event.setFileName(fileName);
+      try (java.io.OutputStream out = event.getOutputStream()) {
+        out.write(content.getBytes(StandardCharsets.UTF_8));
+      }
+    };
 
-    csvDownloadLink.setHref(resource);
+    csvDownloadLink.setHref(handler);
     csvDownloadLink.setVisible(true);
   }
 

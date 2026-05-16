@@ -18,6 +18,7 @@ import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.Div;
@@ -747,7 +748,7 @@ public class AciBuilderDialog extends Dialog {
 
   private void initUI() {
     setHeaderTitle("ACI Builder");
-    setModal(true);
+    setModality(ModalityMode.VISUAL);
     setDraggable(false);
     setResizable(true);
     setWidth("800px");

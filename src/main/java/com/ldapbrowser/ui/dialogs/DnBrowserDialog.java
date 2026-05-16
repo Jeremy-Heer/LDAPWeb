@@ -8,6 +8,7 @@ import com.ldapbrowser.ui.components.LdapTreeBrowser;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import java.util.List;
@@ -57,7 +58,7 @@ public class DnBrowserDialog extends Dialog {
     setHeaderTitle(title);
     setWidth("800px");
     setHeight("600px");
-    setModal(true);
+    setModality(ModalityMode.VISUAL);
     setCloseOnOutsideClick(false);
     setDraggable(true);
     setResizable(true);

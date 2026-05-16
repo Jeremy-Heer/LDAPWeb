@@ -33,7 +33,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.upload.Upload;
-import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
+import com.vaadin.flow.server.streams.InMemoryUploadHandler;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
@@ -279,8 +279,15 @@ public class SettingsView extends VerticalLayout {
     aliasField.setRequired(true);
 
     // Upload component
-    MemoryBuffer buffer = new MemoryBuffer();
-    Upload upload = new Upload(buffer);
+    byte[][] uploadedCertBytes = {null};
+    Upload upload = new Upload();
+    upload.setUploadHandler(new InMemoryUploadHandler((metadata, data) -> {
+      try {
+        uploadedCertBytes[0] = data;
+      } catch (Exception ex) {
+        NotificationHelper.showError("Failed to read file: " + ex.getMessage(), 3000);
+      }
+    }));
     upload.setAcceptedFileTypes(".cer", ".crt", ".pem", ".der");
     upload.setMaxFiles(1);
     upload.setDropLabel(new Span("Drop certificate file here or click to browse"));
@@ -309,10 +316,10 @@ public class SettingsView extends VerticalLayout {
         Certificate cert = null;
 
         // Try to load from upload first
-        if (buffer.getFileData() != null) {
-          InputStream inputStream = buffer.getInputStream();
+        if (uploadedCertBytes[0] != null) {
+          ByteArrayInputStream certInputStream = new ByteArrayInputStream(uploadedCertBytes[0]);
           CertificateFactory cf = CertificateFactory.getInstance("X.509");
-          cert = cf.generateCertificate(inputStream);
+          cert = cf.generateCertificate(certInputStream);
         } else if (pemArea.getValue() != null && !pemArea.getValue().trim().isEmpty()) {
           // Try to parse PEM text
           String pemText = pemArea.getValue().trim();
@@ -373,8 +380,15 @@ public class SettingsView extends VerticalLayout {
     baseAliasField.setHelperText("Multiple certificates will be numbered (e.g., cert_1, cert_2)");
 
     // Upload component
-    MemoryBuffer buffer = new MemoryBuffer();
-    Upload upload = new Upload(buffer);
+    byte[][] uploadedPemBytes = {null};
+    Upload upload = new Upload();
+    upload.setUploadHandler(new InMemoryUploadHandler((metadata, data) -> {
+      try {
+        uploadedPemBytes[0] = data;
+      } catch (Exception ex) {
+        NotificationHelper.showError("Failed to read file: " + ex.getMessage(), 3000);
+      }
+    }));
     upload.setAcceptedFileTypes(".pem", ".crt", ".cer", ".txt");
     upload.setMaxFiles(1);
     upload.setDropLabel(new Span("Drop certificate file here or click to browse"));
@@ -393,15 +407,14 @@ public class SettingsView extends VerticalLayout {
         return;
       }
 
-      if (buffer.getFileData() == null) {
+      if (uploadedPemBytes[0] == null) {
         NotificationHelper.showError("Please upload a certificate file", 3000);
         return;
       }
 
       try {
         // Read the uploaded file
-        InputStream inputStream = buffer.getInputStream();
-        String pemText = new String(inputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        String pemText = new String(uploadedPemBytes[0], java.nio.charset.StandardCharsets.UTF_8);
 
         // Import all certificates
         int count = truststoreService.importPemCertificates(pemText, baseAlias);

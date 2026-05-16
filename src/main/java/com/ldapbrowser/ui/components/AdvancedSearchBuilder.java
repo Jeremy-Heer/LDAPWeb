@@ -7,6 +7,7 @@ import com.unboundid.ldap.sdk.Filter;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
@@ -124,7 +125,7 @@ public class AdvancedSearchBuilder extends VerticalLayout {
     dialog.setHeaderTitle(title);
     dialog.setWidth("900px");
     dialog.setHeight("700px");
-    dialog.setModal(true);
+    dialog.setModality(ModalityMode.VISUAL);
     dialog.setCloseOnOutsideClick(false);
 
     AdvancedSearchBuilder filterBuilder = new AdvancedSearchBuilder(ldapService);

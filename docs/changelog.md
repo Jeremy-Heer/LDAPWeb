@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.83 - correct deprecated features
+
 ## v0.82 - Create Enhancements
 - Create View
   - Remove the "Relative Distinguished Name (RDN)" field and the "," to the left of the "Parent DN" field

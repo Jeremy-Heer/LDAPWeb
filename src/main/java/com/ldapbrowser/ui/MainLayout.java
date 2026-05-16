@@ -22,6 +22,7 @@ import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H1;
@@ -263,7 +264,7 @@ public class MainLayout extends AppLayout
   private void createLogsDialog() {
     logsDialog = new Dialog();
     logsDialog.setHeaderTitle("Activity Logs");
-    logsDialog.setModal(false);
+    logsDialog.setModality(ModalityMode.MODELESS);
     logsDialog.setDraggable(true);
     logsDialog.setResizable(true);
     

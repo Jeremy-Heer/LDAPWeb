@@ -11,6 +11,7 @@ import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
+import com.vaadin.flow.component.ModalityMode;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Span;
@@ -86,7 +87,7 @@ public class TemplateEditorDialog extends Dialog {
     setHeaderTitle(isEdit ? "Edit Template" : "New Template");
     setWidth("900px");
     setHeight("700px");
-    setModal(true);
+    setModality(ModalityMode.VISUAL);
     setDraggable(true);
     setResizable(true);
 
