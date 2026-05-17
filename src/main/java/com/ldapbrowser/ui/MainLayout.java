@@ -36,7 +36,6 @@ import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.server.VaadinSession;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -418,6 +417,12 @@ public class MainLayout extends AppLayout
         serverSelect.select(previousSelection.stream()
             .filter(filteredNames::contains)
             .toArray(String[]::new));
+
+        // If the selection was effectively unchanged, the select listener may
+        // not fire even though refreshed server configs should be reloaded.
+        if (previousSelection.equals(serverSelect.getSelectedItems())) {
+          notifyCurrentViewOfServerChange();
+        }
       }
     }
   }
@@ -502,6 +507,11 @@ public class MainLayout extends AppLayout
    */
   private void notifyCurrentViewOfServerChange() {
     com.vaadin.flow.component.Component content = getContent();
+    if (content instanceof BrowseView) {
+      ((BrowseView) content).refreshTree();
+      logger.debug("Refreshed BrowseView after server selection change");
+      return;
+    }
     if (content instanceof BulkView) {
       ((BulkView) content).updateTabServers();
       logger.debug("Notified BulkView of server selection change");

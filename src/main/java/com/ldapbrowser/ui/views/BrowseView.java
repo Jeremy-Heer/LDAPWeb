@@ -116,9 +116,7 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
     if (lastLoadedServers == null
         || !lastLoadedServers.equals(currentServers)) {
       getUI().ifPresent(ui -> ui.access(() -> {
-        loadTree();
-        lastLoadedServers = currentServers != null
-            ? Set.copyOf(currentServers) : Set.of();
+        refreshTree();
       }));
     }
   }
@@ -175,10 +173,23 @@ public class BrowseView extends VerticalLayout implements BeforeEnterObserver {
 
     if (!selectedConfigs.isEmpty()) {
       treeBrowser.setServerConfigs(selectedConfigs);
-      treeBrowser.loadServers();
+      treeBrowser.refreshTree();
     } else {
       showServerNotFound("No matching server configurations found");
     }
+  }
+
+  /**
+   * Reloads the browse tree using the current server selection.
+   *
+   * <p>This is used for both polling-based refreshes and immediate
+   * notifications from the main layout when server selection changes.
+   */
+  public void refreshTree() {
+    loadTree();
+    Set<String> currentServers = MainLayout.getSelectedServers();
+    lastLoadedServers = currentServers != null
+        ? Set.copyOf(currentServers) : Set.of();
   }
 
   private void onEntrySelected(LdapEntry entry) {

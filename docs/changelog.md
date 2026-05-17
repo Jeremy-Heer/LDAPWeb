@@ -1,5 +1,11 @@
 # LDAP Web Browser
 
+## v0.85 - Browse tree grid Loading... issue
+- when selecting additional ldap servers after alreadying browsing in the LDAP Browser tree grid
+  the already expanded ldap tree grid displays Loading...
+- When disconecting and reconnecting to an LDAP server, the Browse view will show Loading... in the tree grid
+- above issues are resolved when refreshing the browser
+
 ## v0.84 - Cleanup extra searches when performing bulk operations.
 
 ## v0.83 - correct deprecated features

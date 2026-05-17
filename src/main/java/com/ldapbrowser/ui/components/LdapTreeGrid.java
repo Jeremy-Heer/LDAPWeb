@@ -6,22 +6,15 @@ import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
 import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.TruststoreService;
-import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
 import com.ldapbrowser.ui.dialogs.TlsCertificateDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
-import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.LDAPException;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.contextmenu.GridContextMenu;
-import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.NotificationVariant;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.treegrid.TreeGrid;
 import com.vaadin.flow.data.provider.hierarchy.TreeData;
 import com.vaadin.flow.data.provider.hierarchy.TreeDataProvider;
@@ -29,7 +22,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Tree grid component for browsing LDAP entries.
@@ -832,6 +824,7 @@ public class LdapTreeGrid extends TreeGrid<LdapEntry> {
     dataProvider.refreshAll();
     entryPageState.clear();
     entryServerMap.clear();
+    entryFilters.clear();
 
     // Clear paging state for all servers
     for (LdapServerConfig config : serverConfigMap.values()) {
