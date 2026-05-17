@@ -1,5 +1,10 @@
 # LDAP Web Browser
 
+## v0.86 - Access View Enhancements
+- On the Entry Access Control tab, make the search ACIs respond instanlty as the user types in their search filter. It seems you currently need to click outside the search form to apply.
+- On the Entry Access Control tab, in line with Refresh and Add New ACI, add an LDIF button
+  - The LDIF button should display a dialog that displays all ACI items in the Entry Access Control grid in LDIF format. This should be similar to the Entry Editor LDIF button that displays a Create and Delete form of the data.
+
 ## v0.85 - Browse tree grid Loading... issue
 - when selecting additional ldap servers after alreadying browsing in the LDAP Browser tree grid
   the already expanded ldap tree grid displays Loading...

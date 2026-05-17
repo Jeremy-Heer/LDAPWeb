@@ -19,6 +19,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -115,6 +116,7 @@ public class GlobalAccessControlTab extends VerticalLayout {
     searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
     searchField.setWidthFull();
     searchField.getStyle().set("margin-bottom", "var(--lumo-space-m)");
+    searchField.setValueChangeMode(ValueChangeMode.EAGER);
     searchField.addValueChangeListener(event -> filterAciGrid());
     leftPane.add(searchField);
 

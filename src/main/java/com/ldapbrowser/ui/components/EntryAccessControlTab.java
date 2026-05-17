@@ -25,12 +25,16 @@ import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -53,6 +57,7 @@ public class EntryAccessControlTab extends VerticalLayout {
   private boolean dataLoaded = false;
   private TextField searchField;
   private List<EntryAciInfo> allAciInfo = new ArrayList<>();
+  private List<EntryAciInfo> visibleAciInfo = new ArrayList<>();
   private Div aciDetailsPanel;
   private EntryAciInfo selectedAci;
 
@@ -118,8 +123,12 @@ public class EntryAccessControlTab extends VerticalLayout {
     Button addAciButton = new Button("Add New ACI", VaadinIcon.PLUS.create());
     addAciButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     addAciButton.addClickListener(event -> openAddAciDialog());
+
+    Button ldifButton = new Button("LDIF", VaadinIcon.FILE_TEXT_O.create());
+    ldifButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+    ldifButton.addClickListener(event -> openLdifDialogForVisibleAcis());
     
-    buttonGroup.add(refreshButton, addAciButton);
+    buttonGroup.add(refreshButton, addAciButton, ldifButton);
     
     header.add(title, buttonGroup);
     leftPane.add(header);
@@ -137,6 +146,7 @@ public class EntryAccessControlTab extends VerticalLayout {
     searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
     searchField.setWidthFull();
     searchField.getStyle().set("margin-bottom", "var(--lumo-space-m)");
+    searchField.setValueChangeMode(ValueChangeMode.EAGER);
     searchField.addValueChangeListener(event -> filterAciGrid());
     leftPane.add(searchField);
 
@@ -365,6 +375,7 @@ public class EntryAccessControlTab extends VerticalLayout {
   public void setSelectedServers(Set<LdapServerConfig> servers) {
     this.selectedServers = servers != null ? servers : Collections.emptySet();
     this.dataLoaded = false; // Reset data loaded flag when servers change
+    this.visibleAciInfo.clear();
     aciGrid.setItems(new ArrayList<>()); // Clear existing data
   }
 
@@ -375,6 +386,7 @@ public class EntryAccessControlTab extends VerticalLayout {
     if (selectedServers == null || selectedServers.isEmpty()) {
       NotificationHelper.showInfo("No servers selected. Please select at least one server from the navigation bar.");
       allAciInfo.clear();
+      visibleAciInfo.clear();
       aciGrid.setItems(allAciInfo);
       aciDetailsPanel.removeAll();
       Span placeholder = new Span("Select an ACI to view details");
@@ -699,20 +711,132 @@ public class EntryAccessControlTab extends VerticalLayout {
     String searchText = searchField.getValue();
     if (searchText == null || searchText.trim().isEmpty()) {
       // Show all ACI entries
-      aciGrid.setItems(allAciInfo);
+      visibleAciInfo = new ArrayList<>(allAciInfo);
+      aciGrid.setItems(visibleAciInfo);
     } else {
       // Filter entries containing the search text in DN or ACI value (case-insensitive)
       String lowerCaseFilter = searchText.toLowerCase().trim();
-      List<EntryAciInfo> filteredItems = allAciInfo.stream()
+      visibleAciInfo = allAciInfo.stream()
         .filter(aciInfo -> 
           aciInfo.getDn().toLowerCase().contains(lowerCaseFilter) ||
           aciInfo.getAciValue().toLowerCase().contains(lowerCaseFilter) ||
           aciInfo.getServerName().toLowerCase().contains(lowerCaseFilter)
         )
         .collect(Collectors.toList());
-      
-      aciGrid.setItems(filteredItems);
+
+      aciGrid.setItems(visibleAciInfo);
     }
+  }
+
+  private void openLdifDialogForVisibleAcis() {
+    Dialog dialog = new Dialog();
+    dialog.setHeaderTitle("LDIF");
+    dialog.setWidth("700px");
+
+    String addLdif = buildAddAciLdifForRows(visibleAciInfo);
+    String deleteLdif = buildDeleteAciLdifForRows(visibleAciInfo);
+
+    Span addLabel = new Span("Add ACIs (LDIF):");
+    addLabel.getStyle().set("font-weight", "bold");
+
+    TextArea addArea = new TextArea();
+    addArea.setWidthFull();
+    addArea.setHeight("180px");
+    addArea.setReadOnly(true);
+    addArea.setValue(addLdif);
+
+    Button copyAddBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyAddBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyAddBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyAddBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", addLdif));
+      NotificationHelper.showSuccess("Add LDIF copied to clipboard");
+    });
+
+    HorizontalLayout addHeader = new HorizontalLayout(addLabel, copyAddBtn);
+    addHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    Span deleteLabel = new Span("Delete ACIs (LDIF):");
+    deleteLabel.getStyle().set("font-weight", "bold");
+
+    TextArea deleteArea = new TextArea();
+    deleteArea.setWidthFull();
+    deleteArea.setHeight("180px");
+    deleteArea.setReadOnly(true);
+    deleteArea.setValue(deleteLdif);
+
+    Button copyDeleteBtn = new Button(new Icon(VaadinIcon.COPY));
+    copyDeleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    copyDeleteBtn.getElement().setAttribute("title", "Copy to clipboard");
+    copyDeleteBtn.addClickListener(e -> {
+      getUI().ifPresent(ui -> ui.getPage().executeJs(
+          "navigator.clipboard.writeText($0)", deleteLdif));
+      NotificationHelper.showSuccess("Delete LDIF copied to clipboard");
+    });
+
+    HorizontalLayout deleteHeader = new HorizontalLayout(deleteLabel, copyDeleteBtn);
+    deleteHeader.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+    VerticalLayout layout = new VerticalLayout(addHeader, addArea, deleteHeader, deleteArea);
+    layout.setPadding(false);
+    layout.setSpacing(true);
+    dialog.add(layout);
+
+    Button closeButton = new Button("Close", e -> dialog.close());
+    dialog.getFooter().add(closeButton);
+    dialog.open();
+  }
+
+  static String buildAddAciLdifForRows(List<EntryAciInfo> rows) {
+    if (rows == null || rows.isEmpty()) {
+      return "# No visible ACI entries to export\n";
+    }
+
+    StringBuilder ldif = new StringBuilder();
+    for (Map.Entry<String, List<String>> entry : groupAciValuesByDn(rows).entrySet()) {
+      ldif.append("dn: ").append(entry.getKey()).append("\n");
+      ldif.append("changetype: modify\n");
+      ldif.append("add: aci\n");
+      for (String aciValue : entry.getValue()) {
+        ldif.append("aci: ").append(aciValue).append("\n");
+      }
+      ldif.append("-\n\n");
+    }
+
+    return ldif.toString().trim() + "\n";
+  }
+
+  static String buildDeleteAciLdifForRows(List<EntryAciInfo> rows) {
+    if (rows == null || rows.isEmpty()) {
+      return "# No visible ACI entries to export\n";
+    }
+
+    StringBuilder ldif = new StringBuilder();
+    for (Map.Entry<String, List<String>> entry : groupAciValuesByDn(rows).entrySet()) {
+      ldif.append("dn: ").append(entry.getKey()).append("\n");
+      ldif.append("changetype: modify\n");
+      ldif.append("delete: aci\n");
+      for (String aciValue : entry.getValue()) {
+        ldif.append("aci: ").append(aciValue).append("\n");
+      }
+      ldif.append("-\n\n");
+    }
+
+    return ldif.toString().trim() + "\n";
+  }
+
+  private static Map<String, List<String>> groupAciValuesByDn(List<EntryAciInfo> rows) {
+    List<EntryAciInfo> sortedRows = new ArrayList<>(rows);
+    sortedRows.sort(Comparator
+        .comparing(EntryAciInfo::getDn, String.CASE_INSENSITIVE_ORDER)
+        .thenComparing(EntryAciInfo::getAciValue, String.CASE_INSENSITIVE_ORDER));
+
+    Map<String, List<String>> byDn = new LinkedHashMap<>();
+    for (EntryAciInfo row : sortedRows) {
+      byDn.computeIfAbsent(row.getDn(), unused -> new ArrayList<>()).add(row.getAciValue());
+    }
+    return byDn;
   }
 
   /**
