@@ -82,6 +82,17 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("writes initial admin credentials to local bootstrap file")
+    void writesBootstrapCredentialsFile() throws IOException {
+      Path bootstrapFile = tempDir.resolve("initial-admin-password.txt");
+      assertThat(bootstrapFile).exists();
+
+      String content = Files.readString(bootstrapFile);
+      assertThat(content).contains("Username: admin");
+      assertThat(content).contains("Password:");
+    }
+
+    @Test
     @DisplayName("does not recreate file if it already exists")
     void doesNotOverwrite() throws IOException {
       // First service creates the file

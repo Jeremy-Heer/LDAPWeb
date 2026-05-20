@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.87 - Code_Quality items
+
 ## v0.86 - Access View Enhancements
 - On the Entry Access Control tab, make the search ACIs respond instanlty as the user types in their search filter. It seems you currently need to click outside the search form to apply.
 - On the Entry Access Control tab, in line with Refresh and Add New ACI, add an LDIF button

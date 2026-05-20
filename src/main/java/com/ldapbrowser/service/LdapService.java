@@ -1,22 +1,15 @@
 package com.ldapbrowser.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.ldapbrowser.exception.CertificateValidationException;
 import com.ldapbrowser.model.BrowseResult;
 import com.ldapbrowser.model.LdapEntry;
 import com.ldapbrowser.model.LdapServerConfig;
-import com.ldapbrowser.util.LdifGenerator;
-import com.unboundid.asn1.ASN1OctetString;
-import com.unboundid.ldap.sdk.Attribute;
 import com.unboundid.ldap.sdk.Control;
 import com.unboundid.ldap.sdk.Filter;
 import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.LDAPConnectionPool;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.LDAPSearchException;
-import com.unboundid.ldap.sdk.Modification;
-import com.unboundid.ldap.sdk.ModificationType;
 import com.unboundid.ldap.sdk.ModifyDNRequest;
 import com.unboundid.ldap.sdk.ResultCode;
 import com.unboundid.ldap.sdk.RootDSE;
@@ -25,8 +18,6 @@ import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.unboundid.ldap.sdk.StartTLSPostConnectProcessor;
-import com.unboundid.ldap.sdk.controls.SimplePagedResultsControl;
-import com.unboundid.ldap.sdk.schema.AttributeTypeDefinition;
 import com.unboundid.ldap.sdk.schema.Schema;
 import com.unboundid.util.ssl.SSLUtil;
 import com.unboundid.util.ssl.TrustAllTrustManager;
@@ -34,7 +25,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -69,40 +59,58 @@ public class LdapService {
   private static final long HEALTH_CHECK_INTERVAL_MS = 60000; // 1 minute
   private static final long MAX_CONNECTION_AGE_MS = 300000; // 5 minutes
 
-  private final Map<String, LDAPConnectionPool> connectionPools = new ConcurrentHashMap<>();
-  
-  // Store server configs alongside connection pools for cache lookups
-  private final Map<String, LdapServerConfig> serverConfigs = new ConcurrentHashMap<>();
+  private final LdapConnectionPoolStore connectionPoolStore = new LdapConnectionPoolStore();
   
   // Schema cache management - stores schema per server for performance
-  private final Map<String, Schema> schemaCache = new ConcurrentHashMap<>();
+    private final LdapSchemaCacheManager schemaCacheManager = new LdapSchemaCacheManager(logger);
+  private final LdapConnectionPoolManager connectionPoolManager = new LdapConnectionPoolManager(
+      connectionPoolStore,
+      schemaCacheManager,
+      logger,
+      this::createConnectionPool,
+      this::fetchSchemaFromServer,
+      this::checkServerAccess);
   
   // Paging state management for LDAP paged search control (thread-safe for multi-server usage)
-  private final Map<String, byte[]> pagingCookies = new ConcurrentHashMap<>();
-  private final Map<String, Integer> currentPages = new ConcurrentHashMap<>();
+  private final LdapPagingStateManager pagingStateManager = new LdapPagingStateManager();
+  private final LdapPagingIterationHelper pagingIterationHelper =
+      new LdapPagingIterationHelper();
+    private final LdapBrowseRequestFactory browseRequestFactory =
+      new LdapBrowseRequestFactory();
+    private final LdapBrowseSearchExecutor browseSearchExecutor =
+      new LdapBrowseSearchExecutor();
   
   // Root DSE and naming context caching to reduce redundant LDAP searches
-  private final Map<String, RootDSE> rootDseCache = new ConcurrentHashMap<>();
-  private final Map<String, List<String>> namingContextsCache = new ConcurrentHashMap<>();
-  private final Map<String, List<String>> privateNamingContextsCache = new ConcurrentHashMap<>();
-  private final Cache<String, LdapEntry> entryMinimalCache = Caffeine.newBuilder()
-      .maximumSize(1000)
-      .expireAfterAccess(Duration.ofMinutes(60))
-      .build();
-  
-  // Lock objects for thread-safe cache population (prevent cache stampede)
-  private final Map<String, Object> rootDseLocks = new ConcurrentHashMap<>();
-  private final Map<String, Object> namingContextsLocks = new ConcurrentHashMap<>();
-  private final Map<String, Object> privateNamingContextsLocks = new ConcurrentHashMap<>();
-  private final Map<String, Object> entryMinimalLocks = new ConcurrentHashMap<>();
+  private final LdapBrowseCacheManager browseCacheManager =
+      new LdapBrowseCacheManager(logger);
+  private final LdapRootDseHelper rootDseHelper = new LdapRootDseHelper();
+  private final LdapSchemaQueryHelper schemaQueryHelper = new LdapSchemaQueryHelper(logger);
+  private final LdapSchemaModificationHelper schemaModificationHelper =
+      new LdapSchemaModificationHelper(logger);
+    private final LdapEffectiveRightsSearchHelper effectiveRightsSearchHelper =
+      new LdapEffectiveRightsSearchHelper();
+  private final LdapModifyRequestHelper modifyRequestHelper =
+      new LdapModifyRequestHelper();
+  private final LdapEntryMapper ldapEntryMapper = new LdapEntryMapper();
+    private final LdapBrowsePageResultMapper browsePageResultMapper =
+      new LdapBrowsePageResultMapper();
+      private final LdapCertificateFailureHelper certificateFailureHelper =
+        new LdapCertificateFailureHelper();
+      private final LdapConnectionBindHelper connectionBindHelper =
+        new LdapConnectionBindHelper();
+        private final LdapConnectionBootstrapHelper connectionBootstrapHelper =
+          new LdapConnectionBootstrapHelper();
+        private final LdapConnectionCloseHelper connectionCloseHelper =
+          new LdapConnectionCloseHelper();
   
   private final TruststoreService truststoreService;
-  private final LoggingService loggingService;
   private final RoleService roleService;
   private final String authMode;
+  private final LdapAttributeModificationHelper attributeModificationHelper;
   
   // Track the last trust manager used for certificate validation
   private final Map<String, TrustStoreTrustManager> trustManagers = new ConcurrentHashMap<>();
+  private final LdapOperationExecutor ldapOperationExecutor = new LdapOperationExecutor();
 
   /**
    * Constructor with dependency injection.
@@ -116,9 +124,10 @@ public class LdapService {
       @Lazy RoleService roleService,
       @Value("${ldapbrowser.auth.mode:none}") String authMode) {
     this.truststoreService = truststoreService;
-    this.loggingService = loggingService;
     this.roleService = roleService;
     this.authMode = authMode;
+    this.attributeModificationHelper =
+        new LdapAttributeModificationHelper(loggingService, logger);
   }
 
   /**
@@ -135,31 +144,20 @@ public class LdapService {
     try {
       connection = createConnection(config);
 
-      // Test bind if credentials provided
-      if (config.getBindDn() != null && !config.getBindDn().isEmpty()) {
-        connection.bind(config.getBindDn(), config.getBindPassword());
-        logger.info("Successfully bound to {} as {}", config.getName(), config.getBindDn());
-      }
+      connectionBindHelper.bindIfConfigured(connection, config, logger);
 
       logger.info("Connection test successful for {}", config.getName());
       return true;
     } catch (LDAPException e) {
-      // Check if this was caused by a certificate validation failure
-      Throwable cause = e.getCause();
-      if (cause instanceof javax.net.ssl.SSLHandshakeException 
-          || cause instanceof java.security.cert.CertificateException) {
-        
-        // Try to get the failed certificate from the trust manager
-        java.security.cert.X509Certificate failedCert = getLastFailedCertificate(config.getName());
-        
-        if (failedCert != null) {
-          logger.error("Certificate validation failed for {}", config.getName());
-          throw new com.ldapbrowser.exception.CertificateValidationException(
-              "Server certificate validation failed: " + cause.getMessage(),
-              cause,
-              new java.security.cert.X509Certificate[]{failedCert}
-          );
-        }
+      CertificateValidationException certificateException =
+          certificateFailureHelper.createCertificateValidationException(
+              "Server certificate validation failed: ",
+              e,
+              e.getCause(),
+              getLastFailedCertificate(config.getName()));
+      if (certificateException != null) {
+        logger.error("Certificate validation failed for {}", config.getName());
+        throw certificateException;
       }
       
       logger.error("Connection test failed for {}: {}", config.getName(), e.getMessage());
@@ -168,9 +166,7 @@ public class LdapService {
       logger.error("SSL/TLS configuration error for {}: {}", config.getName(), e.getMessage());
       return false;
     } finally {
-      if (connection != null) {
-        connection.close();
-      }
+      connectionCloseHelper.closeQuietly(connection);
     }
   }
 
@@ -189,9 +185,7 @@ public class LdapService {
 
     // Setup SSL if needed
     if (config.isUseSsl()) {
-      SSLUtil sslUtil = createSslUtil(config);
-      SSLContext sslContext = sslUtil.createSSLContext();
-      socketFactory = sslContext.getSocketFactory();
+      socketFactory = connectionBootstrapHelper.createSocketFactory(createSslUtil(config));
     }
 
     LDAPConnection connection;
@@ -209,12 +203,8 @@ public class LdapService {
 
     // Setup StartTLS if needed
     if (config.isUseStartTls() && !config.isUseSsl()) {
-      SSLUtil sslUtil = createSslUtil(config);
-      SSLContext sslContext = sslUtil.createSSLContext();
       try {
-        connection.processExtendedOperation(
-            new com.unboundid.ldap.sdk.extensions.StartTLSExtendedRequest(sslContext)
-        );
+        connectionBootstrapHelper.applyStartTlsIfNeeded(connection, config, createSslUtil(config));
       } catch (LDAPException e) {
         // Check if this is a certificate validation failure
         checkForCertificateFailure(e, config);
@@ -235,22 +225,14 @@ public class LdapService {
    */
   private void checkForCertificateFailure(LDAPException e, LdapServerConfig config)
       throws CertificateValidationException {
-    Throwable cause = e.getCause();
-    while (cause != null) {
-      if (cause instanceof javax.net.ssl.SSLHandshakeException
-          || cause instanceof java.security.cert.CertificateException) {
-        // Certificate validation failed - try to get the certificate
-        X509Certificate cert = getLastFailedCertificate(config.getName());
-        if (cert != null) {
-          throw new CertificateValidationException(
-              "Certificate validation failed: " + cause.getMessage(),
-              e,
-              new X509Certificate[]{cert}
-          );
-        }
-        break;
-      }
-      cause = cause.getCause();
+    CertificateValidationException certificateException =
+        certificateFailureHelper.createCertificateValidationException(
+            "Certificate validation failed: ",
+            e,
+            e,
+            getLastFailedCertificate(config.getName()));
+    if (certificateException != null) {
+      throw certificateException;
     }
   }
 
@@ -357,9 +339,7 @@ public class LdapService {
         throw new Exception("Failed to capture server certificate chain");
       }
     } finally {
-      if (connection != null) {
-        connection.close();
-      }
+      connectionCloseHelper.closeQuietly(connection);
     }
   }
 
@@ -437,7 +417,7 @@ public class LdapService {
    */
   public LDAPConnectionPool getConnectionPool(LdapServerConfig config)
       throws LDAPException, GeneralSecurityException {
-    return getConnectionPoolForOperation(config, true);
+    return connectionPoolManager.getConnectionPoolForOperation(config, true);
   }
 
   /**
@@ -453,63 +433,7 @@ public class LdapService {
       LdapServerConfig config,
       boolean validatePoolHealth
   ) throws LDAPException, GeneralSecurityException {
-    checkServerAccess(config.getName());
-    String key = config.getName();
-    boolean isNewConnection = !connectionPools.containsKey(key);
-
-    // Store the config for later cache lookups
-    serverConfigs.put(key, config);
-
-    LDAPConnectionPool pool;
-    try {
-      pool = connectionPools.computeIfAbsent(key, k -> {
-        try {
-          return createConnectionPool(config);
-        } catch (CertificateValidationException e) {
-          // Wrap certificate validation exception so it can escape computeIfAbsent
-          throw new RuntimeException("CERT_VALIDATION_FAILED", e);
-        } catch (LDAPException | GeneralSecurityException e) {
-          logger.error("Failed to create connection pool for {}", config.getName(), e);
-          throw new RuntimeException("Failed to create connection pool", e);
-        }
-      });
-    } catch (RuntimeException e) {
-      // Certificate validation exceptions are wrapped - they'll be detected in UI
-      throw e;
-    }
-    
-    // Validate pool health and recreate if stale
-    if (!isNewConnection && validatePoolHealth && !isPoolHealthy(pool)) {
-      logger.warn("Connection pool for {} is unhealthy, recreating", config.getName());
-      pool.close();
-      connectionPools.remove(key);
-      schemaCache.remove(key);
-      try {
-        pool = createConnectionPool(config);
-        connectionPools.put(key, pool);
-        isNewConnection = true;
-      } catch (CertificateValidationException e) {
-        logger.error("Certificate validation failed for {}", config.getName());
-        throw new RuntimeException("CERT_VALIDATION_FAILED", e);
-      } catch (LDAPException | GeneralSecurityException e) {
-        logger.error("Failed to recreate connection pool for {}", config.getName(), e);
-        throw new RuntimeException("Failed to recreate connection pool", e);
-      }
-    }
-    
-    // If this is a new connection, fetch and cache the schema
-    if (isNewConnection && !schemaCache.containsKey(key)) {
-      try {
-        Schema schema = fetchSchemaFromServer(config);
-        schemaCache.put(key, schema);
-        logger.debug("Pre-fetched and cached schema for {}", config.getName());
-      } catch (LDAPException e) {
-        // Log but don't fail - schema can be fetched later if needed
-        logger.warn("Failed to pre-fetch schema for {}: {}", config.getName(), e.getMessage());
-      }
-    }
-    
-    return pool;
+    return connectionPoolManager.getConnectionPoolForOperation(config, validatePoolHealth);
   }
   
   /**
@@ -544,60 +468,8 @@ public class LdapService {
         postConnectProcessor
     );
     
-    // Configure health checks to detect and replace stale connections
-    newPool.setHealthCheck(new com.unboundid.ldap.sdk.LDAPConnectionPoolHealthCheck() {
-      @Override
-      public void ensureNewConnectionValid(LDAPConnection connection) throws LDAPException {
-        // Test connection with a simple operation
-        connection.getRootDSE();
-      }
-
-      @Override
-      public void ensureConnectionValidAfterException(LDAPConnection connection,
-          LDAPException exception) throws LDAPException {
-        // If we get certain exceptions, consider the connection invalid
-        ResultCode resultCode = exception.getResultCode();
-        if (resultCode == ResultCode.SERVER_DOWN
-            || resultCode == ResultCode.CONNECT_ERROR
-            || resultCode == ResultCode.UNAVAILABLE
-            || resultCode == ResultCode.TIMEOUT
-            || resultCode == ResultCode.DECODING_ERROR) {
-          throw exception; // Connection is invalid, pool will replace it
-        }
-        // For other exceptions, test if connection is still valid
-        connection.getRootDSE();
-      }
-
-      @Override
-      public void ensureConnectionValidForCheckout(LDAPConnection connection)
-          throws LDAPException {
-        // Quick check before giving connection to caller
-        if (!connection.isConnected()) {
-          throw new LDAPException(ResultCode.SERVER_DOWN,
-              "Connection is not established");
-        }
-      }
-
-      @Override
-      public void ensureConnectionValidForRelease(LDAPConnection connection)
-          throws LDAPException {
-        // Check when returning connection to pool
-        if (!connection.isConnected()) {
-          throw new LDAPException(ResultCode.SERVER_DOWN,
-              "Connection is not established");
-        }
-      }
-
-      @Override
-      public void ensureConnectionValidForContinuedUse(LDAPConnection connection)
-          throws LDAPException {
-        // Periodic health check for idle connections
-        if (!connection.isConnected()) {
-          throw new LDAPException(ResultCode.SERVER_DOWN,
-              "Connection is not established");
-        }
-      }
-    });
+    // Configure health checks to detect and replace stale connections.
+    newPool.setHealthCheck(LdapConnectionHealthSupport.createPoolHealthCheck());
     
     // Set health check interval and connection age limits
     newPool.setHealthCheckIntervalMillis(HEALTH_CHECK_INTERVAL_MS);
@@ -612,35 +484,6 @@ public class LdapService {
   }
   
   /**
-   * Checks if a connection pool is healthy.
-   *
-   * @param pool connection pool to check
-   * @return true if pool is healthy
-   */
-  private boolean isPoolHealthy(LDAPConnectionPool pool) {
-    if (pool == null || pool.isClosed()) {
-      return false;
-    }
-    
-    try {
-      // Try to get a connection and perform a simple operation
-      LDAPConnection conn = pool.getConnection();
-      try {
-        conn.getRootDSE();
-        pool.releaseConnection(conn);
-        return true;
-      } catch (LDAPException e) {
-        logger.debug("Health check failed: {}", e.getMessage());
-        pool.releaseDefunctConnection(conn);
-        return false;
-      }
-    } catch (LDAPException e) {
-      logger.debug("Failed to get connection for health check: {}", e.getMessage());
-      return false;
-    }
-  }
-
-  /**
    * Executes an LDAP operation with automatic retry on stale connection errors.
    * If the operation fails due to connection issues, the pool is recreated and retried once.
    *
@@ -653,32 +496,15 @@ public class LdapService {
    */
   private <T> T executeWithRetry(LdapServerConfig config,
       LdapOperation<T> operation) throws LDAPException, GeneralSecurityException {
-    try {
-      LDAPConnectionPool pool = getConnectionPool(config);
-      return operation.execute(pool);
-    } catch (LDAPException e) {
-      // Check if this is a connection-related error that warrants a retry
-      if (isConnectionRelatedError(e.getResultCode())) {
-        
-        logger.warn("LDAP operation failed with {}, attempting retry after pool recreation",
-            e.getResultCode());
-        
-        // Retry the operation with a fresh pool
-        try {
-          LDAPConnectionPool newPool = recreateConnectionPool(config);
-          T result = operation.execute(newPool);
-          logger.info("LDAP operation succeeded after retry for {}", config.getName());
-          return result;
-        } catch (LDAPException retryException) {
-          logger.error("LDAP operation failed after retry for {}: {}",
-              config.getName(), retryException.getMessage());
-          throw retryException;
-        }
-      }
-      
-      // Not a connection error, rethrow immediately
-      throw e;
-    }
+    return ldapOperationExecutor.executeWithRetry(
+        config,
+        () -> getConnectionPool(config),
+        operation::execute,
+        () -> recreateConnectionPool(config));
+  }
+
+  private boolean isConnectionRelatedError(ResultCode resultCode) {
+    return ldapOperationExecutor.isConnectionRelatedError(resultCode);
   }
 
   /**
@@ -691,27 +517,7 @@ public class LdapService {
    */
   LDAPConnectionPool recreateConnectionPool(LdapServerConfig config)
       throws LDAPException, GeneralSecurityException {
-    String key = config.getName();
-    LDAPConnectionPool oldPool = connectionPools.remove(key);
-    if (oldPool != null) {
-      oldPool.close();
-    }
-    schemaCache.remove(key);
-    return getConnectionPoolForOperation(config, true);
-  }
-
-  /**
-   * Returns whether the result code indicates a connection-level failure.
-   *
-   * @param resultCode LDAP result code
-   * @return true if the error can be recovered by reconnecting
-   */
-  private boolean isConnectionRelatedError(ResultCode resultCode) {
-    return resultCode == ResultCode.SERVER_DOWN
-        || resultCode == ResultCode.CONNECT_ERROR
-        || resultCode == ResultCode.UNAVAILABLE
-        || resultCode == ResultCode.TIMEOUT
-        || resultCode == ResultCode.DECODING_ERROR;
+    return connectionPoolManager.recreateConnectionPool(config);
   }
   
   /**
@@ -731,7 +537,7 @@ public class LdapService {
    * @return server config or null if not found
    */
   private LdapServerConfig findConfigByName(String serverName) {
-    return serverConfigs.get(serverName);
+    return connectionPoolStore.getConfig(serverName);
   }
 
   /**
@@ -740,13 +546,13 @@ public class LdapService {
    * @param serverName server name
    */
   public void closeConnectionPool(String serverName) {
-    LDAPConnectionPool pool = connectionPools.remove(serverName);
+    LDAPConnectionPool pool = connectionPoolStore.removePool(serverName);
     if (pool != null) {
       pool.close();
       logger.info("Closed connection pool for {}", serverName);
     }
     // Clear all caches for this server
-    serverConfigs.remove(serverName);
+    connectionPoolStore.removeConfig(serverName);
     clearSchemaCache(serverName);
     clearBrowseCache(serverName);
   }
@@ -756,11 +562,11 @@ public class LdapService {
    */
   @PreDestroy
   public void closeAllConnectionPools() {
-    connectionPools.forEach((name, pool) -> {
+    connectionPoolStore.forEachPool((name, pool) -> {
       pool.close();
       logger.info("Closed connection pool for {}", name);
     });
-    connectionPools.clear();
+    connectionPoolStore.clearPools();
     // Clear all caches
     clearAllSchemaCaches();
     clearAllBrowseCaches();
@@ -821,28 +627,17 @@ public class LdapService {
       SearchScope scope,
       String... attributes
   ) throws LDAPException, GeneralSecurityException {
+    Filter validatedFilter = toValidatedFilter(filter);
     return executeWithRetry(config, pool -> {
       SearchRequest searchRequest;
       if (attributes != null && attributes.length > 0) {
-        searchRequest = new SearchRequest(baseDn, scope, filter, attributes);
+        searchRequest = new SearchRequest(baseDn, scope, validatedFilter, attributes);
       } else {
-        searchRequest = new SearchRequest(baseDn, scope, filter);
+        searchRequest = new SearchRequest(baseDn, scope, validatedFilter);
       }
       SearchResult searchResult = pool.search(searchRequest);
-
-      List<LdapEntry> entries = new ArrayList<>();
-      for (SearchResultEntry entry : searchResult.getSearchEntries()) {
-        LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
-        
-        // Add regular attributes
-        for (Attribute attr : entry.getAttributes()) {
-          for (String value : attr.getValues()) {
-            ldapEntry.addAttribute(attr.getName(), value);
-          }
-        }
-        
-        entries.add(ldapEntry);
-      }
+      List<LdapEntry> entries =
+          ldapEntryMapper.mapEntries(searchResult.getSearchEntries(), config.getName());
 
       logger.info("Search on {} returned {} entries", config.getName(), entries.size());
       return entries;
@@ -872,12 +667,13 @@ public class LdapService {
       int timeLimitSeconds,
       String... attributes
   ) throws LDAPException, GeneralSecurityException {
+    Filter validatedFilter = toValidatedFilter(filter);
     return executeWithRetry(config, pool -> {
       SearchRequest searchRequest;
       if (attributes != null && attributes.length > 0) {
-        searchRequest = new SearchRequest(baseDn, scope, filter, attributes);
+        searchRequest = new SearchRequest(baseDn, scope, validatedFilter, attributes);
       } else {
-        searchRequest = new SearchRequest(baseDn, scope, filter);
+        searchRequest = new SearchRequest(baseDn, scope, validatedFilter);
       }
       if (sizeLimit > 0) {
         searchRequest.setSizeLimit(sizeLimit);
@@ -900,16 +696,8 @@ public class LdapService {
         }
       }
 
-      List<LdapEntry> entries = new ArrayList<>();
-      for (SearchResultEntry entry : searchResult.getSearchEntries()) {
-        LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
-        for (Attribute attr : entry.getAttributes()) {
-          for (String value : attr.getValues()) {
-            ldapEntry.addAttribute(attr.getName(), value);
-          }
-        }
-        entries.add(ldapEntry);
-      }
+      List<LdapEntry> entries =
+          ldapEntryMapper.mapEntries(searchResult.getSearchEntries(), config.getName());
 
       logger.info("Search on {} returned {} entries", config.getName(), entries.size());
       return entries;
@@ -949,7 +737,6 @@ public class LdapService {
       }
 
       SearchResultEntry entry = searchResult.getSearchEntries().get(0);
-      LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
 
       // Get schema to properly classify attributes
       Schema schema = null;
@@ -960,20 +747,7 @@ public class LdapService {
             e.getMessage());
       }
 
-      // Add attributes, classifying them as operational or user attributes
-      for (Attribute attr : entry.getAttributes()) {
-        boolean isOperational = isOperationalAttribute(attr.getName(), schema);
-        
-        for (String value : attr.getValues()) {
-          if (isOperational && includeOperational) {
-            ldapEntry.addOperationalAttribute(attr.getName(), value);
-          } else if (!isOperational) {
-            ldapEntry.addAttribute(attr.getName(), value);
-          }
-        }
-      }
-
-      return ldapEntry;
+      return ldapEntryMapper.mapReadEntry(entry, config.getName(), includeOperational, schema);
     });
   }
 
@@ -994,22 +768,12 @@ public class LdapService {
       List<String> values
   ) throws LDAPException, GeneralSecurityException {
     LDAPConnectionPool pool = getConnectionPool(config);
-    
-    Modification mod = new Modification(
-        ModificationType.REPLACE,
-        attributeName,
-        values.toArray(new String[0])
-    );
-    
-    pool.modify(dn, mod);
-    logger.info("Modified attribute {} on {}", attributeName, dn);
-
-    // Log to activity log
-    loggingService.logModification(
+    attributeModificationHelper.modifyAttribute(
+      pool,
         config.getName(),
-        "Modified attribute '" + attributeName + "' on entry",
         dn,
-        LdifGenerator.replace(dn, attributeName, values)
+      attributeName,
+      values
     );
   }
 
@@ -1030,22 +794,12 @@ public class LdapService {
       List<String> values
   ) throws LDAPException, GeneralSecurityException {
     LDAPConnectionPool pool = getConnectionPool(config);
-    
-    Modification mod = new Modification(
-        ModificationType.ADD,
-        attributeName,
-        values.toArray(new String[0])
-    );
-    
-    pool.modify(dn, mod);
-    logger.info("Added attribute {} to {}", attributeName, dn);
-
-    // Log to activity log
-    loggingService.logModification(
+    attributeModificationHelper.addAttribute(
+      pool,
         config.getName(),
-        "Added attribute '" + attributeName + "' to entry",
         dn,
-        LdifGenerator.add(dn, attributeName, values)
+      attributeName,
+      values
     );
   }
 
@@ -1064,18 +818,11 @@ public class LdapService {
       String attributeName
   ) throws LDAPException, GeneralSecurityException {
     LDAPConnectionPool pool = getConnectionPool(config);
-    
-    Modification mod = new Modification(ModificationType.DELETE, attributeName);
-    
-    pool.modify(dn, mod);
-    logger.info("Deleted attribute {} from {}", attributeName, dn);
-
-    // Log to activity log
-    loggingService.logModification(
+    attributeModificationHelper.deleteAttribute(
+      pool,
         config.getName(),
-        "Deleted attribute '" + attributeName + "' from entry",
         dn,
-        LdifGenerator.delete(dn, attributeName)
+      attributeName
     );
   }
 
@@ -1165,14 +912,7 @@ public class LdapService {
       List<com.unboundid.ldap.sdk.Modification> modifications, Control... controls)
       throws LDAPException, GeneralSecurityException {
     LDAPConnectionPool pool = getConnectionPool(config);
-    
-    if (controls != null && controls.length > 0) {
-      com.unboundid.ldap.sdk.ModifyRequest modifyRequest = 
-          new com.unboundid.ldap.sdk.ModifyRequest(dn, modifications, controls);
-      pool.modify(modifyRequest);
-    } else {
-      pool.modify(dn, modifications);
-    }
+    modifyRequestHelper.applyModify(pool, dn, modifications, controls);
     
     logger.info("Modified entry {} with {} modifications", dn, modifications.size());
   }
@@ -1197,13 +937,7 @@ public class LdapService {
     LDAPConnectionPool pool = getConnectionPoolForOperation(config, false);
 
     try {
-      if (controls != null && controls.length > 0) {
-        com.unboundid.ldap.sdk.ModifyRequest modifyRequest =
-            new com.unboundid.ldap.sdk.ModifyRequest(dn, modifications, controls);
-        pool.modify(modifyRequest);
-      } else {
-        pool.modify(dn, modifications);
-      }
+      modifyRequestHelper.applyModify(pool, dn, modifications, controls);
 
       logger.info("Bulk-modified entry {} with {} modifications", dn, modifications.size());
     } catch (LDAPException e) {
@@ -1215,13 +949,7 @@ public class LdapService {
           e.getResultCode(), dn);
 
       LDAPConnectionPool freshPool = recreateConnectionPool(config);
-      if (controls != null && controls.length > 0) {
-        com.unboundid.ldap.sdk.ModifyRequest modifyRequest =
-            new com.unboundid.ldap.sdk.ModifyRequest(dn, modifications, controls);
-        freshPool.modify(modifyRequest);
-      } else {
-        freshPool.modify(dn, modifications);
-      }
+      modifyRequestHelper.applyModify(freshPool, dn, modifications, controls);
 
       logger.info("Bulk-modified entry {} after retry", dn);
     }
@@ -1249,9 +977,7 @@ public class LdapService {
       logger.error("Bind test failed for {}: {}", dn, e.getMessage());
       return false;
     } finally {
-      if (connection != null) {
-        connection.close();
-      }
+      connectionCloseHelper.closeQuietly(connection);
     }
   }
   
@@ -1296,13 +1022,10 @@ public class LdapService {
    */
   public BrowseResult browseEntriesWithPage(LdapServerConfig config, String baseDn, 
       int pageNumber, String searchFilter) throws LDAPException {
-    // Validate filter syntax before sending to the server.
-    if (searchFilter != null && !searchFilter.isEmpty()) {
-      Filter.create(searchFilter); // throws LDAPException if malformed
-    }
+    Filter validatedFilter = toValidatedFilter(searchFilter);
     try {
       return executeWithRetry(config, 
-          pool -> browsePage(config, baseDn, pageNumber, pool, searchFilter));
+          pool -> browsePage(config, baseDn, pageNumber, pool, validatedFilter));
     } catch (GeneralSecurityException e) {
       throw new LDAPException(
           ResultCode.LOCAL_ERROR,
@@ -1322,137 +1045,54 @@ public class LdapService {
    * @return browse result
    * @throws LDAPException if browse fails
    */
-  private BrowseResult browsePage(LdapServerConfig config, String baseDn, 
-      int pageNumber, LDAPConnectionPool pool, String searchFilter)
+    private BrowseResult browsePage(LdapServerConfig config, String baseDn, 
+      int pageNumber, LDAPConnectionPool pool, Filter searchFilter)
       throws LDAPException {
     
     // Create a unique key for this search context
-    String searchKey = config.getName() + ":" + baseDn;
+    String searchKey = LdapPagingStateManager.buildSearchKey(config.getName(), baseDn);
     
-    List<LdapEntry> entries = new ArrayList<>();
-    boolean hasNextPage = false;
-    
-    // Get current stored page and cookie for this search context
-    Integer storedPage = currentPages.get(searchKey);
-    byte[] cookie = pagingCookies.get(searchKey);
-    
-    // Handle different navigation scenarios
-    if (pageNumber == 0) {
-      // First page - start fresh
-      pagingCookies.remove(searchKey);
-      currentPages.put(searchKey, 0);
-      cookie = null;
-    } else if (storedPage == null || storedPage != pageNumber - 1) {
-      // We don't have the right cookie position - need to iterate from beginning
-      // This happens when jumping to arbitrary pages or after a refresh
-      return browseEntriesWithPagingIteration(config, baseDn, pageNumber, searchFilter);
+    LdapPagingStateManager.PagingState pagingState =
+        pagingStateManager.preparePageRequest(searchKey, pageNumber);
+    if (pagingState.requiresIteration()) {
+      // We don't have the right cookie position - need to iterate from beginning.
+      // This happens when jumping to arbitrary pages or after a refresh.
+      return browseEntriesWithPagingIteration(config, baseDn, pageNumber,
+          searchFilter != null ? searchFilter.toString() : null);
     }
-    // else: we have the right cookie for sequential navigation (page = storedPage + 1)
+    byte[] cookie = pagingState.cookie();
     
     // Use custom filter if provided, otherwise default
-    String filter = (searchFilter != null && !searchFilter.isEmpty()) 
-        ? searchFilter : "(objectClass=*)";
+    Filter filter = searchFilter != null ? searchFilter : toValidatedFilter(null);
     
-    // Create the paged search control
-    SimplePagedResultsControl pagedControl;
-    if (cookie != null) {
-      pagedControl = new SimplePagedResultsControl(PAGE_SIZE, new ASN1OctetString(cookie), false);
-    } else {
-      pagedControl = new SimplePagedResultsControl(PAGE_SIZE, false);
+    SearchRequest searchRequest =
+        browseRequestFactory.createPagedBrowseRequest(baseDn, filter, PAGE_SIZE, cookie);
+
+    return browseSearchExecutor.executePageSearch(
+      pool,
+      searchRequest,
+      config.getName(),
+      searchKey,
+      pageNumber,
+      PAGE_SIZE,
+      baseDn,
+      this::shouldShowExpanderForEntry,
+      browsePageResultMapper,
+      pagingStateManager);
+  }
+
+  /**
+   * Parses and validates an LDAP filter using the UnboundID SDK.
+   *
+   * @param filter filter string, or null/empty for the default objectClass filter
+   * @return validated filter
+   * @throws LDAPException if the filter syntax is invalid
+   */
+  private Filter toValidatedFilter(String filter) throws LDAPException {
+    if (filter == null || filter.isEmpty()) {
+      return Filter.create("(objectClass=*)");
     }
-    
-    // Create search request with essential attributes only
-    SearchRequest searchRequest = new SearchRequest(
-        baseDn,
-        SearchScope.ONE,
-        filter,
-        "objectClass", "cn", "ou", "dc"
-    );
-    
-    // Add the paged results control
-    searchRequest.addControl(pagedControl);
-    
-    try {
-      SearchResult searchResult = pool.search(searchRequest);
-      
-      // Extract entries from this page
-      for (SearchResultEntry entry : searchResult.getSearchEntries()) {
-        LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
-        
-        for (Attribute attr : entry.getAttributes()) {
-          for (String value : attr.getValues()) {
-            ldapEntry.addAttribute(attr.getName(), value);
-          }
-        }
-        
-        // Determine if entry likely has children
-        ldapEntry.setHasChildren(shouldShowExpanderForEntry(ldapEntry));
-        entries.add(ldapEntry);
-      }
-      
-      // Sort entries by display name
-      entries.sort((a, b) -> a.getDisplayName().compareToIgnoreCase(b.getDisplayName()));
-      
-      // Check for paged results response control to get the cookie for next page
-      SimplePagedResultsControl responseControl = null;
-      for (Control control : searchResult.getResponseControls()) {
-        if (control instanceof SimplePagedResultsControl) {
-          responseControl = (SimplePagedResultsControl) control;
-          break;
-        }
-      }
-      
-      if (responseControl != null) {
-        ASN1OctetString cookieOctetString = responseControl.getCookie();
-        if (cookieOctetString != null && cookieOctetString.getValueLength() > 0) {
-          // Store cookie for next page
-          byte[] nextCookie = cookieOctetString.getValue();
-          pagingCookies.put(searchKey, nextCookie);
-          currentPages.put(searchKey, pageNumber);
-          hasNextPage = true;
-        } else {
-          // No more pages
-          pagingCookies.remove(searchKey);
-          currentPages.remove(searchKey);
-          hasNextPage = false;
-        }
-      }
-      
-      // Calculate pagination info
-      boolean hasPrevPage = pageNumber > 0;
-      
-      return new BrowseResult(entries, hasNextPage, entries.size(), 
-          pageNumber, PAGE_SIZE, hasNextPage, hasPrevPage);
-      
-    } catch (LDAPSearchException e) {
-      // Handle SIZE_LIMIT_EXCEEDED gracefully
-      if (e.getResultCode() == ResultCode.SIZE_LIMIT_EXCEEDED) {
-        // Process partial results from the exception
-        for (SearchResultEntry entry : e.getSearchEntries()) {
-          LdapEntry ldapEntry = new LdapEntry(entry.getDN(), config.getName());
-          
-          for (Attribute attr : entry.getAttributes()) {
-            for (String value : attr.getValues()) {
-              ldapEntry.addAttribute(attr.getName(), value);
-            }
-          }
-          
-          ldapEntry.setHasChildren(shouldShowExpanderForEntry(ldapEntry));
-          entries.add(ldapEntry);
-        }
-        
-        entries.sort((a, b) -> a.getDisplayName().compareToIgnoreCase(b.getDisplayName()));
-        
-        logger.warn("Size limit exceeded for {}, returning {} partial results", 
-            baseDn, entries.size());
-        
-        return new BrowseResult(entries, true, entries.size(), 
-            pageNumber, PAGE_SIZE, true, pageNumber > 0);
-      } else {
-        // Re-throw other types of LDAP exceptions
-        throw e;
-      }
-    }
+    return Filter.create(filter);
   }
   
   /**
@@ -1471,27 +1111,13 @@ public class LdapService {
                                                          String searchFilter)
       throws LDAPException {
     // Clear any existing state and start from page 0
-    String searchKey = config.getName() + ":" + baseDn;
-    pagingCookies.remove(searchKey);
-    currentPages.remove(searchKey);
-    
-    // Iterate through pages until we reach the target page
-    boolean hasMorePages = true;
-    BrowseResult lastResult = null;
-    
-    for (int currentPage = 0; currentPage <= targetPage && hasMorePages; currentPage++) {
-      lastResult = browseEntriesWithPage(config, baseDn, currentPage, searchFilter);
-      
-      if (currentPage == targetPage) {
-        // This is our target page
-        return lastResult;
-      }
-      
-      hasMorePages = lastResult.hasNextPage();
-    }
-    
-    // If we reach here, the target page doesn't exist
-    return new BrowseResult(new ArrayList<>(), false, 0, targetPage, PAGE_SIZE, false, targetPage > 0);
+    String searchKey = LdapPagingStateManager.buildSearchKey(config.getName(), baseDn);
+    pagingStateManager.clearSearchContext(searchKey);
+
+    return pagingIterationHelper.fetchTargetPage(
+        targetPage,
+        PAGE_SIZE,
+        currentPage -> browseEntriesWithPage(config, baseDn, currentPage, searchFilter));
   }
   
   /**
@@ -1500,8 +1126,7 @@ public class LdapService {
    * @param serverId server ID
    */
   public void clearPagingState(String serverId) {
-    pagingCookies.entrySet().removeIf(entry -> entry.getKey().startsWith(serverId + ":"));
-    currentPages.entrySet().removeIf(entry -> entry.getKey().startsWith(serverId + ":"));
+    pagingStateManager.clearServer(serverId);
   }
   
   /**
@@ -1511,9 +1136,8 @@ public class LdapService {
    * @param baseDn base DN
    */
   public void clearPagingState(String serverId, String baseDn) {
-    String searchKey = serverId + ":" + baseDn;
-    pagingCookies.remove(searchKey);
-    currentPages.remove(searchKey);
+    String searchKey = LdapPagingStateManager.buildSearchKey(serverId, baseDn);
+    pagingStateManager.clearSearchContext(searchKey);
   }
   
   /**
@@ -1526,49 +1150,13 @@ public class LdapService {
    * @throws LDAPException if operation fails
    */
   public List<String> getNamingContexts(LdapServerConfig config) throws LDAPException {
-    String cacheKey = config.getName();
-    
-    // First check without locking (fast path for cache hits)
-    List<String> contexts = namingContextsCache.get(cacheKey);
-    if (contexts != null) {
-      logger.debug("Using cached naming contexts for {}", config.getName());
-      return contexts;
-    }
-    
-    // Get or create a lock object for this server
-    Object lock = namingContextsLocks.computeIfAbsent(cacheKey, k -> new Object());
-    
-    // Synchronize on the dedicated lock object
-    synchronized (lock) {
-      // Double-check after acquiring lock
-      contexts = namingContextsCache.get(cacheKey);
-      if (contexts != null) {
-        logger.debug("Using cached naming contexts for {} (after sync)", config.getName());
-        return contexts;
-      }
-      
-      try {
-        // Use cached getRootDSE instead of direct LDAP search
-        RootDSE rootDse = getRootDSE(config);
-        contexts = new ArrayList<>();
-        
-        if (rootDse != null) {
-          String[] namingContexts = rootDse.getAttributeValues("namingContexts");
-          if (namingContexts != null) {
-            contexts = List.of(namingContexts);
-          }
-        }
-        
-        // Cache the result
-        namingContextsCache.put(cacheKey, contexts);
-        logger.debug("Cached naming contexts for {}: {} contexts", config.getName(), contexts.size());
-        return contexts;
-      } catch (GeneralSecurityException e) {
-        throw new LDAPException(
-            com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
-            "SSL/TLS error: " + e.getMessage()
-        );
-      }
+    try {
+      return browseCacheManager.getNamingContexts(config, this::loadNamingContexts);
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(
+          com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage()
+      );
     }
   }
 
@@ -1581,51 +1169,13 @@ public class LdapService {
    * @throws LDAPException if operation fails
    */
   public List<String> getPrivateNamingContexts(LdapServerConfig config) throws LDAPException {
-    String cacheKey = config.getName();
-    
-    // First check without locking (fast path for cache hits)
-    List<String> contexts = privateNamingContextsCache.get(cacheKey);
-    if (contexts != null) {
-      logger.debug("Using cached private naming contexts for {}", config.getName());
-      return contexts;
-    }
-    
-    // Get or create a lock object for this server
-    Object lock = privateNamingContextsLocks.computeIfAbsent(cacheKey, k -> new Object());
-    
-    // Synchronize on the dedicated lock object
-    synchronized (lock) {
-      // Double-check after acquiring lock
-      contexts = privateNamingContextsCache.get(cacheKey);
-      if (contexts != null) {
-        logger.debug("Using cached private naming contexts for {} (after sync)", 
-            config.getName());
-        return contexts;
-      }
-      
-      try {
-        // Use cached getRootDSE instead of direct LDAP search
-        RootDSE rootDse = getRootDSE(config);
-        contexts = new ArrayList<>();
-        
-        if (rootDse != null) {
-          String[] privateContexts = rootDse.getAttributeValues("ds-private-naming-contexts");
-          if (privateContexts != null) {
-            contexts = List.of(privateContexts);
-          }
-        }
-        
-        // Cache the result
-        privateNamingContextsCache.put(cacheKey, contexts);
-        logger.debug("Cached private naming contexts for {}: {} contexts", 
-            config.getName(), contexts.size());
-        return contexts;
-      } catch (GeneralSecurityException e) {
-        throw new LDAPException(
-            com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
-            "SSL/TLS error: " + e.getMessage()
-        );
-      }
+    try {
+      return browseCacheManager.getPrivateNamingContexts(config, this::loadPrivateNamingContexts);
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(
+          com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage()
+      );
     }
   }
   
@@ -1639,64 +1189,7 @@ public class LdapService {
    * @throws LDAPException if operation fails
    */
   public LdapEntry getEntryMinimal(LdapServerConfig config, String dn) throws LDAPException {
-    String cacheKey = config.getName() + ":" + dn;
-    
-    // First check without locking (fast path for cache hits)
-    LdapEntry ldapEntry = entryMinimalCache.getIfPresent(cacheKey);
-    if (ldapEntry != null) {
-      logger.debug("Using cached minimal entry for {}: {}", config.getName(), dn);
-      return ldapEntry;
-    }
-    
-    // Get or create a lock object for this entry
-    Object lock = entryMinimalLocks.computeIfAbsent(cacheKey, k -> new Object());
-    
-    // Synchronize on the dedicated lock object
-    synchronized (lock) {
-      // Double-check after acquiring lock
-      ldapEntry = entryMinimalCache.getIfPresent(cacheKey);
-      if (ldapEntry != null) {
-        logger.debug("Using cached minimal entry for {}: {} (after sync)", config.getName(), dn);
-        return ldapEntry;
-      }
-      
-      try {
-        LDAPConnectionPool pool = getConnectionPool(config);
-        SearchRequest searchRequest = new SearchRequest(
-            dn,
-            SearchScope.BASE,
-            "(objectClass=*)",
-            "objectClass", "cn", "ou", "dc"
-        );
-        
-        SearchResult searchResult = pool.search(searchRequest);
-        if (searchResult.getEntryCount() == 0) {
-          return null;
-        }
-        
-        SearchResultEntry entry = searchResult.getSearchEntries().get(0);
-        ldapEntry = new LdapEntry(entry.getDN(), config.getName());
-        
-        for (Attribute attr : entry.getAttributes()) {
-          for (String value : attr.getValues()) {
-            ldapEntry.addAttribute(attr.getName(), value);
-          }
-        }
-        
-        ldapEntry.setHasChildren(shouldShowExpanderForEntry(ldapEntry));
-        
-        // Cache the result
-        entryMinimalCache.put(cacheKey, ldapEntry);
-        logger.debug("Cached minimal entry for {}: {}", config.getName(), dn);
-        
-        return ldapEntry;
-      } catch (GeneralSecurityException e) {
-        throw new LDAPException(
-            com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
-            "SSL/TLS error: " + e.getMessage()
-        );
-      }
-    }
+    return browseCacheManager.getEntryMinimal(config, dn, this::loadMinimalEntry);
   }
   
   /**
@@ -1705,8 +1198,7 @@ public class LdapService {
    * @param config server configuration
    */
   public void clearPagingState(LdapServerConfig config) {
-    // Placeholder for paging support
-    logger.debug("Clearing paging state for {}", config.getName());
+    clearPagingState(config.getName());
   }
   
   private boolean shouldShowExpanderForEntry(LdapEntry entry) {
@@ -1739,20 +1231,7 @@ public class LdapService {
    * @throws LDAPException if schema retrieval fails
    */
   public Schema getSchema(LdapServerConfig config) throws LDAPException {
-    // Check cache first
-    String cacheKey = config.getName();
-    Schema cachedSchema = schemaCache.get(cacheKey);
-    if (cachedSchema != null) {
-      return cachedSchema;
-    }
-    
-    // Not in cache, fetch from server
-    Schema schema = fetchSchemaFromServer(config);
-    
-    // Cache the schema
-    schemaCache.put(cacheKey, schema);
-    
-    return schema;
+    return schemaCacheManager.getSchema(config, this::fetchSchemaFromServer);
   }
   
   /**
@@ -1789,33 +1268,10 @@ public class LdapService {
       // Try to retrieve schema with Extended Schema Info control for Ping Directory
       try {
         String schemaDN = getSchemaSubentryDN(config);
-        if (schemaDN != null && !schemaDN.isEmpty()) {
-          SearchRequest req = new SearchRequest(
-              schemaDN,
-              SearchScope.BASE,
-              "(objectClass=*)",
-              // Request all common schema attributes
-              "attributeTypes", "objectClasses", "ldapSyntaxes", "matchingRules",
-              "matchingRuleUse", "dITContentRules", "nameForms", "dITStructureRules"
-          );
-          
-          // Add Extended Schema Info control (non-critical) to get X-SCHEMA-FILE
-          // OID: 1.3.6.1.4.1.30221.2.5.12 - Extended Schema Info Request Control
-          req.addControl(new Control("1.3.6.1.4.1.30221.2.5.12", false));
-          
-          SearchResult sr = pool.search(req);
-          if (sr.getEntryCount() > 0) {
-            SearchResultEntry entry = sr.getSearchEntries().get(0);
-            try {
-              // Build Schema directly from the schema subentry with extended info
-              Schema schema = new Schema(entry);
-              logger.info("Retrieved schema with extended info from {}", config.getName());
-              return schema;
-            } catch (Throwable t) {
-              // Fall through to standard retrieval
-              logger.debug("Could not parse schema from subentry, using standard retrieval", t);
-            }
-          }
+        Schema schema = schemaQueryHelper.tryRetrieveWithExtendedControl(pool, schemaDN);
+        if (schema != null) {
+          logger.info("Retrieved schema with extended info from {}", config.getName());
+          return schema;
         }
       } catch (LDAPException e) {
         // Fall back to standard retrieval
@@ -1836,11 +1292,7 @@ public class LdapService {
    * @throws LDAPException if schema retrieval fails
    */
   public Schema refreshSchema(LdapServerConfig config) throws LDAPException {
-    String cacheKey = config.getName();
-    Schema schema = fetchSchemaFromServer(config);
-    schemaCache.put(cacheKey, schema);
-    logger.info("Refreshed schema cache for {}", config.getName());
-    return schema;
+    return schemaCacheManager.refreshSchema(config, this::fetchSchemaFromServer);
   }
   
   /**
@@ -1849,16 +1301,14 @@ public class LdapService {
    * @param serverName server name
    */
   public void clearSchemaCache(String serverName) {
-    schemaCache.remove(serverName);
-    logger.debug("Cleared schema cache for {}", serverName);
+    schemaCacheManager.clearSchemaCache(serverName);
   }
   
   /**
    * Clears all cached schemas.
    */
   public void clearAllSchemaCaches() {
-    schemaCache.clear();
-    logger.debug("Cleared all schema caches");
+    schemaCacheManager.clearAllSchemaCaches();
   }
   
   /**
@@ -1867,34 +1317,54 @@ public class LdapService {
    * @param serverName server name
    */
   public void clearBrowseCache(String serverName) {
-    rootDseCache.remove(serverName);
-    namingContextsCache.remove(serverName);
-    privateNamingContextsCache.remove(serverName);
-    rootDseLocks.remove(serverName);
-    namingContextsLocks.remove(serverName);
-    privateNamingContextsLocks.remove(serverName);
-    
-    // Clear minimal entry cache entries for this server
-    entryMinimalCache.asMap().entrySet().removeIf(
-        entry -> entry.getKey().startsWith(serverName + ":"));
-    entryMinimalLocks.entrySet().removeIf(e -> e.getKey().startsWith(serverName + ":"));
-    
-    logger.debug("Cleared browse caches for {}", serverName);
+    browseCacheManager.clearBrowseCache(serverName);
   }
   
   /**
    * Clears all browse-related caches for all servers.
    */
   public void clearAllBrowseCaches() {
-    rootDseCache.clear();
-    namingContextsCache.clear();
-    privateNamingContextsCache.clear();
-    rootDseLocks.clear();
-    namingContextsLocks.clear();
-    privateNamingContextsLocks.clear();
-    entryMinimalCache.invalidateAll();
-    entryMinimalLocks.clear();
-    logger.debug("Cleared all browse caches");
+    browseCacheManager.clearAllBrowseCaches();
+  }
+
+  private List<String> loadNamingContexts(LdapServerConfig config)
+      throws LDAPException, GeneralSecurityException {
+    RootDSE rootDse = getRootDSE(config);
+    return rootDseHelper.getNamingContexts(rootDse);
+  }
+
+  private List<String> loadPrivateNamingContexts(LdapServerConfig config)
+      throws LDAPException, GeneralSecurityException {
+    RootDSE rootDse = getRootDSE(config);
+    return rootDseHelper.getPrivateNamingContexts(rootDse);
+  }
+
+  private LdapEntry loadMinimalEntry(LdapServerConfig config, String dn) throws LDAPException {
+    try {
+      LDAPConnectionPool pool = getConnectionPool(config);
+      SearchRequest searchRequest = new SearchRequest(
+          dn,
+          SearchScope.BASE,
+          "(objectClass=*)",
+          "objectClass", "cn", "ou", "dc"
+      );
+
+      SearchResult searchResult = pool.search(searchRequest);
+      if (searchResult.getEntryCount() == 0) {
+        return null;
+      }
+
+      SearchResultEntry entry = searchResult.getSearchEntries().get(0);
+      LdapEntry ldapEntry = ldapEntryMapper.mapEntry(entry, config.getName());
+
+      ldapEntry.setHasChildren(shouldShowExpanderForEntry(ldapEntry));
+      return ldapEntry;
+    } catch (GeneralSecurityException e) {
+      throw new LDAPException(
+          com.unboundid.ldap.sdk.ResultCode.LOCAL_ERROR,
+          "SSL/TLS error: " + e.getMessage()
+      );
+    }
   }
 
   /**
@@ -1938,7 +1408,7 @@ public class LdapService {
    */
   public Schema getSchema(String serverId, boolean useExtendedControl) 
       throws LDAPException, GeneralSecurityException {
-    LDAPConnectionPool pool = connectionPools.get(serverId);
+    LDAPConnectionPool pool = connectionPoolStore.getPool(serverId);
     if (pool == null) {
       throw new LDAPException(ResultCode.CONNECT_ERROR, "Not connected to server: " + serverId);
     }
@@ -1948,30 +1418,9 @@ public class LdapService {
         // Get root DSE to find schema DN (uses cache)
         LdapServerConfig config = findConfigByName(serverId);
         RootDSE rootDSE = config != null ? getRootDSE(config) : pool.getRootDSE();
-        String schemaDN = rootDSE != null 
-            ? rootDSE.getAttributeValue("subschemaSubentry") 
-            : "cn=schema";
-        
-        if (schemaDN == null || schemaDN.isEmpty()) {
-          schemaDN = "cn=schema";
-        }
-
-        SearchRequest req = new SearchRequest(
-            schemaDN,
-            SearchScope.BASE,
-            "(objectClass=*)",
-            "attributeTypes", "objectClasses", "ldapSyntaxes", "matchingRules",
-            "matchingRuleUse", "dITContentRules", "nameForms", "dITStructureRules"
-        );
-        
-        // Add Extended Schema Info control (non-critical) to get X-SCHEMA-FILE
-        // OID: 1.3.6.1.4.1.30221.2.5.12 - Extended Schema Info Request Control
-        req.addControl(new Control("1.3.6.1.4.1.30221.2.5.12", false));
-        
-        SearchResult sr = pool.search(req);
-        if (sr.getEntryCount() > 0) {
-          SearchResultEntry entry = sr.getSearchEntries().get(0);
-          Schema schema = new Schema(entry);
+        String schemaDN = rootDseHelper.getSchemaSubentryDn(rootDSE);
+        Schema schema = schemaQueryHelper.tryRetrieveWithExtendedControl(pool, schemaDN);
+        if (schema != null) {
           logger.debug("Retrieved schema with extended control from {}", serverId);
           return schema;
         }
@@ -1993,7 +1442,7 @@ public class LdapService {
    * @return true if connected
    */
   public boolean isConnected(String serverName) {
-    return connectionPools.containsKey(serverName);
+    return connectionPoolStore.hasPool(serverName);
   }
 
   /**
@@ -2027,39 +1476,13 @@ public class LdapService {
    */
   public RootDSE getRootDSE(LdapServerConfig config) 
       throws LDAPException, GeneralSecurityException {
-    String cacheKey = config.getName();
-    
-    // First check without locking (fast path for cache hits)
-    RootDSE rootDse = rootDseCache.get(cacheKey);
-    if (rootDse != null) {
-      logger.debug("Using cached Root DSE for {}", config.getName());
-      return rootDse;
-    }
-    
-    // Get or create a lock object for this server using computeIfAbsent (atomic operation)
-    Object lock = rootDseLocks.computeIfAbsent(cacheKey, k -> new Object());
-    
-    // Synchronize on the dedicated lock object to prevent concurrent fetches
-    synchronized (lock) {
-      // Double-check after acquiring lock
-      rootDse = rootDseCache.get(cacheKey);
-      if (rootDse != null) {
-        logger.debug("Using cached Root DSE for {} (after sync)", config.getName());
-        return rootDse;
-      }
-      
-      // Fetch from LDAP server
-      logger.debug("Fetching Root DSE for {}", config.getName());
-      rootDse = executeWithRetry(config, LDAPConnectionPool::getRootDSE);
-      
-      // Cache the result
-      if (rootDse != null) {
-        rootDseCache.put(cacheKey, rootDse);
-        logger.debug("Cached Root DSE for {}", config.getName());
-      }
-      
-      return rootDse;
-    }
+    return browseCacheManager.getRootDse(config, this::loadRootDse);
+  }
+
+  private RootDSE loadRootDse(LdapServerConfig config)
+      throws LDAPException, GeneralSecurityException {
+    logger.debug("Fetching Root DSE for {}", config.getName());
+    return executeWithRetry(config, LDAPConnectionPool::getRootDSE);
   }
 
   /**
@@ -2072,7 +1495,7 @@ public class LdapService {
    */
   public boolean isControlSupported(String serverId, String controlOid) throws LDAPException {
     try {
-      LDAPConnectionPool pool = connectionPools.get(serverId);
+      LDAPConnectionPool pool = connectionPoolStore.getPool(serverId);
       if (pool == null) {
         return false;
       }
@@ -2080,17 +1503,7 @@ public class LdapService {
       // Use cached getRootDSE() method
       LdapServerConfig config = findConfigByName(serverId);
       RootDSE rootDSE = config != null ? getRootDSE(config) : pool.getRootDSE();
-      if (rootDSE != null) {
-        String[] supportedControls = rootDSE.getAttributeValues("supportedControl");
-        if (supportedControls != null) {
-          for (String control : supportedControls) {
-            if (controlOid.equals(control)) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
+      return rootDseHelper.isControlSupported(rootDSE, controlOid);
     } catch (Exception e) {
       logger.debug("Error checking control support for {}: {}", serverId, e.getMessage());
       return false;
@@ -2123,28 +1536,13 @@ public class LdapService {
       RootDSE rootDSE = getRootDSE(config);
       
       if (rootDSE != null) {
-        // Check for schema modification support indicators
-        String[] supportedFeatures = rootDSE.getAttributeValues("supportedFeatures");
-        if (supportedFeatures != null) {
-          for (String feature : supportedFeatures) {
-            // Check for various schema modification OIDs
-            if ("1.3.6.1.4.1.4203.1.5.1".equals(feature) || // All Operational Attributes
-                "1.3.6.1.4.1.42.2.27.9.5.4".equals(feature)) { // Sun DS Schema Modification
-              return true;
-            }
-          }
+        if (rootDseHelper.supportsSchemaModification(rootDSE)) {
+          return true;
         }
         
         // Check if schema subentry is accessible
         String schemaDN = getSchemaSubentryDN(config);
-        if (schemaDN != null) {
-          try {
-            SearchResult result = pool.search(schemaDN, SearchScope.BASE, "(objectClass=*)", "objectClass");
-            return result != null && result.getSearchEntries().size() > 0;
-          } catch (LDAPException e) {
-            logger.debug("Schema subentry not accessible: {}", e.getMessage());
-          }
-        }
+        return schemaModificationHelper.canAccessSchemaSubentry(pool, schemaDN);
       }
     } catch (Exception e) {
       logger.debug("Error checking schema modification support: {}", e.getMessage());
@@ -2160,30 +1558,10 @@ public class LdapService {
    */
   private String getSchemaSubentryDN(LdapServerConfig config) {
     try {
-      LDAPConnectionPool pool = getConnectionPool(config);
+      getConnectionPool(config);
       // Use cached getRootDSE() method
       RootDSE rootDSE = getRootDSE(config);
-      
-      if (rootDSE != null) {
-        // Try different attributes in order of preference
-        String schemaDN = rootDSE.getAttributeValue("subschemaSubentry");
-        if (schemaDN != null) {
-          return schemaDN;
-        }
-        
-        schemaDN = rootDSE.getAttributeValue("schemaNamingContext");
-        if (schemaDN != null) {
-          return schemaDN;
-        }
-        
-        schemaDN = rootDSE.getAttributeValue("schemaSubentry");
-        if (schemaDN != null) {
-          return schemaDN;
-        }
-      }
-      
-      // Fallback to common default
-      return "cn=schema";
+      return rootDseHelper.getSchemaSubentryDn(rootDSE);
     } catch (Exception e) {
       logger.debug("Error getting schema subentry DN: {}", e.getMessage());
       return "cn=schema";
@@ -2272,9 +1650,12 @@ public class LdapService {
             "Cannot determine schema subentry DN");
       }
 
-      Modification addModification = new Modification(
-          ModificationType.ADD, schemaAttributeName, definition);
-      pool.modify(schemaDN, addModification);
+      schemaModificationHelper.applyAddModification(
+          pool,
+          schemaDN,
+          schemaAttributeName,
+          definition
+      );
       logger.info(logMessage, config.getName());
     } catch (GeneralSecurityException e) {
       throw new LDAPException(ResultCode.LOCAL_ERROR, "SSL/TLS error: " + e.getMessage());
@@ -2302,92 +1683,21 @@ public class LdapService {
       String attributes,
       String effectiveRightsFor,
       int sizeLimit) throws LDAPException {
-    
     try {
       LDAPConnectionPool pool = getConnectionPool(config);
-      
-      // Parse attributes for the search
-      String[] attributeArray;
-      if ("*".equals(attributes.trim())) {
-        attributeArray = new String[] { "*", "aclRights" };
-      } else {
-        List<String> attrList = new ArrayList<>();
-        for (String attr : attributes.split(",")) {
-          attrList.add(attr.trim());
-        }
-        attrList.add("aclRights");
-        attributeArray = attrList.toArray(new String[0]);
-      }
-
-      // Create search request with GetEffectiveRightsRequestControl
-      SearchRequest searchRequest = new SearchRequest(
+      return effectiveRightsSearchHelper.searchEffectiveRights(
+          pool,
           searchBase,
           scope,
-          Filter.create(filter),
-          attributeArray
+          filter,
+          attributes,
+          effectiveRightsFor,
+          sizeLimit
       );
-      
-      searchRequest.setSizeLimit(sizeLimit);
-      searchRequest.addControl(
-          new com.unboundid.ldap.sdk.unboundidds.controls.GetEffectiveRightsRequestControl(
-              effectiveRightsFor));
-      
-      // Execute the search
-      SearchResult searchResult = pool.search(searchRequest);
-      
-      // Check if size limit was exceeded
-      boolean sizeLimitExceeded = (searchResult.getResultCode() == ResultCode.SIZE_LIMIT_EXCEEDED)
-          || (sizeLimit > 0 && searchResult.getEntryCount() >= sizeLimit);
-      
-      return new SearchResultWithEffectiveRights(searchResult.getSearchEntries(), sizeLimitExceeded);
-      
-    } catch (LDAPSearchException e) {
-      // Handle size limit exceeded - return partial results
-      if (e.getResultCode() == ResultCode.SIZE_LIMIT_EXCEEDED) {
-        SearchResult partialResult = e.getSearchResult();
-        if (partialResult != null) {
-          return new SearchResultWithEffectiveRights(partialResult.getSearchEntries(), true);
-        }
-        // If we got SIZE_LIMIT_EXCEEDED but no partial result, return empty with flag
-        return new SearchResultWithEffectiveRights(new ArrayList<>(), true);
-      } else if (e.getResultCode() == ResultCode.UNAVAILABLE_CRITICAL_EXTENSION) {
-        throw new LDAPException(ResultCode.UNAVAILABLE_CRITICAL_EXTENSION,
-            "Server does not support GetEffectiveRightsRequestControl", e);
-      }
-      throw e;
     } catch (GeneralSecurityException e) {
       throw new LDAPException(ResultCode.LOCAL_ERROR,
           "SSL/TLS error: " + e.getMessage());
     }
-  }
-
-  /**
-   * Determines if an attribute is operational based on its schema definition.
-   * An attribute is operational if its usage is directoryOperation, dSAOperation,
-   * or distributedOperation (anything other than userApplications).
-   *
-   * @param attributeName the attribute name to check
-   * @param schema the schema to use for lookup (may be null)
-   * @return true if the attribute is operational according to schema
-   */
-  private boolean isOperationalAttribute(String attributeName, Schema schema) {
-    if (schema == null) {
-      return false;
-    }
-    
-    AttributeTypeDefinition attrDef = schema.getAttributeType(attributeName);
-    if (attrDef == null) {
-      return false;
-    }
-    
-    // Check usage - operational attributes have usage other than "userApplications"
-    if (attrDef.getUsage() != null) {
-      String usage = attrDef.getUsage().getName();
-      // Operational attributes have usage: directoryOperation, dSAOperation, or distributedOperation
-      return !usage.equalsIgnoreCase("userApplications");
-    }
-    
-    return false;
   }
 
   /**

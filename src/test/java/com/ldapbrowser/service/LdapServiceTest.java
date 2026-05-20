@@ -29,12 +29,14 @@ import com.unboundid.ldap.sdk.SearchRequest;
 import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 import com.unboundid.ldap.sdk.SearchScope;
+import com.unboundid.ldap.sdk.unboundidds.controls.GetEffectiveRightsRequestControl;
 import com.unboundid.util.ssl.SSLUtil;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -86,14 +88,14 @@ class LdapServiceTest {
   }
 
   // -------------------------------------------------------------------------
-  // Helper: retrieves the private ConcurrentHashMap<String, LDAPConnectionPool>
-  // field "connectionPools" via reflection so tests can pre-populate it.
+  // Helper: retrieves connectionPools from the internal pool store via
+  // reflection so tests can pre-populate it.
   // -------------------------------------------------------------------------
-  @SuppressWarnings("unchecked")
   private Map<String, LDAPConnectionPool> getConnectionPoolsMap() throws Exception {
-    java.lang.reflect.Field f = LdapService.class.getDeclaredField("connectionPools");
+    java.lang.reflect.Field f = LdapService.class.getDeclaredField("connectionPoolStore");
     f.setAccessible(true);
-    return (Map<String, LDAPConnectionPool>) f.get(service);
+    LdapConnectionPoolStore store = (LdapConnectionPoolStore) f.get(service);
+    return store.connectionPools();
   }
 
   // -------------------------------------------------------------------------
@@ -508,11 +510,9 @@ class LdapServiceTest {
       // Null filter must not reach Filter.create() — the null guard fires first.
       // Filter.create(null) would throw NPE; we verify the guard prevents that.
       assertThatCode(() -> {
-        // Replicate the guard from browseEntriesWithPage
         String searchFilter = null;
-        if (searchFilter != null && !searchFilter.isEmpty()) {
-          Filter.create(searchFilter);
-        }
+        Filter filter = searchFilter == null ? null : Filter.create(searchFilter);
+        assertThat(filter).isNull();
       }).doesNotThrowAnyException();
     }
 
@@ -526,6 +526,117 @@ class LdapServiceTest {
       assertThatThrownBy(() ->
           service.browseEntriesWithPage(cfg, "dc=example,dc=com", 0, "(cn=test"))
           .isInstanceOf(LDAPException.class);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // searchEffectiveRights – request shape and public error mapping
+  // -------------------------------------------------------------------------
+  @Nested
+  @DisplayName("searchEffectiveRights")
+  class SearchEffectiveRights {
+
+    @Test
+    @DisplayName("builds request with aclRights, size limit, and effective-rights control")
+    void buildsExpectedSearchRequest() throws Exception {
+      LdapService spy = spy(service);
+      LDAPConnectionPool pool = mock(LDAPConnectionPool.class);
+      doReturn(pool).when(spy).getConnectionPool(any());
+
+      SearchResult result = mock(SearchResult.class);
+      when(result.getResultCode()).thenReturn(ResultCode.SUCCESS);
+      when(result.getEntryCount()).thenReturn(1);
+      when(result.getSearchEntries()).thenReturn(List.of(
+          new SearchResultEntry(
+              "uid=user.1,ou=people,dc=example,dc=com",
+              new Attribute[] {new Attribute("cn", "user.1")}
+          )
+      ));
+      when(pool.search(any(SearchRequest.class))).thenReturn(result);
+
+      LdapServerConfig cfg = config("EffectiveRights");
+      LdapService.SearchResultWithEffectiveRights searchResult = spy.searchEffectiveRights(
+          cfg,
+          "dc=example,dc=com",
+          SearchScope.SUB,
+          "(objectClass=person)",
+          "cn, sn",
+          "dn:uid=reader,ou=people,dc=example,dc=com",
+          25
+      );
+
+      org.mockito.ArgumentCaptor<SearchRequest> requestCaptor =
+          org.mockito.ArgumentCaptor.forClass(SearchRequest.class);
+      verify(pool).search(requestCaptor.capture());
+
+      SearchRequest captured = requestCaptor.getValue();
+      assertThat(captured.getAttributes()).containsExactly("cn", "sn", "aclRights");
+      assertThat(captured.getSizeLimit()).isEqualTo(25);
+      assertThat(Arrays.stream(captured.getControls())
+          .anyMatch(c -> c instanceof GetEffectiveRightsRequestControl)).isTrue();
+
+      assertThat(searchResult.getEntries()).hasSize(1);
+      assertThat(searchResult.isSizeLimitExceeded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("size limit exceeded returns partial results with exceeded flag")
+    void sizeLimitExceededReturnsPartialResults() throws Exception {
+      LdapService spy = spy(service);
+      LDAPConnectionPool pool = mock(LDAPConnectionPool.class);
+      doReturn(pool).when(spy).getConnectionPool(any());
+
+      SearchResult partial = mock(SearchResult.class);
+      when(partial.getSearchEntries()).thenReturn(List.of(
+          new SearchResultEntry(
+              "uid=user.partial,ou=people,dc=example,dc=com",
+              new Attribute[] {new Attribute("cn", "partial")}
+          )
+      ));
+
+      LDAPSearchException sizeLimit = mock(LDAPSearchException.class);
+      when(sizeLimit.getResultCode()).thenReturn(ResultCode.SIZE_LIMIT_EXCEEDED);
+      when(sizeLimit.getSearchResult()).thenReturn(partial);
+      when(pool.search(any(SearchRequest.class))).thenThrow(sizeLimit);
+
+      LdapServerConfig cfg = config("EffectiveRightsPartial");
+      LdapService.SearchResultWithEffectiveRights searchResult = spy.searchEffectiveRights(
+          cfg,
+          "dc=example,dc=com",
+          SearchScope.SUB,
+          "(objectClass=person)",
+          "*",
+          "dn:uid=reader,ou=people,dc=example,dc=com",
+          1
+      );
+
+      assertThat(searchResult.getEntries()).hasSize(1);
+      assertThat(searchResult.isSizeLimitExceeded()).isTrue();
+    }
+
+    @Test
+    @DisplayName("unsupported effective-rights control returns friendly LDAPException")
+    void unsupportedControlTranslated() throws Exception {
+      LdapService spy = spy(service);
+      LDAPConnectionPool pool = mock(LDAPConnectionPool.class);
+      doReturn(pool).when(spy).getConnectionPool(any());
+
+      LDAPSearchException unsupported = mock(LDAPSearchException.class);
+      when(unsupported.getResultCode()).thenReturn(ResultCode.UNAVAILABLE_CRITICAL_EXTENSION);
+      when(pool.search(any(SearchRequest.class))).thenThrow(unsupported);
+
+      LdapServerConfig cfg = config("EffectiveRightsUnsupported");
+      assertThatThrownBy(() -> spy.searchEffectiveRights(
+          cfg,
+          "dc=example,dc=com",
+          SearchScope.SUB,
+          "(objectClass=person)",
+          "cn",
+          "dn:uid=reader,ou=people,dc=example,dc=com",
+          0
+      ))
+          .isInstanceOf(LDAPException.class)
+          .hasMessageContaining("GetEffectiveRightsRequestControl");
     }
   }
 }

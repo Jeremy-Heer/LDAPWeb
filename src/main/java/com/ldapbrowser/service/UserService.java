@@ -180,7 +180,7 @@ public class UserService implements UserDetailsService {
 
   /**
    * Creates the users file with a default admin account when it does not
-   * exist. The generated password is logged to the console exactly once.
+    * exist. The generated password is written to a local owner-only bootstrap file.
    */
   private void ensureUsersFileExists() {
     if (Files.exists(usersPath)) {
@@ -198,11 +198,24 @@ public class UserService implements UserDetailsService {
           new UserRecord("admin", hash, List.of("ADMIN")));
       saveUsers(new ArrayList<>(defaultUsers));
 
+      Path credentialsPath = parent != null
+          ? parent.resolve("initial-admin-password.txt")
+          : Path.of("initial-admin-password.txt");
+      Files.writeString(
+          credentialsPath,
+          "Initial admin account created\n"
+              + "Username: admin\n"
+              + "Password: "
+              + generatedPassword
+              + "\n"
+              + "Change this password after first login.\n");
+      setRestrictivePermissions(credentialsPath);
+
       logger.info("============================================");
       logger.info("  Initial admin account created");
       logger.info("  Username : admin");
-      logger.info("  Password : {}", generatedPassword);
-      logger.info("  Change this password after first login!");
+      logger.info("  Initial password written to: {}", credentialsPath);
+      logger.info("  Change this password after first login.");
       logger.info("============================================");
     } catch (IOException e) {
       logger.error("Failed to create default users file", e);

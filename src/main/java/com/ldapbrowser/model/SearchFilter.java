@@ -1,6 +1,7 @@
 package com.ldapbrowser.model;
 
 import com.unboundid.ldap.sdk.Filter;
+import com.unboundid.ldap.sdk.LDAPException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -129,5 +130,15 @@ public class SearchFilter {
       sb.append(")");
       return sb.toString();
     }
+  }
+
+  /**
+   * Converts this filter to an UnboundID filter after validating the syntax.
+   *
+   * @return validated LDAP filter
+   * @throws LDAPException if the generated filter syntax is invalid
+   */
+  public Filter toFilter() throws LDAPException {
+    return Filter.create(toLdapFilter());
   }
 }

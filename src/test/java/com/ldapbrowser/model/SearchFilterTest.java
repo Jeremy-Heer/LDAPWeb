@@ -3,6 +3,8 @@ package com.ldapbrowser.model;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ldapbrowser.model.SearchFilter.Operator;
+import com.unboundid.ldap.sdk.Filter;
+import com.unboundid.ldap.sdk.LDAPException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -65,6 +67,14 @@ class SearchFilterTest {
       SearchFilter f =
           new SearchFilter(Operator.SUBSTRING, "cn", "admin");
       assertThat(f.toLdapFilter()).isEqualTo("(cn=*admin*)");
+    }
+
+    @Test
+    @DisplayName("toFilter parses a valid generated filter via UnboundID")
+    void toFilterParsesValidFilter() throws LDAPException {
+      SearchFilter f = new SearchFilter(Operator.EQUAL, "cn", "admin");
+      Filter filter = f.toFilter();
+      assertThat(filter.toString()).contains("cn=admin");
     }
   }
 
