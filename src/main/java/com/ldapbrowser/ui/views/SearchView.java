@@ -13,6 +13,7 @@ import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
 import com.ldapbrowser.ui.components.EntryEditor;
 import com.ldapbrowser.ui.utils.NotificationHelper;
+import com.unboundid.ldap.sdk.DN;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.accordion.Accordion;
@@ -40,12 +41,17 @@ import com.vaadin.flow.router.QueryParameters;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
 import org.slf4j.LoggerFactory;
@@ -62,6 +68,19 @@ import org.slf4j.LoggerFactory;
 public class SearchView extends VerticalLayout implements BeforeEnterObserver {
 
   private static final Logger logger = LoggerFactory.getLogger(SearchView.class);
+  private static final String PARAM_BASE_MODE = "baseMode";
+  private static final String PARAM_SEARCH_BASE = "searchBase";
+  private static final String PARAM_FILTER = "filter";
+  private static final String PARAM_SCOPE = "scope";
+  private static final String PARAM_RETURN_ATTRIBUTES = "returnAttributes";
+  private static final String PARAM_SIZE_LIMIT = "sizeLimit";
+  private static final String PARAM_TIME_LIMIT = "timeLimit";
+  private static final String PARAM_TEMPLATE = "template";
+  private static final String PARAM_TEMPLATE_SEARCH = "templateSearch";
+  private static final String PARAM_SELECTED_SERVERS = "selectedServers";
+  private static final String BASE_MODE_DEFAULT = "DEFAULT";
+  private static final String BASE_MODE_CUSTOM = "CUSTOM";
+  private static final String LDAP_TEMPLATE_NAME = "LDAP";
 
   private final ConfigurationService configService;
   private final LdapService ldapService;
@@ -322,8 +341,13 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     templateSearchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     templateSearchButton.setVisible(false);
 
+    Button bookmarkLinkButton = new Button(VaadinIcon.LINK.create());
+    bookmarkLinkButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    bookmarkLinkButton.setTooltipText("Copy shareable bookmark URL");
+    bookmarkLinkButton.addClickListener(e -> copyBookmarkLink());
+
     topRow.add(searchTemplateCombo, ldapSearchLayout, searchButton,
-      templateSearchField, templateSearchButton);
+      templateSearchField, templateSearchButton, bookmarkLinkButton);
     topRow.setFlexGrow(1, ldapSearchLayout);
     topRow.setFlexGrow(1, templateSearchField);
 
@@ -777,17 +801,343 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
 
   @Override
   public void beforeEnter(BeforeEnterEvent event) {
-    // Check for searchBase query parameter
     QueryParameters queryParameters = event.getLocation().getQueryParameters();
     Map<String, List<String>> params = queryParameters.getParameters();
-    
-    if (params.containsKey("searchBase")) {
-      List<String> searchBaseValues = params.get("searchBase");
-      if (searchBaseValues != null && !searchBaseValues.isEmpty()) {
-        String searchBase = searchBaseValues.get(0);
-        setSearchBase(searchBase);
+
+    if (params == null || params.isEmpty()) {
+      return;
+    }
+
+    applyBookmarkedSearchState(params);
+  }
+
+  private void applyBookmarkedSearchState(Map<String, List<String>> params) {
+    applyBaseMode(params);
+    applySearchBase(params);
+
+    String templateName = getFirstParam(params, PARAM_TEMPLATE);
+    if (templateName != null && !templateName.isEmpty()
+        && !LDAP_TEMPLATE_NAME.equalsIgnoreCase(templateName)) {
+      applyTemplateState(templateName, params);
+    } else {
+      applyLdapState(params);
+    }
+
+    validateBookmarkedCustomBase();
+    checkBookmarkedServerHint(params);
+  }
+
+  private void applyBaseMode(Map<String, List<String>> params) {
+    String requestedMode = getFirstParam(params, PARAM_BASE_MODE);
+    String bookmarkedBase = getFirstParam(params, PARAM_SEARCH_BASE);
+
+    if (requestedMode == null || requestedMode.isEmpty()) {
+      if (bookmarkedBase != null && !bookmarkedBase.isBlank()) {
+        baseTypeRadio.setValue("Custom Base");
+      }
+      return;
+    }
+
+    if (BASE_MODE_CUSTOM.equalsIgnoreCase(requestedMode)
+        || "Custom Base".equalsIgnoreCase(requestedMode)) {
+      baseTypeRadio.setValue("Custom Base");
+      return;
+    }
+
+    if (BASE_MODE_DEFAULT.equalsIgnoreCase(requestedMode)
+        || "Default Base".equalsIgnoreCase(requestedMode)) {
+      baseTypeRadio.setValue("Default Base");
+      return;
+    }
+
+    NotificationHelper.showWarning(
+        "Bookmark has unknown baseMode '" + requestedMode + "'. Using current form setting.");
+  }
+
+  private void applySearchBase(Map<String, List<String>> params) {
+    String searchBase = getFirstParam(params, PARAM_SEARCH_BASE);
+    if (searchBase != null && !searchBase.isBlank()) {
+      setSearchBase(searchBase.trim());
+    }
+  }
+
+  private void applyTemplateState(String templateName,
+      Map<String, List<String>> params) {
+    EntryTemplate matchingTemplate = searchTemplates.stream()
+        .filter(t -> t.getName().equals(templateName))
+        .findFirst()
+        .orElse(null);
+
+    if (matchingTemplate == null) {
+      NotificationHelper.showWarning(
+          "Bookmarked template '" + templateName + "' is unavailable. Switched to LDAP mode.");
+      searchTemplateCombo.setValue(LDAP_TEMPLATE_NAME);
+      applyLdapState(params);
+      return;
+    }
+
+    searchTemplateCombo.setValue(matchingTemplate.getName());
+    String templateSearch = getFirstParam(params, PARAM_TEMPLATE_SEARCH);
+    if (templateSearch != null) {
+      templateSearchField.setValue(templateSearch);
+    }
+  }
+
+  private void applyLdapState(Map<String, List<String>> params) {
+    searchTemplateCombo.setValue(LDAP_TEMPLATE_NAME);
+
+    String filter = getFirstParam(params, PARAM_FILTER);
+    if (filter != null) {
+      filterField.setValue(filter);
+    }
+
+    String scopeParam = getFirstParam(params, PARAM_SCOPE);
+    SearchScope parsedScope = parseSearchScope(scopeParam);
+    if (parsedScope != null) {
+      scopeSelect.setValue(parsedScope);
+    }
+
+    List<String> returnAttrs = parseCsvList(
+        getFirstParam(params, PARAM_RETURN_ATTRIBUTES));
+    if (!returnAttrs.isEmpty()) {
+      mergeReturnAttributeChoices(returnAttrs);
+      returnAttributesField.setValue(new LinkedHashSet<>(returnAttrs));
+    }
+
+    Integer sizeLimit = parseNonNegativeInteger(
+        getFirstParam(params, PARAM_SIZE_LIMIT), PARAM_SIZE_LIMIT);
+    if (sizeLimit != null) {
+      sizeLimitField.setValue(sizeLimit);
+    }
+
+    Integer timeLimit = parseNonNegativeInteger(
+        getFirstParam(params, PARAM_TIME_LIMIT), PARAM_TIME_LIMIT);
+    if (timeLimit != null) {
+      timeLimitField.setValue(timeLimit);
+    }
+  }
+
+  private void mergeReturnAttributeChoices(List<String> returnAttrs) {
+    List<String> existingItems = returnAttributesField.getListDataView()
+        .getItems().toList();
+    Set<String> merged = new LinkedHashSet<>(existingItems);
+    merged.addAll(returnAttrs);
+    returnAttributesField.setItems(merged);
+  }
+
+  private void validateBookmarkedCustomBase() {
+    if (!"Custom Base".equals(baseTypeRadio.getValue())) {
+      return;
+    }
+
+    String baseDn = searchBaseField.getValue();
+    if (baseDn == null || baseDn.isBlank()) {
+      NotificationHelper.showWarning(
+          "Bookmark uses custom base mode, but searchBase is missing.");
+      return;
+    }
+
+    String trimmedBaseDn = baseDn.trim();
+    if (!DN.isValidDN(trimmedBaseDn)) {
+      NotificationHelper.showWarning(
+          "Bookmarked custom base DN is invalid: " + trimmedBaseDn);
+      return;
+    }
+
+    Set<String> selectedServers = MainLayout.getSelectedServers();
+    if (selectedServers == null || selectedServers.isEmpty()) {
+      NotificationHelper.showWarning(
+          "Bookmark includes custom base DN, but no servers are selected.");
+      return;
+    }
+
+    List<LdapServerConfig> serverConfigs = configService.loadConfigurations();
+    boolean readableOnAnyServer = false;
+    for (String serverName : selectedServers) {
+      LdapServerConfig serverConfig = serverConfigs.stream()
+          .filter(c -> serverName.equals(c.getName()))
+          .findFirst()
+          .orElse(null);
+      if (serverConfig == null) {
+        continue;
+      }
+
+      try {
+        ldapService.getEntryMinimal(serverConfig, trimmedBaseDn);
+        readableOnAnyServer = true;
+        break;
+      } catch (Exception e) {
+        logger.debug("Bookmarked base DN '{}' not readable on server '{}': {}",
+            trimmedBaseDn, serverName, e.getMessage());
       }
     }
+
+    if (!readableOnAnyServer) {
+      NotificationHelper.showWarning(
+          "Bookmarked custom base DN is not readable on selected servers. "
+              + "Adjust the base DN or server selection.");
+    }
+  }
+
+  private void checkBookmarkedServerHint(Map<String, List<String>> params) {
+    List<String> hintedServers = parseCsvList(
+        getFirstParam(params, PARAM_SELECTED_SERVERS));
+    if (hintedServers.isEmpty()) {
+      return;
+    }
+
+    Set<String> currentServers = MainLayout.getSelectedServers();
+    Set<String> hintedSet = new LinkedHashSet<>(hintedServers);
+    if (currentServers == null || currentServers.isEmpty()) {
+      NotificationHelper.showWarning(
+          "Bookmark suggests servers " + String.join(", ", hintedServers)
+              + ", but no servers are currently selected.");
+      return;
+    }
+
+    if (!currentServers.equals(hintedSet)) {
+      NotificationHelper.showWarning(
+          "Bookmark was created for servers " + String.join(", ", hintedServers)
+              + ". Current selection is " + String.join(", ", currentServers) + ".");
+    }
+  }
+
+  private SearchScope parseSearchScope(String scopeParam) {
+    if (scopeParam == null || scopeParam.isBlank()) {
+      return null;
+    }
+
+    String normalized = scopeParam.trim().toUpperCase();
+    if ("BASE".equals(normalized)) {
+      return SearchScope.BASE;
+    }
+    if ("ONE".equals(normalized) || "ONE_LEVEL".equals(normalized)) {
+      return SearchScope.ONE;
+    }
+    if ("SUB".equals(normalized) || "SUBTREE".equals(normalized)) {
+      return SearchScope.SUB;
+    }
+    if ("SUBORDINATE".equals(normalized)
+        || "SUBORDINATE_SUBTREE".equals(normalized)) {
+      return SearchScope.SUBORDINATE_SUBTREE;
+    }
+
+    NotificationHelper.showWarning(
+        "Bookmark has unknown scope '" + scopeParam + "'. Using current scope.");
+    return null;
+  }
+
+  private Integer parseNonNegativeInteger(String value, String fieldName) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+
+    try {
+      int parsed = Integer.parseInt(value.trim());
+      if (parsed < 0) {
+        NotificationHelper.showWarning(
+            "Bookmark has negative " + fieldName + ". Using current value.");
+        return null;
+      }
+      return parsed;
+    } catch (NumberFormatException e) {
+      NotificationHelper.showWarning(
+          "Bookmark has invalid " + fieldName + " value '" + value + "'.");
+      return null;
+    }
+  }
+
+  private List<String> parseCsvList(String csvValue) {
+    if (csvValue == null || csvValue.isBlank()) {
+      return new ArrayList<>();
+    }
+
+    return java.util.Arrays.stream(csvValue.split(","))
+        .map(String::trim)
+        .filter(s -> !s.isEmpty())
+        .distinct()
+        .collect(Collectors.toCollection(ArrayList::new));
+  }
+
+  private String getFirstParam(Map<String, List<String>> params, String key) {
+    List<String> values = params.get(key);
+    if (values == null || values.isEmpty()) {
+      return null;
+    }
+    return values.get(0);
+  }
+
+  private void copyBookmarkLink() {
+    String relativeUrl = buildBookmarkRelativeUrl();
+    getUI().ifPresent(ui -> ui.getPage().executeJs(
+        "navigator.clipboard.writeText(window.location.origin + $0)",
+        relativeUrl));
+    NotificationHelper.showSuccess("Bookmark link copied to clipboard");
+  }
+
+  private String buildBookmarkRelativeUrl() {
+    Map<String, String> params = new LinkedHashMap<>();
+    String selectedTemplate = searchTemplateCombo.getValue();
+
+    if (selectedTemplate != null && !LDAP_TEMPLATE_NAME.equals(selectedTemplate)) {
+      params.put(PARAM_TEMPLATE, selectedTemplate);
+      if (templateSearchField.getValue() != null
+          && !templateSearchField.getValue().isBlank()) {
+        params.put(PARAM_TEMPLATE_SEARCH, templateSearchField.getValue().trim());
+      }
+    } else {
+      if ("Custom Base".equals(baseTypeRadio.getValue())) {
+        params.put(PARAM_BASE_MODE, BASE_MODE_CUSTOM);
+        if (searchBaseField.getValue() != null && !searchBaseField.getValue().isBlank()) {
+          params.put(PARAM_SEARCH_BASE, searchBaseField.getValue().trim());
+        }
+      }
+
+      if (filterField.getValue() != null && !filterField.getValue().isBlank()) {
+        params.put(PARAM_FILTER, filterField.getValue().trim());
+      }
+
+      if (scopeSelect.getValue() != null && scopeSelect.getValue() != SearchScope.SUB) {
+        params.put(PARAM_SCOPE, scopeSelect.getValue().toString());
+      }
+
+      Set<String> selectedAttrs = returnAttributesField.getSelectedItems();
+      if (selectedAttrs != null && !selectedAttrs.isEmpty()) {
+        if (!(selectedAttrs.size() == 1 && selectedAttrs.contains("cn"))) {
+          params.put(PARAM_RETURN_ATTRIBUTES,
+              String.join(",", new ArrayList<>(selectedAttrs)));
+        }
+      }
+
+      Integer sizeLimit = sizeLimitField.getValue();
+      if (sizeLimit != null && sizeLimit > 0) {
+        params.put(PARAM_SIZE_LIMIT, String.valueOf(sizeLimit));
+      }
+
+      Integer timeLimit = timeLimitField.getValue();
+      if (timeLimit != null && timeLimit > 0) {
+        params.put(PARAM_TIME_LIMIT, String.valueOf(timeLimit));
+      }
+    }
+
+    Set<String> selectedServers = MainLayout.getSelectedServers();
+    if (selectedServers != null && !selectedServers.isEmpty()) {
+      params.put(PARAM_SELECTED_SERVERS,
+          String.join(",", new ArrayList<>(selectedServers)));
+    }
+
+    if (params.isEmpty()) {
+      return "/search";
+    }
+
+    String query = params.entrySet().stream()
+        .map(entry -> entry.getKey() + "=" + encodeQueryValue(entry.getValue()))
+        .collect(Collectors.joining("&"));
+    return "/search?" + query;
+  }
+
+  private String encodeQueryValue(String value) {
+    return URLEncoder.encode(value, StandardCharsets.UTF_8);
   }
 
   /**

@@ -1,5 +1,20 @@
 # LDAP Web Browser
 
+## v0.89 - Add Search Search Bookmarks.
+- Search view includes a new 'Copy Bookmark' action to generate and copy a shareable URL.
+- URL bookmarks now support both search modes:
+  - LDAP form mode (base mode, search base, filter, scope, return attributes,
+    size limit, and time limit)
+  - Template mode (template name and template search text)
+- Opening a bookmark pre-fills the form state and does not auto-run searches.
+- Bookmarks include selected server names as a non-binding hint.
+  - If current selected servers differ, a warning is shown and search can continue.
+- Custom base bookmark validation improvements:
+  - Warns when custom base DN is missing or invalid
+  - Warns when the custom base DN is not readable on selected servers
+  - Keeps the form populated for manual adjustment
+- Backward compatibility retained for existing searchBase deep links.
+
 ## v0.88 - Search View layout improvement
 - LDAP Template changed to be more compact and similar to non ldap templates.
   - LDAP Template UI Component Location

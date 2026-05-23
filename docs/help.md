@@ -31,6 +31,7 @@ The Search view allows you to query LDAP directories using flexible search crite
 - Advanced search builder for complex queries
 - Search scope selection (base, one level, subtree)
 - Multi-server search across selected servers
+- URL bookmark support for saving and sharing search form state
 - View and edit search results
 - Export search results
 - Delete entries directly from results
@@ -42,6 +43,15 @@ The Search view allows you to query LDAP directories using flexible search crite
 - Select the search scope
 - Click 'Search' to execute the query
 - Click on a result entry to view or edit its attributes
+
+### URL Bookmarks:
+- Click 'Copy Bookmark' in the Search form to copy a shareable URL
+- Bookmarks support both LDAP form mode and template-search mode
+- Opening a bookmark pre-fills the form only; it does not auto-run
+- Bookmark URLs can include a non-binding selected server hint
+- If server selection differs, a warning is shown and you can still run the search
+- If a bookmarked custom base DN is invalid or not readable on selected servers,
+  a warning is shown and you can adjust the form before searching
 
 ## Browse
 
