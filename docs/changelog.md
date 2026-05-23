@@ -1,5 +1,23 @@
 # LDAP Web Browser
 
+## v0.88 - Search View layout improvement
+- LDAP Template changed to be more compact and similar to non ldap templates.
+  - LDAP Template UI Component Location
+    - 'Search Template' label and dropdown (no change)
+    - To the right of the 'Search Template' dropdown, a 'Search' lablel and field.
+    - To the right of the 'Search' field, the Filter Builder icon
+    - To the right of the Filter Builder icon a 'Search' button.
+    - On the next row under the Template / Search Field / Filter Icon / Search Button
+      - 'Advanced Search' Accordion that is collopesed by default and only displayed when 'LDAP' template is 
+        selected.
+    - Advanced Search Accordion content displayed when Accordion is selected
+      - 'Search Base' lable, field and 'Default Base'/'Custom Base' radio under Search Base. - Same previous funcitonality moved to new locaiton
+      - Scope lable and dropdown - Same previous funcitonality moved to new locaiton
+      - Return Attributes lable and multi-select combo box 9 Same previous funcitonality moved to new location
+      - Size Limit lable and field - Same previous funcitonality moved to new locaiton
+      - Time Limit lable and field - Same previous funcitonality moved to new locaiton
+
+
 ## v0.87 - Code_Quality items
 
 ## v0.86 - Access View Enhancements

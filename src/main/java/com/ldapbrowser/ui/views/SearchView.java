@@ -15,6 +15,7 @@ import com.ldapbrowser.ui.components.EntryEditor;
 import com.ldapbrowser.ui.utils.NotificationHelper;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
+import com.vaadin.flow.component.accordion.Accordion;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.ModalityMode;
@@ -143,12 +144,6 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     formLayout.setPadding(true);
     formLayout.setSpacing(true);
 
-    // First row: compact search fields
-    HorizontalLayout compactSearchRow = new HorizontalLayout();
-    compactSearchRow.setWidthFull();
-    compactSearchRow.setDefaultVerticalComponentAlignment(Alignment.START);
-    compactSearchRow.setSpacing(true);
-
     // Search Base with Browse button
     HorizontalLayout searchBaseLayout = new HorizontalLayout();
     searchBaseLayout.setWidthFull();
@@ -181,14 +176,14 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
       browseButton.setEnabled(isCustom);
     });
 
-    // Filter field with Filter Builder button
-    HorizontalLayout filterLayout = new HorizontalLayout();
-    filterLayout.setWidthFull();
-    filterLayout.setDefaultVerticalComponentAlignment(Alignment.END);
-    filterLayout.setSpacing(false);
-    filterLayout.getStyle().set("gap", "var(--lumo-space-xs)");
-    
-    filterField = new TextField("Filter");
+    // LDAP search field with Filter Builder button
+    HorizontalLayout ldapSearchLayout = new HorizontalLayout();
+    ldapSearchLayout.setWidthFull();
+    ldapSearchLayout.setDefaultVerticalComponentAlignment(Alignment.END);
+    ldapSearchLayout.setSpacing(false);
+    ldapSearchLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+
+    filterField = new TextField("Search");
     filterField.setWidthFull();
     filterField.setPlaceholder("(objectClass=*)");
 
@@ -197,8 +192,12 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     filterBuilderButton.setTooltipText("Filter Builder");
     filterBuilderButton.addClickListener(e -> showFilterBuilderDialog());
 
-    filterLayout.add(filterField, filterBuilderButton);
-    filterLayout.expand(filterField);
+    ldapSearchLayout.add(filterField, filterBuilderButton);
+    ldapSearchLayout.expand(filterField);
+
+    searchButton = new Button("Search", VaadinIcon.SEARCH.create());
+    searchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    searchButton.addClickListener(e -> performSearch());
 
     scopeSelect = new Select<>();
     scopeSelect.setLabel("Scope");
@@ -268,20 +267,6 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     searchBaseWithRadio.setPadding(false);
     searchBaseWithRadio.setSpacing(false);
 
-    // Add search button under filter, aligned with radio group
-    searchButton = new Button("Search", VaadinIcon.SEARCH.create());
-    searchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-    searchButton.addClickListener(e -> performSearch());
-
-    HorizontalLayout searchButtonRow = new HorizontalLayout(searchButton);
-    searchButtonRow.setDefaultVerticalComponentAlignment(Alignment.CENTER);
-    searchButtonRow.setSpacing(false);
-
-    VerticalLayout filterWithButton = new VerticalLayout(
-        filterLayout, searchButtonRow);
-    filterWithButton.setPadding(false);
-    filterWithButton.setSpacing(false);
-
     sizeLimitField = new IntegerField("Size Limit");
     sizeLimitField.setMin(0);
     sizeLimitField.setValue(0);
@@ -294,32 +279,36 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     timeLimitField.setWidth("110px");
     timeLimitField.setTooltipText("Search time limit in seconds (0 = no limit)");
 
-    compactSearchRow.add(searchBaseWithRadio, filterWithButton,
-        scopeSelect, returnAttributesField, sizeLimitField, timeLimitField);
-    compactSearchRow.setFlexGrow(2, searchBaseWithRadio);
-    compactSearchRow.setFlexGrow(2, filterWithButton);
-    compactSearchRow.setFlexGrow(0, scopeSelect);
-    compactSearchRow.setFlexGrow(1, returnAttributesField);
-    compactSearchRow.setFlexGrow(0, sizeLimitField);
-    compactSearchRow.setFlexGrow(0, timeLimitField);
+    // Advanced LDAP controls in accordion
+    HorizontalLayout advancedRow = new HorizontalLayout();
+    advancedRow.setWidthFull();
+    advancedRow.setDefaultVerticalComponentAlignment(Alignment.START);
+    advancedRow.setSpacing(true);
+    advancedRow.add(searchBaseWithRadio, scopeSelect,
+      returnAttributesField, sizeLimitField, timeLimitField);
+    advancedRow.setFlexGrow(2, searchBaseWithRadio);
+    advancedRow.setFlexGrow(0, scopeSelect);
+    advancedRow.setFlexGrow(1, returnAttributesField);
+    advancedRow.setFlexGrow(0, sizeLimitField);
+    advancedRow.setFlexGrow(0, timeLimitField);
 
-    // Template search row
-    HorizontalLayout templateRow = new HorizontalLayout();
-    templateRow.setWidthFull();
-    templateRow.setDefaultVerticalComponentAlignment(Alignment.END);
-    templateRow.setSpacing(true);
+    VerticalLayout advancedContent = new VerticalLayout(advancedRow);
+    advancedContent.setPadding(false);
+    advancedContent.setSpacing(false);
+
+    Accordion advancedSearchAccordion = new Accordion();
+    advancedSearchAccordion.setWidthFull();
+    advancedSearchAccordion.add("Advanced Search", advancedContent);
+
+    // Top row shared by LDAP and template search
+    HorizontalLayout topRow = new HorizontalLayout();
+    topRow.setWidthFull();
+    topRow.setDefaultVerticalComponentAlignment(Alignment.END);
+    topRow.setSpacing(true);
 
     searchTemplateCombo = new ComboBox<>("Search Template");
     searchTemplateCombo.setWidth("200px");
     searchTemplateCombo.setClearButtonVisible(true);
-    loadSearchTemplates();
-    searchTemplateCombo.addValueChangeListener(e -> {
-      boolean isTemplate = e.getValue() != null
-          && !"LDAP".equals(e.getValue());
-      templateSearchField.setVisible(isTemplate);
-      compactSearchRow.setVisible(!isTemplate);
-      templateSearchButton.setVisible(isTemplate);
-    });
 
     templateSearchField = new TextField("Search");
     templateSearchField.setWidthFull();
@@ -333,11 +322,23 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     templateSearchButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     templateSearchButton.setVisible(false);
 
-    templateRow.add(searchTemplateCombo, templateSearchField,
-        templateSearchButton);
-    templateRow.setFlexGrow(1, templateSearchField);
+    topRow.add(searchTemplateCombo, ldapSearchLayout, searchButton,
+      templateSearchField, templateSearchButton);
+    topRow.setFlexGrow(1, ldapSearchLayout);
+    topRow.setFlexGrow(1, templateSearchField);
 
-    formLayout.add(templateRow, compactSearchRow);
+    loadSearchTemplates();
+    searchTemplateCombo.addValueChangeListener(e -> {
+      boolean isTemplate = e.getValue() != null
+        && !"LDAP".equals(e.getValue());
+      ldapSearchLayout.setVisible(!isTemplate);
+      searchButton.setVisible(!isTemplate);
+      advancedSearchAccordion.setVisible(!isTemplate);
+      templateSearchField.setVisible(isTemplate);
+      templateSearchButton.setVisible(isTemplate);
+    });
+
+    formLayout.add(topRow, advancedSearchAccordion);
     return formLayout;
   }
 
