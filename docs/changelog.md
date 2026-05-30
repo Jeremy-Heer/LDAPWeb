@@ -1,5 +1,7 @@
 # LDAP Web Browser
 
+## v0.90 - OAuth mTLS - Claim Role Mappings
+
 ## v0.89 - Add Search Search Bookmarks.
 - Search view includes a new 'Copy Bookmark' action to generate and copy a shareable URL.
 - URL bookmarks now support both search modes:

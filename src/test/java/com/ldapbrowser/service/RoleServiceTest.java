@@ -103,4 +103,34 @@ class RoleServiceTest {
         .containsExactlyInAnyOrder("ServerA", "ServerB");
     assertThat(admin.getAllowedViews()).containsAll(Role.ALL_VIEWS);
   }
+
+  @Test
+  @DisplayName("role-name union helpers match roles case-insensitively")
+  void roleNameUnionHelpersCaseInsensitive() throws Exception {
+    ConfigurationService configurationService = mock(ConfigurationService.class);
+    when(configurationService.loadConfigurations()).thenReturn(List.of());
+
+    RoleService roleService = new RoleService(
+        tempDir.toString(),
+        configurationService,
+        Optional.empty(),
+        "oauth");
+
+    Role admin = new Role("Admin");
+    admin.setAllowedViews(List.of("Server", "Settings"));
+    admin.setServerMembers(List.of("ServerA"));
+
+    Role viewer = new Role("Viewer");
+    viewer.setAllowedViews(List.of("Browse", "Search"));
+    viewer.setServerMembers(List.of("ServerB"));
+
+    roleService.saveRoles(List.of(admin, viewer));
+
+    assertThat(roleService.getAllowedViewsForRoleNames(
+        Set.of("admin", "VIEWER", "missing")))
+            .containsExactly("Server", "Settings", "Browse", "Search");
+    assertThat(roleService.getAllowedServersForRoleNames(
+        Set.of("admin", "VIEWER", "missing")))
+            .containsExactly("ServerA", "ServerB");
+  }
 }

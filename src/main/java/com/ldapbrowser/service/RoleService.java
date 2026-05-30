@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -289,6 +290,57 @@ public class RoleService {
     return getRolesForUser(username).stream()
         .flatMap(r -> r.getServerMembers().stream())
         .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  /**
+   * Returns the union of allowed views across the provided role names.
+   * Role names are matched case-insensitively against roles.json names.
+   *
+   * @param roleNames app role names
+   * @return set of allowed view labels
+   */
+  public Set<String> getAllowedViewsForRoleNames(Set<String> roleNames) {
+    return getRolesForNames(roleNames).stream()
+        .flatMap(r -> r.getAllowedViews().stream())
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  /**
+   * Returns the union of server names across the provided role names.
+   * Role names are matched case-insensitively against roles.json names.
+   *
+   * @param roleNames app role names
+   * @return set of allowed server names
+   */
+  public Set<String> getAllowedServersForRoleNames(Set<String> roleNames) {
+    return getRolesForNames(roleNames).stream()
+        .flatMap(r -> r.getServerMembers().stream())
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  private List<Role> getRolesForNames(Set<String> roleNames) {
+    if (roleNames == null || roleNames.isEmpty()) {
+      return List.of();
+    }
+    Set<String> normalizedRoleNames = roleNames.stream()
+        .filter(name -> name != null && !name.isBlank())
+        .map(this::normalizeRoleName)
+        .collect(Collectors.toSet());
+
+    if (normalizedRoleNames.isEmpty()) {
+      return List.of();
+    }
+
+    return loadRoles().stream()
+        .filter(role -> normalizedRoleNames.contains(
+            normalizeRoleName(role.getName())))
+        .toList();
+  }
+
+  private String normalizeRoleName(String roleName) {
+    return roleName == null
+        ? ""
+        : roleName.trim().toUpperCase(Locale.ROOT);
   }
 
   /**

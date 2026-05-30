@@ -127,7 +127,7 @@ Delegates authentication to any OIDC-compliant identity provider
 (Keycloak, Entra ID, Okta, Auth0, etc.).
 
 ```bash
-java -jar target/ldap-browser-0.65.jar \
+java -jar target/ldap-browser-0.90.jar \
   --spring.profiles.active=oauth
 ```
 
@@ -139,6 +139,33 @@ spring.security.oauth2.client.registration.oidc.client-id=your-client-id
 spring.security.oauth2.client.registration.oidc.client-secret=your-secret
 spring.security.oauth2.client.provider.oidc.issuer-uri=https://idp.example.com/realms/myrealm
 ```
+
+#### Create The OAuth Client
+
+When creating the client in your identity provider, use these
+provider-neutral settings as the baseline:
+
+| Item | Value / Guidance |
+|------|------------------|
+| Application type | Web application / confidential client |
+| OAuth flow | Authorization Code |
+| OIDC support | Required |
+| Client authentication | `client_secret_basic` by default; use `tls_client_auth` or `self_signed_tls_client_auth` only when enabling OAuth mTLS |
+| Redirect URI | `http://localhost:8081/login/oauth2/code/oidc` |
+| Redirect URI pattern | `http(s)://<host>:<port>/login/oauth2/code/oidc` |
+| Local development callback | `http://localhost:8081/login/oauth2/code/oidc` |
+| Production callback | Match your deployed base URL, for example `https://ldapbrowser.example.com/login/oauth2/code/oidc` |
+| Requested scopes | `openid,profile,email` |
+| Issuer / authority URL | Use the provider issuer URL exposed by OIDC discovery |
+
+Notes:
+
+- The redirect URI path is fixed by the current Spring Security registration id: `oidc`.
+- If you change host, port, reverse proxy, or TLS termination, register the externally visible callback URI with the provider.
+- If your provider requires exact URI matching, every distinct environment needs its own registered redirect URI.
+- Dynamic role resolution expects the configured role claim to contain values that match role names in `roles.json`.
+- If OAuth mTLS is enabled, configure the provider client for certificate-based client authentication and set `spring.security.oauth2.client.registration.oidc.client-authentication-method` accordingly.
+- For a provider-specific setup walkthrough, see [docs/keycloak-setup.md](docs/keycloak-setup.md).
 
 #### Example: Google Sign-In
 
@@ -157,7 +184,7 @@ To use Google for authentication, you first need to create OAuth 2.0 credentials
     Run the application with the `oauth` profile and your Google credentials. The issuer URI for Google is `https://accounts.google.com`.
 
     ```bash
-    java -jar target/ldap-browser-0.65.jar \
+      java -jar target/ldap-browser-0.90.jar \
       --spring.profiles.active=oauth \
       --spring.security.oauth2.client.registration.oidc.client-id=YOUR_GOOGLE_CLIENT_ID \
       --spring.security.oauth2.client.registration.oidc.client-secret=YOUR_GOOGLE_CLIENT_SECRET \
@@ -168,21 +195,53 @@ To use Google for authentication, you first need to create OAuth 2.0 credentials
 
 #### Role Mapping
 
-OIDC tokens are mapped to application roles using these properties:
+OIDC token claim values are matched to role names defined in
+`roles.json` (case-insensitive exact match). Matched roles are then
+used to determine allowed views and servers.
+
+Role mapping is configured with these properties:
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `ldapbrowser.oauth.role-claim` | `roles` | Token claim containing role names |
-| `ldapbrowser.oauth.admin-role` | `ldap-admin` | Claim value mapped to ADMIN |
-| `ldapbrowser.oauth.viewer-role` | `ldap-viewer` | Claim value mapped to VIEWER |
-| `ldapbrowser.oauth.default-role` | `VIEWER` | Fallback when no matching claim is found |
+| `ldapbrowser.oauth.role-claim` | `roles` | Claim path containing role values (dot-path supported) |
+| `ldapbrowser.oauth.admin-role` | `ldap-admin` | Legacy property (not used for dynamic OAuth authorization) |
+| `ldapbrowser.oauth.viewer-role` | `ldap-viewer` | Legacy property (not used for dynamic OAuth authorization) |
+| `ldapbrowser.oauth.default-role` | `DENY` | Fallback role name in `roles.json` or `DENY` |
 
-Nested claims are supported (e.g., `realm_access.roles` for Keycloak).
+Nested claims are supported (e.g., `realm_access.roles`).
+
+For a provider-specific setup walkthrough, see [docs/keycloak-setup.md](docs/keycloak-setup.md).
+
+When fallback is `DENY`, users with no matching role claim are authenticated
+but receive no app role, so navigation access is denied by default.
+
+#### OAuth mTLS (Token Endpoint)
+
+The OAuth profile supports optional mTLS for token endpoint calls
+(authorization code exchange).
+
+```properties
+ldapbrowser.oauth.mtls.enabled=true
+ldapbrowser.oauth.mtls.ssl-bundle=oidc-mtls
+spring.security.oauth2.client.registration.oidc.client-authentication-method=tls_client_auth
+
+spring.ssl.bundle.jks.oidc-mtls.keystore.location=file:/path/to/oidc-client.p12
+spring.ssl.bundle.jks.oidc-mtls.keystore.password=changeit
+spring.ssl.bundle.jks.oidc-mtls.keystore.type=PKCS12
+```
+
+Use `self_signed_tls_client_auth` instead of `tls_client_auth` when your
+provider requires self-signed client certificate mode.
 
 ### Roles and View Access
 
-When authentication is enabled (`local` or `oauth`), views are
-protected by role:
+When authentication is enabled, views are controlled by application roles.
+
+- In `local` mode, users receive access based on role membership in `roles.json`.
+- In `oauth` mode, OIDC claim values are resolved to `roles.json` role names,
+  and access is the union of those roles.
+
+Default role templates commonly use ADMIN/VIEWER conventions:
 
 | View | Required Role |
 |------|---------------|

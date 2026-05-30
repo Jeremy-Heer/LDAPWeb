@@ -265,3 +265,64 @@ users in the Users tab. Each role specifies:
 
 - Which navigation views are accessible (Browse, Search, Create, Schema, etc.)
 - Which LDAP server configurations the role is allowed to connect to
+
+## OAuth / OIDC Authentication
+
+When running with `ldapbrowser.auth.mode=oauth`, users authenticate with an OpenID Connect
+identity provider.
+
+### Create The OAuth Client
+
+When creating the client in your identity provider, use these baseline settings:
+
+- **Application type** - Web application / confidential client
+- **OAuth flow** - Authorization Code
+- **OIDC support** - Required
+- **Client authentication** - `client_secret_basic` by default; use `tls_client_auth`
+  or `self_signed_tls_client_auth` only when enabling OAuth mTLS
+- **Redirect URI** - `http://localhost:8081/login/oauth2/code/oidc`
+- **Redirect URI pattern** - `http(s)://<host>:<port>/login/oauth2/code/oidc`
+- **Requested scopes** - `openid,profile,email`
+- **Issuer URL** - Use the provider issuer / authority URL exposed by OIDC discovery
+
+Notes:
+
+- The redirect URI path is fixed by the current Spring Security registration id: `oidc`.
+- If you change host, port, reverse proxy, or TLS termination, register the externally
+  visible callback URI with the provider.
+- If your provider requires exact URI matching, register a separate redirect URI for each
+  environment.
+- Dynamic role resolution expects the configured role claim to contain values that match role
+  names in `roles.json`.
+- If OAuth mTLS is enabled, configure the provider client for certificate-based client
+  authentication and set
+  `spring.security.oauth2.client.registration.oidc.client-authentication-method`
+  accordingly.
+- For a provider-specific setup walkthrough, see [docs/keycloak-setup.md](../../docs/keycloak-setup.md).
+
+### Claim-Based Role Mapping
+
+OAuth access is controlled by matching token claim values to role names in
+`roles.json` (case-insensitive exact match).
+
+For a provider-specific setup walkthrough, see [docs/keycloak-setup.md](../../docs/keycloak-setup.md).
+
+Relevant properties:
+
+- `ldapbrowser.oauth.role-claim` - claim path containing role values (dot-path supported)
+- `ldapbrowser.oauth.default-role` - fallback role name from `roles.json`, or `DENY`
+- `ldapbrowser.oauth.admin-role` / `ldapbrowser.oauth.viewer-role` - legacy properties,
+  not used for dynamic OAuth authorization
+
+With `default-role=DENY`, users without a matching claim value are authenticated but denied
+application access by default.
+
+### OAuth mTLS (Token Endpoint)
+
+Optional mTLS can be enabled for OAuth token endpoint calls:
+
+- `ldapbrowser.oauth.mtls.enabled=true`
+- `ldapbrowser.oauth.mtls.ssl-bundle=<bundle-name>`
+- `spring.security.oauth2.client.registration.oidc.client-authentication-method=tls_client_auth`
+
+Use `self_signed_tls_client_auth` when required by your identity provider.

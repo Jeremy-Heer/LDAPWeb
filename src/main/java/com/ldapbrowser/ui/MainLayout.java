@@ -38,6 +38,7 @@ import com.vaadin.flow.component.UI;
 import com.vaadin.flow.server.VaadinSession;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
@@ -60,6 +62,7 @@ public class MainLayout extends AppLayout
     implements com.vaadin.flow.router.BeforeEnterObserver {
 
   private static final Logger logger = LoggerFactory.getLogger(MainLayout.class);
+  private static final String APP_ROLE_PREFIX = "APP_ROLE:";
   private static final String SELECTED_SERVERS_KEY = "selectedServers";
 
   /** Maps route paths to drawer view labels for role filtering. */
@@ -566,6 +569,21 @@ public class MainLayout extends AppLayout
     return principal.toString();
   }
 
+  private Set<String> getOauthRoleNames() {
+    Authentication auth = SecurityContextHolder.getContext()
+        .getAuthentication();
+    if (auth == null || auth.getAuthorities() == null) {
+      return Set.of();
+    }
+
+    return auth.getAuthorities().stream()
+        .map(GrantedAuthority::getAuthority)
+        .filter(a -> a != null && a.startsWith(APP_ROLE_PREFIX))
+        .map(a -> a.substring(APP_ROLE_PREFIX.length()))
+        .filter(name -> !name.isBlank())
+        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+  }
+
   /**
    * Returns the set of view labels the current user may access.
    * When auth is disabled every view is allowed.
@@ -573,6 +591,9 @@ public class MainLayout extends AppLayout
   private Set<String> getAllowedViews() {
     if ("none".equalsIgnoreCase(authMode)) {
       return new HashSet<>(com.ldapbrowser.model.Role.ALL_VIEWS);
+    }
+    if ("oauth".equalsIgnoreCase(authMode)) {
+      return roleService.getAllowedViewsForRoleNames(getOauthRoleNames());
     }
     return roleService.getAllowedViewsForUser(getCurrentUsername());
   }
@@ -583,14 +604,21 @@ public class MainLayout extends AppLayout
    */
   private Set<String> getAllowedServers() {
     if ("none".equalsIgnoreCase(authMode)) {
-      List<LdapServerConfig> configs = configService.loadConfigurations();
-      Set<String> all = new HashSet<>();
-      for (LdapServerConfig c : configs) {
-        all.add(c.getName());
-      }
-      return all;
+      return getAllServerNames();
+    }
+    if ("oauth".equalsIgnoreCase(authMode)) {
+      return roleService.getAllowedServersForRoleNames(getOauthRoleNames());
     }
     return roleService.getAllowedServersForUser(getCurrentUsername());
+  }
+
+  private Set<String> getAllServerNames() {
+    List<LdapServerConfig> configs = configService.loadConfigurations();
+    Set<String> all = new HashSet<>();
+    for (LdapServerConfig c : configs) {
+      all.add(c.getName());
+    }
+    return all;
   }
 
   @Override

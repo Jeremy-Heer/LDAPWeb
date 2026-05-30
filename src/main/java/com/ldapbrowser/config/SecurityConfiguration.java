@@ -5,12 +5,16 @@ import com.vaadin.flow.spring.security.VaadinSecurityConfigurer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 
@@ -54,11 +58,17 @@ public class SecurityConfiguration {
    * @throws Exception if configuration fails
    */
   @Bean
-  public SecurityFilterChain securityFilterChain(HttpSecurity http)
+  public SecurityFilterChain securityFilterChain(
+      HttpSecurity http,
+      ObjectProvider<GrantedAuthoritiesMapper> authoritiesMapperProvider,
+      ObjectProvider<OAuth2AccessTokenResponseClient<
+          OAuth2AuthorizationCodeGrantRequest>> tokenResponseClientProvider)
       throws Exception {
     switch (authMode) {
       case "local" -> configureLocal(http);
-      case "oauth" -> configureOauth(http);
+      case "oauth" -> configureOauth(http,
+          authoritiesMapperProvider.getIfAvailable(),
+          tokenResponseClientProvider.getIfAvailable());
       default -> configureNone(http);
     }
     return http.build();
@@ -98,20 +108,30 @@ public class SecurityConfiguration {
    *
    * <p>The default success URL is {@code /browse} rather than the
    * root ({@code /}) because the root route ({@code ServerView})
-   * requires {@code ADMIN}.  OIDC users whose token lacks the
-   * configured admin-role claim receive only {@code VIEWER} and
-   * would be denied access to the root, resulting in a Vaadin
-   * "Could not navigate to ''" error.  {@code /browse} is
-   * accessible to both {@code ADMIN} and {@code VIEWER}.
+    * requires elevated privileges. Routing OAuth users to
+    * {@code /browse} avoids an immediate access error and allows both
+    * mapped admin and viewer users to land on an accessible page.
    */
-  private void configureOauth(HttpSecurity http) throws Exception {
+  private void configureOauth(HttpSecurity http,
+      GrantedAuthoritiesMapper authoritiesMapper,
+      OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest>
+        tokenResponseClient) throws Exception {
     logger.info("Auth mode: oauth - OIDC login enabled");
     http.with(VaadinSecurityConfigurer.vaadin(),
         vaadin -> vaadin
             .oauth2LoginPage("/login")
             .loginView(LoginView.class));
-    http.oauth2Login(oauth -> oauth
-        .defaultSuccessUrl("/browse", true));
+    http.oauth2Login(oauth -> {
+      oauth.defaultSuccessUrl("/browse", true);
+      if (authoritiesMapper != null) {
+        oauth.userInfoEndpoint(userInfo ->
+            userInfo.userAuthoritiesMapper(authoritiesMapper));
+      }
+      if (tokenResponseClient != null) {
+        oauth.tokenEndpoint(token ->
+            token.accessTokenResponseClient(tokenResponseClient));
+      }
+    });
     http.logout(logout -> logout
         .logoutRequestMatcher(PathPatternRequestMatcher.pathPattern("/logout"))
         .logoutSuccessUrl("/login"));
