@@ -186,7 +186,10 @@ class SearchViewBookmarkTest {
     TemplateService templateService = mock(TemplateService.class);
 
     EntryTemplate template = new EntryTemplate("People");
-    template.setSearchSection(new SearchTemplateSection());
+      SearchTemplateSection searchSection = new SearchTemplateSection();
+      searchSection.setSearchPlaceholder("Enter a user ID");
+      searchSection.setSearchTooltip("User ID or login name");
+      template.setSearchSection(searchSection);
     when(templateService.loadTemplates()).thenReturn(List.of(template));
 
     try (MockedStatic<MainLayout> mainLayout = mockStatic(MainLayout.class)) {
@@ -221,7 +224,10 @@ class SearchViewBookmarkTest {
     TemplateService templateService = mock(TemplateService.class);
 
     EntryTemplate template = new EntryTemplate("People");
-    template.setSearchSection(new SearchTemplateSection());
+    SearchTemplateSection searchSection = new SearchTemplateSection();
+    searchSection.setSearchPlaceholder("Enter a user ID");
+    searchSection.setSearchTooltip("User ID or login name");
+    template.setSearchSection(searchSection);
     when(templateService.loadTemplates()).thenReturn(List.of(template));
 
     try (MockedStatic<MainLayout> mainLayout = mockStatic(MainLayout.class)) {
@@ -244,6 +250,7 @@ class SearchViewBookmarkTest {
       assertThat(templateCombo.getValue()).isEqualTo("People");
       assertThat(templateSearch.getValue()).isEqualTo("jane");
       assertThat(templateSearch.isVisible()).isTrue();
+        assertThat(templateSearch.getPlaceholder()).isEqualTo("Enter a user ID");
     }
   }
 

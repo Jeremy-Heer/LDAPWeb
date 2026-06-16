@@ -1,5 +1,12 @@
 # LDAP Web Browser
 
+## v0.92 - Search Template Enhancement
+- For search templates (Settings view, templates tab, edit template dialog, Search tab),
+  add a field in the template to store the place holder / default value  and tool tip.
+  - This field would be used when the template is selected for the Search field.
+  - For example "Enter a user ID" would inform the user that a user ID is expected in the search field when
+    they select the template in the Search view.
+
 ## v0.91 - Search View Enhancements
 - On the Search View, add an export icon to the right of the existing copy link icon
 - When selected, an export dialog would be displayed

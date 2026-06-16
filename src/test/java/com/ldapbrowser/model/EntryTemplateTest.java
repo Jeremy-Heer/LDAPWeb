@@ -101,6 +101,8 @@ class EntryTemplateTest {
           "(&(objectClass=inetOrgPerson)(uid={SEARCH}))");
       search.setBaseFilter("(objectClass=organizationalUnit)");
       search.setScope("sub");
+        search.setSearchPlaceholder("Enter a user ID");
+        search.setSearchTooltip("User ID or login name");
       search.setReturnAttributes(List.of("cn", "uid", "mail"));
       template.setSearchSection(search);
 
@@ -142,6 +144,10 @@ class EntryTemplateTest {
           .contains("{SEARCH}");
       assertThat(loaded.getSearchSection().getScope())
           .isEqualTo("sub");
+        assertThat(loaded.getSearchSection().getSearchPlaceholder())
+          .isEqualTo("Enter a user ID");
+        assertThat(loaded.getSearchSection().getSearchTooltip())
+          .isEqualTo("User ID or login name");
       assertThat(loaded.getSearchSection().getReturnAttributes())
           .containsExactly("cn", "uid", "mail");
     }
@@ -287,6 +293,20 @@ class EntryTemplateTest {
       SearchTemplateSection search = new SearchTemplateSection();
       assertThat(search.getBaseDn()).isNull();
     }
+
+    @Test
+    @DisplayName("default search placeholder is null")
+    void defaultSearchPlaceholder() {
+      SearchTemplateSection search = new SearchTemplateSection();
+      assertThat(search.getSearchPlaceholder()).isNull();
+    }
+
+    @Test
+    @DisplayName("default search tooltip is null")
+    void defaultSearchTooltip() {
+      SearchTemplateSection search = new SearchTemplateSection();
+      assertThat(search.getSearchTooltip()).isNull();
+    }
   }
 
   // ---- CreateTemplateSection baseDn -----------------------------------
@@ -349,6 +369,8 @@ class EntryTemplateTest {
       SearchTemplateSection ss = new SearchTemplateSection();
       ss.setSearchFilter("(uid={SEARCH})");
       ss.setBaseDn("kerberos");
+      ss.setSearchPlaceholder("Enter a user ID");
+      ss.setSearchTooltip("User ID or login name");
       ss.setScope("sub");
       template.setSearchSection(ss);
 
@@ -357,6 +379,10 @@ class EntryTemplateTest {
           mapper.readValue(json, EntryTemplate.class);
       assertThat(loaded.getSearchSection().getBaseDn())
           .isEqualTo("kerberos");
+        assertThat(loaded.getSearchSection().getSearchPlaceholder())
+          .isEqualTo("Enter a user ID");
+        assertThat(loaded.getSearchSection().getSearchTooltip())
+          .isEqualTo("User ID or login name");
     }
   }
 }

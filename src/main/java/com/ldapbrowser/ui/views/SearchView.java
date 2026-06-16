@@ -367,6 +367,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
       advancedSearchAccordion.setVisible(!isTemplate);
       templateSearchField.setVisible(isTemplate);
       templateSearchButton.setVisible(isTemplate);
+      updateTemplateSearchHints();
     });
 
     formLayout.add(topRow, advancedSearchAccordion);
@@ -955,6 +956,7 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     searchTemplateCombo.setValue(matchingTemplate.getName());
+    updateTemplateSearchHints();
     String templateSearch = getFirstParam(params, PARAM_TEMPLATE_SEARCH);
     if (templateSearch != null) {
       templateSearchField.setValue(templateSearch);
@@ -1285,6 +1287,28 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     }
     searchTemplateCombo.setItems(items);
     searchTemplateCombo.setValue("LDAP");
+    updateTemplateSearchHints();
+  }
+
+  private void updateTemplateSearchHints() {
+    EntryTemplate selectedTemplate = getSelectedSearchTemplate();
+    if (selectedTemplate == null || selectedTemplate.getSearchSection() == null) {
+      templateSearchField.setPlaceholder(
+          "Enter search text (used in template filter)");
+      templateSearchField.setTooltipText(null);
+      return;
+    }
+
+    SearchTemplateSection section = selectedTemplate.getSearchSection();
+    String placeholder = section.getSearchPlaceholder();
+    String tooltip = section.getSearchTooltip();
+
+    templateSearchField.setPlaceholder(
+        placeholder != null && !placeholder.isBlank()
+            ? placeholder
+            : "Enter search text (used in template filter)");
+    templateSearchField.setTooltipText(
+        tooltip != null && !tooltip.isBlank() ? tooltip : null);
   }
 
   /**

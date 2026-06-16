@@ -287,6 +287,8 @@ public class EntryTemplate implements Serializable {
     private String baseFilter;
     private String baseDn;
     private String scope = "sub";
+    private String searchPlaceholder;
+    private String searchTooltip;
     private List<String> returnAttributes = new ArrayList<>();
 
     /**
@@ -325,6 +327,22 @@ public class EntryTemplate implements Serializable {
 
     public void setScope(String scope) {
       this.scope = scope;
+    }
+
+    public String getSearchPlaceholder() {
+      return searchPlaceholder;
+    }
+
+    public void setSearchPlaceholder(String searchPlaceholder) {
+      this.searchPlaceholder = searchPlaceholder;
+    }
+
+    public String getSearchTooltip() {
+      return searchTooltip;
+    }
+
+    public void setSearchTooltip(String searchTooltip) {
+      this.searchTooltip = searchTooltip;
     }
 
     public List<String> getReturnAttributes() {

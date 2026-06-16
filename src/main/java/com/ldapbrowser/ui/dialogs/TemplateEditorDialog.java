@@ -60,6 +60,8 @@ public class TemplateEditorDialog extends Dialog {
   private TextField searchFilterField;
   private TextField baseFilterField;
   private TextField searchBaseDnField;
+  private TextField searchPlaceholderField;
+  private TextField searchTooltipField;
   private Select<String> scopeSelect;
   private TextField returnAttributesField;
 
@@ -82,7 +84,11 @@ public class TemplateEditorDialog extends Dialog {
       EntryTemplate template) {
     this.templateService = templateService;
     this.isEdit = template != null;
-    this.originalName = isEdit ? template.getName() : null;
+    if (template != null) {
+      this.originalName = template.getName();
+    } else {
+      this.originalName = null;
+    }
 
     setHeaderTitle(isEdit ? "Edit Template" : "New Template");
     setWidth("900px");
@@ -257,6 +263,18 @@ public class TemplateEditorDialog extends Dialog {
     searchBaseDnField.setHelperText(
         "'Default' or a named base from server config");
 
+    searchPlaceholderField = new TextField("Search Field Placeholder");
+    searchPlaceholderField.setWidthFull();
+    searchPlaceholderField.setPlaceholder("Enter a user ID");
+    searchPlaceholderField.setHelperText(
+      "Shown in the Search view when this template is selected");
+
+    searchTooltipField = new TextField("Search Field Tooltip");
+    searchTooltipField.setWidthFull();
+    searchTooltipField.setPlaceholder("User ID or login name");
+    searchTooltipField.setHelperText(
+      "Tooltip text shown for the Search field in the Search view");
+
     scopeSelect = new Select<>();
     scopeSelect.setLabel("Scope");
     scopeSelect.setItems("base", "one", "sub");
@@ -274,17 +292,22 @@ public class TemplateEditorDialog extends Dialog {
       searchFilterField.setEnabled(enabled);
       baseFilterField.setEnabled(enabled);
       searchBaseDnField.setEnabled(enabled);
+      searchPlaceholderField.setEnabled(enabled);
+      searchTooltipField.setEnabled(enabled);
       scopeSelect.setEnabled(enabled);
       returnAttributesField.setEnabled(enabled);
     });
     searchFilterField.setEnabled(false);
     baseFilterField.setEnabled(false);
     searchBaseDnField.setEnabled(false);
+    searchPlaceholderField.setEnabled(false);
+    searchTooltipField.setEnabled(false);
     scopeSelect.setEnabled(false);
     returnAttributesField.setEnabled(false);
 
     layout.add(searchEnabled, searchFilterField, baseFilterField,
-        searchBaseDnField, scopeSelect, returnAttributesField);
+        searchBaseDnField, searchPlaceholderField, searchTooltipField,
+        scopeSelect, returnAttributesField);
     return layout;
   }
 
@@ -460,6 +483,11 @@ public class TemplateEditorDialog extends Dialog {
           ss.getBaseFilter() != null ? ss.getBaseFilter() : "");
       searchBaseDnField.setValue(
           ss.getBaseDn() != null ? ss.getBaseDn() : "");
+        searchPlaceholderField.setValue(
+          ss.getSearchPlaceholder() != null
+            ? ss.getSearchPlaceholder() : "");
+        searchTooltipField.setValue(
+          ss.getSearchTooltip() != null ? ss.getSearchTooltip() : "");
       scopeSelect.setValue(
           ss.getScope() != null ? ss.getScope() : "sub");
       returnAttributesField.setValue(
@@ -531,6 +559,8 @@ public class TemplateEditorDialog extends Dialog {
       ss.setSearchFilter(searchFilterField.getValue());
       ss.setBaseFilter(baseFilterField.getValue());
       ss.setBaseDn(searchBaseDnField.getValue());
+      ss.setSearchPlaceholder(searchPlaceholderField.getValue());
+      ss.setSearchTooltip(searchTooltipField.getValue());
       ss.setScope(scopeSelect.getValue());
       String retAttrs = returnAttributesField.getValue();
       if (retAttrs != null && !retAttrs.trim().isEmpty()) {
