@@ -25,7 +25,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -66,23 +65,29 @@ class SearchViewBookmarkTest {
       SearchView view = new SearchView(configService, ldapService,
           truststoreService, templateService);
 
-      getField(view, "baseTypeRadio", RadioButtonGroup.class)
-          .setValue("Custom Base");
-      getField(view, "searchBaseField", TextField.class)
-          .setValue("dc=example,dc=com");
-      getField(view, "filterField", TextField.class)
-          .setValue("(uid=jdoe)");
-      getField(view, "scopeSelect", Select.class)
-          .setValue(SearchScope.ONE);
+        RadioButtonGroup<String> baseTypeRadio = getField(view,
+          "baseTypeRadio", RadioButtonGroup.class);
+        baseTypeRadio.setValue("Custom Base");
+        TextField searchBaseField = getField(view,
+          "searchBaseField", TextField.class);
+        searchBaseField.setValue("dc=example,dc=com");
+        TextField filterField = getField(view,
+          "filterField", TextField.class);
+        filterField.setValue("(uid=jdoe)");
+        Select<SearchScope> scopeSelect = getField(view,
+          "scopeSelect", Select.class);
+        scopeSelect.setValue(SearchScope.ONE);
 
       MultiSelectComboBox<String> attrs =
           getField(view, "returnAttributesField", MultiSelectComboBox.class);
       attrs.setValue(new LinkedHashSet<>(List.of("uid", "mail")));
 
-      getField(view, "sizeLimitField", IntegerField.class)
-          .setValue(25);
-      getField(view, "timeLimitField", IntegerField.class)
-          .setValue(10);
+        IntegerField sizeLimitField = getField(view,
+          "sizeLimitField", IntegerField.class);
+        sizeLimitField.setValue(25);
+        IntegerField timeLimitField = getField(view,
+          "timeLimitField", IntegerField.class);
+        timeLimitField.setValue(10);
 
       String relativeUrl = invokeStringMethod(view, "buildBookmarkRelativeUrl");
       Map<String, String> params = parseQuery(relativeUrl);
@@ -139,17 +144,30 @@ class SearchViewBookmarkTest {
 
       invokeVoidMethod(view, "applyBookmarkedSearchState", Map.class, params);
 
-      assertThat(getField(view, "baseTypeRadio", RadioButtonGroup.class).getValue())
+        RadioButtonGroup<String> baseTypeRadio = getField(view,
+          "baseTypeRadio", RadioButtonGroup.class);
+        TextField searchBaseField = getField(view,
+          "searchBaseField", TextField.class);
+        TextField filterField = getField(view,
+          "filterField", TextField.class);
+        Select<SearchScope> scopeSelect = getField(view,
+          "scopeSelect", Select.class);
+        IntegerField sizeLimitField = getField(view,
+          "sizeLimitField", IntegerField.class);
+        IntegerField timeLimitField = getField(view,
+          "timeLimitField", IntegerField.class);
+
+        assertThat(baseTypeRadio.getValue())
           .isEqualTo("Custom Base");
-      assertThat(getField(view, "searchBaseField", TextField.class).getValue())
+        assertThat(searchBaseField.getValue())
           .isEqualTo("dc=example,dc=com");
-      assertThat(getField(view, "filterField", TextField.class).getValue())
+        assertThat(filterField.getValue())
           .isEqualTo("(uid=jdoe)");
-      assertThat(getField(view, "scopeSelect", Select.class).getValue())
+        assertThat(scopeSelect.getValue())
           .isEqualTo(SearchScope.ONE);
-      assertThat(getField(view, "sizeLimitField", IntegerField.class).getValue())
+        assertThat(sizeLimitField.getValue())
           .isEqualTo(15);
-      assertThat(getField(view, "timeLimitField", IntegerField.class).getValue())
+        assertThat(timeLimitField.getValue())
           .isEqualTo(5);
 
       MultiSelectComboBox<String> attrs =
@@ -177,10 +195,12 @@ class SearchViewBookmarkTest {
       SearchView view = new SearchView(configService, ldapService,
           truststoreService, templateService);
 
-      getField(view, "searchTemplateCombo", ComboBox.class)
-          .setValue("People");
-      getField(view, "templateSearchField", TextField.class)
-          .setValue("john doe");
+        ComboBox<String> templateCombo = getField(view,
+          "searchTemplateCombo", ComboBox.class);
+        templateCombo.setValue("People");
+        TextField templateSearchField = getField(view,
+          "templateSearchField", TextField.class);
+        templateSearchField.setValue("john doe");
 
       String relativeUrl = invokeStringMethod(view, "buildBookmarkRelativeUrl");
       Map<String, String> params = parseQuery(relativeUrl);
@@ -227,6 +247,65 @@ class SearchViewBookmarkTest {
     }
   }
 
+  @Test
+  @DisplayName("uses LDAP return attributes for export bootstrap")
+  void buildsLdapExportReturnAttributes() throws Exception {
+    ConfigurationService configService = mock(ConfigurationService.class);
+    LdapService ldapService = mock(LdapService.class);
+    TruststoreService truststoreService = mock(TruststoreService.class);
+    TemplateService templateService = mock(TemplateService.class);
+
+    when(templateService.loadTemplates()).thenReturn(List.of());
+
+    try (MockedStatic<MainLayout> mainLayout = mockStatic(MainLayout.class)) {
+      mainLayout.when(MainLayout::getSelectedServers).thenReturn(Set.of());
+
+      SearchView view = new SearchView(configService, ldapService,
+          truststoreService, templateService);
+
+      MultiSelectComboBox<String> attrs =
+          getField(view, "returnAttributesField", MultiSelectComboBox.class);
+      attrs.setValue(new LinkedHashSet<>(List.of("uid", "mail")));
+
+      String exportAttrs = invokeStringMethod(view,
+          "buildSearchExportReturnAttributes");
+
+      assertThat(parseCsv(exportAttrs))
+          .containsExactlyInAnyOrder("uid", "mail");
+    }
+  }
+
+  @Test
+  @DisplayName("uses template return attributes for export bootstrap")
+  void buildsTemplateExportReturnAttributes() throws Exception {
+    ConfigurationService configService = mock(ConfigurationService.class);
+    LdapService ldapService = mock(LdapService.class);
+    TruststoreService truststoreService = mock(TruststoreService.class);
+    TemplateService templateService = mock(TemplateService.class);
+
+    EntryTemplate template = new EntryTemplate("People");
+    SearchTemplateSection section = new SearchTemplateSection();
+    section.setReturnAttributes(List.of("uid", "cn"));
+    template.setSearchSection(section);
+    when(templateService.loadTemplates()).thenReturn(List.of(template));
+
+    try (MockedStatic<MainLayout> mainLayout = mockStatic(MainLayout.class)) {
+      mainLayout.when(MainLayout::getSelectedServers).thenReturn(Set.of());
+
+      SearchView view = new SearchView(configService, ldapService,
+          truststoreService, templateService);
+
+        ComboBox<String> templateCombo = getField(view,
+          "searchTemplateCombo", ComboBox.class);
+        templateCombo.setValue("People");
+
+      String exportAttrs = invokeStringMethod(view,
+          "buildSearchExportReturnAttributes");
+
+      assertThat(exportAttrs).isEqualTo("uid,cn");
+    }
+  }
+
   private static List<String> parseCsv(String csv) {
     if (csv == null || csv.isBlank()) {
       return List.of();
@@ -261,7 +340,7 @@ class SearchViewBookmarkTest {
   @SuppressWarnings("unchecked")
   private static <T> T getField(Object target,
       String fieldName,
-      Class<T> fieldType) throws Exception {
+      Class<?> fieldType) throws Exception {
     Field field = target.getClass().getDeclaredField(fieldName);
     field.setAccessible(true);
     return (T) fieldType.cast(field.get(target));

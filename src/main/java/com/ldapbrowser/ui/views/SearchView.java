@@ -10,6 +10,7 @@ import com.ldapbrowser.service.TemplateService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
+import com.ldapbrowser.ui.dialogs.SearchExportDialog;
 import com.ldapbrowser.ui.components.AdvancedSearchBuilder;
 import com.ldapbrowser.ui.components.EntryEditor;
 import com.ldapbrowser.ui.utils.NotificationHelper;
@@ -346,8 +347,14 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     bookmarkLinkButton.setTooltipText("Copy shareable bookmark URL");
     bookmarkLinkButton.addClickListener(e -> copyBookmarkLink());
 
+    Button exportResultsButton = new Button(VaadinIcon.DOWNLOAD.create());
+    exportResultsButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+    exportResultsButton.setTooltipText("Export search results");
+    exportResultsButton.addClickListener(e -> openSearchExportDialog());
+
     topRow.add(searchTemplateCombo, ldapSearchLayout, searchButton,
-      templateSearchField, templateSearchButton, bookmarkLinkButton);
+      templateSearchField, templateSearchButton, bookmarkLinkButton,
+      exportResultsButton);
     topRow.setFlexGrow(1, ldapSearchLayout);
     topRow.setFlexGrow(1, templateSearchField);
 
@@ -660,31 +667,9 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     List<LdapServerConfig> configs = configService.loadConfigurations();
 
     // Validate default base availability when using default base
-    if (useDefaultBase) {
-      for (String serverName : selectedServers) {
-        configs.stream()
-            .filter(c -> c.getName().equals(serverName))
-            .findFirst()
-            .ifPresent(config -> {
-              if (config.getBaseDn() == null
-                  || config.getBaseDn().isEmpty()) {
-                NotificationHelper.showError(
-                    "No default base DN configured for server: "
-                        + serverName,
-                    5000);
-              }
-            });
-      }
-      // Check if any server lacks a default base
-      boolean anyMissing = selectedServers.stream().anyMatch(serverName ->
-          configs.stream()
-              .filter(c -> c.getName().equals(serverName))
-              .findFirst()
-              .map(c -> c.getBaseDn() == null || c.getBaseDn().isEmpty())
-              .orElse(true));
-      if (anyMissing) {
-        return;
-      }
+    if (useDefaultBase && !validateDefaultBaseAvailability(configs,
+        selectedServers)) {
+      return;
     }
 
     String finalFilter = filter;
@@ -729,6 +714,99 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     NotificationHelper.showSuccess(
         "Search complete: " + currentResults.size() + " entries found",
         3000);
+  }
+
+  private List<LdapEntry> executeLdapExportSearch(
+      List<String> requestedAttributes) throws Exception {
+    boolean useDefaultBase = "Default Base".equals(baseTypeRadio.getValue());
+    String baseDn = searchBaseField.getValue();
+    String filter = filterField.getValue();
+    SearchScope scope = scopeSelect.getValue();
+
+    if (!useDefaultBase && (baseDn == null || baseDn.isEmpty())) {
+      throw new IllegalStateException("Please enter a search base");
+    }
+
+    if (filter == null || filter.isEmpty()) {
+      filter = "(objectClass=*)";
+    }
+
+    Set<String> selectedServers = MainLayout.getSelectedServers();
+    if (selectedServers.isEmpty()) {
+      throw new IllegalStateException(
+          "Please select at least one server from the navbar");
+    }
+
+    List<LdapServerConfig> configs = configService.loadConfigurations();
+    if (useDefaultBase && !validateDefaultBaseAvailability(configs,
+        selectedServers)) {
+      throw new IllegalStateException(
+          "Default base DN is missing for one or more selected servers");
+    }
+
+    String[] attributesToReturn = requestedAttributes.isEmpty()
+        ? null : requestedAttributes.toArray(new String[0]);
+    int sizeLimit = sizeLimitField.getValue() != null
+        ? sizeLimitField.getValue() : 0;
+    int timeLimit = timeLimitField.getValue() != null
+        ? timeLimitField.getValue() : 0;
+    List<LdapEntry> exportResults = new ArrayList<>();
+    String finalFilter = filter;
+
+    for (String serverName : selectedServers) {
+      configs.stream()
+          .filter(c -> c.getName().equals(serverName))
+          .findFirst()
+          .ifPresent(config -> {
+            try {
+              String searchBase = useDefaultBase
+                  ? config.getBaseDn() : baseDn;
+              List<LdapEntry> results = ldapService.search(
+                  config,
+                  searchBase,
+                  finalFilter,
+                  scope,
+                  sizeLimit,
+                  timeLimit,
+                  attributesToReturn);
+              exportResults.addAll(results);
+            } catch (LDAPException | GeneralSecurityException e) {
+              NotificationHelper.showError(
+                  "Search failed on " + serverName + ": "
+                      + e.getMessage(),
+                  5000);
+              logger.error("Export search failed on {}", serverName, e);
+            }
+          });
+    }
+
+    return exportResults;
+  }
+
+  private boolean validateDefaultBaseAvailability(
+      List<LdapServerConfig> configs,
+      Set<String> selectedServers) {
+    for (String serverName : selectedServers) {
+      configs.stream()
+          .filter(c -> c.getName().equals(serverName))
+          .findFirst()
+          .ifPresent(config -> {
+            if (config.getBaseDn() == null
+                || config.getBaseDn().isEmpty()) {
+              NotificationHelper.showError(
+                  "No default base DN configured for server: "
+                      + serverName,
+                  5000);
+            }
+          });
+    }
+
+    return selectedServers.stream().noneMatch(serverName ->
+        configs.stream()
+            .filter(c -> c.getName().equals(serverName))
+            .findFirst()
+            .map(c -> c.getBaseDn() == null || c.getBaseDn().isEmpty())
+            .orElse(true));
   }
 
   private void showBrowseDialog() {
@@ -1075,6 +1153,50 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     NotificationHelper.showSuccess("Bookmark link copied to clipboard");
   }
 
+  private void openSearchExportDialog() {
+    createSearchExportDialog().open();
+  }
+
+  private SearchExportDialog createSearchExportDialog() {
+    return new SearchExportDialog(buildSearchExportReturnAttributes(),
+        this::executeSearchExport);
+  }
+
+  private String buildSearchExportReturnAttributes() {
+    EntryTemplate selectedTemplate = getSelectedSearchTemplate();
+    if (selectedTemplate != null && selectedTemplate.getSearchSection() != null) {
+      return String.join(",", selectedTemplate.getSearchSection()
+          .getReturnAttributes());
+    }
+
+    Set<String> selectedAttributes = returnAttributesField.getSelectedItems();
+    if (selectedAttributes == null || selectedAttributes.isEmpty()) {
+      return "";
+    }
+    return String.join(",", selectedAttributes);
+  }
+
+  private List<LdapEntry> executeSearchExport(List<String> requestedAttributes)
+      throws Exception {
+    EntryTemplate selectedTemplate = getSelectedSearchTemplate();
+    if (selectedTemplate != null && selectedTemplate.getSearchSection() != null) {
+      return executeTemplateExportSearch(selectedTemplate, requestedAttributes);
+    }
+    return executeLdapExportSearch(requestedAttributes);
+  }
+
+  private EntryTemplate getSelectedSearchTemplate() {
+    String templateName = searchTemplateCombo.getValue();
+    if (templateName == null || LDAP_TEMPLATE_NAME.equals(templateName)) {
+      return null;
+    }
+
+    return searchTemplates.stream()
+        .filter(template -> templateName.equals(template.getName()))
+        .findFirst()
+        .orElse(null);
+  }
+
   private String buildBookmarkRelativeUrl() {
     Map<String, String> params = new LinkedHashMap<>();
     String selectedTemplate = searchTemplateCombo.getValue();
@@ -1198,79 +1320,21 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     SearchTemplateSection ss = tmpl.getSearchSection();
-    String searchText = templateSearchField.getValue();
-    if (searchText == null) {
-      searchText = "";
-    }
-
-    // Build filter by replacing {SEARCH} placeholder
-    String filter = ss.getSearchFilter();
-    if (filter == null || filter.isEmpty()) {
-      NotificationHelper.showError("Template has no search filter");
-      return;
-    }
-    filter = filter.replace("{SEARCH}", searchText);
-
-    // Parse scope
-    SearchScope scope = SearchScope.SUB;
-    if ("base".equals(ss.getScope())) {
-      scope = SearchScope.BASE;
-    } else if ("one".equals(ss.getScope())) {
-      scope = SearchScope.ONE;
-    }
-
-    // Get return attributes
-    String[] returnAttrs = null;
-    if (ss.getReturnAttributes() != null
-        && !ss.getReturnAttributes().isEmpty()) {
-      returnAttrs = ss.getReturnAttributes().toArray(new String[0]);
-    }
-
-    // Get selected servers
-    Set<String> selectedServers = MainLayout.getSelectedServers();
-    if (selectedServers.isEmpty()) {
-      NotificationHelper.showError(
-          "Please select at least one server");
-      return;
-    }
+    List<String> requestedAttributes = ss.getReturnAttributes() != null
+        ? new ArrayList<>(ss.getReturnAttributes())
+        : new ArrayList<>();
 
     currentResults.clear();
-    List<LdapServerConfig> configs =
-        configService.loadConfigurations();
-
-    String finalFilter = filter;
-    SearchScope finalScope = scope;
-    String[] finalReturnAttrs = returnAttrs;
-
-    for (String serverName : selectedServers) {
-      configs.stream()
-          .filter(c -> c.getName().equals(serverName))
-          .findFirst()
-          .ifPresent(config -> {
-            try {
-              // Resolve base DNs from template config
-              List<String> baseDns = resolveBaseDns(
-                  config, ss.getBaseFilter(),
-                  ss.getBaseDn());
-              for (String base : baseDns) {
-                List<LdapEntry> results;
-                if (finalReturnAttrs != null) {
-                  results = ldapService.search(config, base,
-                      finalFilter, finalScope, finalReturnAttrs);
-                } else {
-                  results = ldapService.search(config, base,
-                      finalFilter, finalScope);
-                }
-                currentResults.addAll(results);
-              }
-            } catch (Exception e) {
-              NotificationHelper.showError(
-                  "Search failed on " + serverName + ": "
-                      + e.getMessage());
-              logger.error("Template search failed on {}",
-                  serverName, e);
-            }
-          });
+    try {
+      currentResults.addAll(executeTemplateExportSearch(tmpl,
+          requestedAttributes));
+    } catch (IllegalStateException e) {
+      NotificationHelper.showError(e.getMessage());
+      return;
+    } catch (Exception e) {
+      NotificationHelper.showError("Search failed: " + e.getMessage());
+      logger.error("Template search failed", e);
+      return;
     }
 
     // Update grid columns
@@ -1283,6 +1347,82 @@ public class SearchView extends VerticalLayout implements BeforeEnterObserver {
     NotificationHelper.showSuccess(
         "Search complete: " + currentResults.size()
             + " entries found", 3000);
+  }
+
+  private List<LdapEntry> executeTemplateExportSearch(EntryTemplate template,
+      List<String> requestedAttributes) throws Exception {
+    SearchTemplateSection searchSection = template.getSearchSection();
+    if (searchSection == null) {
+      throw new IllegalStateException("Template has no search section");
+    }
+
+    Set<String> selectedServers = MainLayout.getSelectedServers();
+    if (selectedServers.isEmpty()) {
+      throw new IllegalStateException("Please select at least one server");
+    }
+
+    String filter = buildTemplateSearchFilter(searchSection);
+    SearchScope scope = parseTemplateScope(searchSection);
+    String[] returnAttrs = requestedAttributes.isEmpty()
+        ? null : requestedAttributes.toArray(new String[0]);
+    List<LdapEntry> exportResults = new ArrayList<>();
+    List<LdapServerConfig> configs = configService.loadConfigurations();
+
+    for (String serverName : selectedServers) {
+      configs.stream()
+          .filter(c -> c.getName().equals(serverName))
+          .findFirst()
+          .ifPresent(config -> {
+            try {
+              List<String> baseDns = resolveBaseDns(
+                  config,
+                  searchSection.getBaseFilter(),
+                  searchSection.getBaseDn());
+              for (String base : baseDns) {
+                List<LdapEntry> results;
+                if (returnAttrs != null) {
+                  results = ldapService.search(config, base,
+                      filter, scope, returnAttrs);
+                } else {
+                  results = ldapService.search(config, base,
+                      filter, scope);
+                }
+                exportResults.addAll(results);
+              }
+            } catch (Exception e) {
+              NotificationHelper.showError(
+                  "Search failed on " + serverName + ": "
+                      + e.getMessage());
+              logger.error("Template export search failed on {}",
+                  serverName, e);
+            }
+          });
+    }
+
+    return exportResults;
+  }
+
+  private String buildTemplateSearchFilter(SearchTemplateSection searchSection) {
+    String filter = searchSection.getSearchFilter();
+    if (filter == null || filter.isEmpty()) {
+      throw new IllegalStateException("Template has no search filter");
+    }
+
+    String searchText = templateSearchField.getValue();
+    if (searchText == null) {
+      searchText = "";
+    }
+    return filter.replace("{SEARCH}", searchText);
+  }
+
+  private SearchScope parseTemplateScope(SearchTemplateSection searchSection) {
+    if ("base".equals(searchSection.getScope())) {
+      return SearchScope.BASE;
+    }
+    if ("one".equals(searchSection.getScope())) {
+      return SearchScope.ONE;
+    }
+    return SearchScope.SUB;
   }
 
   /**

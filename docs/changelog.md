@@ -1,5 +1,22 @@
 # LDAP Web Browser
 
+## v0.91 - Search View Enhancements
+- On the Search View, add an export icon to the right of the existing copy link icon
+- When selected, an export dialog would be displayed
+- The new export dialog would provide
+  - return attributes pre populated with existing return attributes used for the search
+  - Include Header checkbox
+  - Include DN checkbox
+  - Surround Values in Quotes checkbox
+  - Output Format dropdown that includes
+    - CSV
+    - JSON
+    - LDIF
+    - DN LIST
+  - Export Button
+- The new export dialog would behave much like the Export view allowing user to export the search results
+  from the Search view to a file in multiple formats.
+
 ## v0.90 - OAuth mTLS - Claim Role Mappings
 
 ## v0.89 - Add Search Search Bookmarks.

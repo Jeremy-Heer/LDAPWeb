@@ -8,13 +8,13 @@ import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.service.TruststoreService;
 import com.ldapbrowser.ui.dialogs.DnBrowserDialog;
 import com.ldapbrowser.ui.utils.NotificationHelper;
+import com.ldapbrowser.util.LdapExportFormatter;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.H3;
@@ -22,12 +22,9 @@ import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
-import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.server.streams.DownloadHandler;
@@ -35,12 +32,9 @@ import com.vaadin.flow.server.streams.InMemoryUploadHandler;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,7 +49,6 @@ public class ExportTab extends VerticalLayout {
 
   private final LdapService ldapService;
   private final LoggingService loggingService;
-  private final ConfigurationService configurationService;
   private final TruststoreService truststoreService;
 
   // Server configuration
@@ -118,7 +111,6 @@ public class ExportTab extends VerticalLayout {
       ConfigurationService configurationService, TruststoreService truststoreService) {
     this.ldapService = ldapService;
     this.loggingService = loggingService;
-    this.configurationService = configurationService;
     this.truststoreService = truststoreService;
     this.csvData = new ArrayList<>();
     this.csvColumnOrder = new ArrayList<>();
@@ -785,223 +777,23 @@ public class ExportTab extends VerticalLayout {
   }
 
   private List<String> getReturnAttributesList(String returnAttrs) {
-    if (returnAttrs == null || returnAttrs.trim().isEmpty()) {
-      return new ArrayList<>();
-    }
-
-    List<String> attrList = new ArrayList<>();
-    for (String attr : returnAttrs.split(",")) {
-      String trimmed = attr.trim();
-      if (!trimmed.isEmpty()) {
-        attrList.add(trimmed);
-      }
-    }
-    return attrList;
+    return LdapExportFormatter.parseReturnAttributes(returnAttrs);
   }
 
   private String generateExportData(List<LdapEntry> entries, String format, List<String> requestedAttrs) {
-    return switch (format.toUpperCase()) {
-      case "CSV" -> generateCsvData(entries, requestedAttrs);
-      case "JSON" -> generateJsonData(entries, requestedAttrs);
-      case "LDIF" -> generateLdifData(entries, requestedAttrs);
-      case "DN LIST" -> generateDnListData(entries);
-      default -> generateCsvData(entries, requestedAttrs);
-    };
-  }
-
-  private String generateCsvData(List<LdapEntry> entries, List<String> requestedAttrs) {
-    StringBuilder sb = new StringBuilder();
-
-    if (entries.isEmpty()) {
-      return sb.toString();
-    }
-
-    // Get checkbox values based on current mode
     boolean includeHeader = isSearchMode ? searchIncludeHeaderCheckbox.getValue() : csvIncludeHeaderCheckbox.getValue();
     boolean includeDn = isSearchMode ? searchIncludeDnCheckbox.getValue() : csvIncludeDnCheckbox.getValue();
     boolean surroundValues = isSearchMode ? searchSurroundValuesCheckbox.getValue() : csvSurroundValuesCheckbox.getValue();
-
-    // Determine attributes to export
-    Set<String> attributesToExport = new LinkedHashSet<>();
-    if (includeDn) {
-      attributesToExport.add("dn");
-    }
-
-    if (requestedAttrs.isEmpty()) {
-      // Collect all unique attributes
-      for (LdapEntry entry : entries) {
-        attributesToExport.addAll(entry.getAttributes().keySet());
-      }
-    } else {
-      attributesToExport.addAll(requestedAttrs);
-    }
-
-    // Write header if requested
-    if (includeHeader) {
-      sb.append(String.join(",", attributesToExport)).append("\n");
-    }
-
-    // Write data
-    for (LdapEntry entry : entries) {
-      List<String> values = new ArrayList<>();
-      for (String attrName : attributesToExport) {
-        if ("dn".equals(attrName)) {
-          String dnValue = entry.getDn();
-          if (surroundValues) {
-            values.add("\"" + escapeQuotes(dnValue) + "\"");
-          } else {
-            values.add(dnValue);
-          }
-        } else {
-          List<String> attrValues = entry.getAttributes().get(attrName);
-          if (attrValues != null && !attrValues.isEmpty()) {
-            String value = String.join("; ", attrValues);
-            if (surroundValues) {
-              values.add("\"" + escapeQuotes(value) + "\"");
-            } else {
-              values.add(value);
-            }
-          } else {
-            if (surroundValues) {
-              values.add("\"\"");
-            } else {
-              values.add("");
-            }
-          }
-        }
-      }
-      sb.append(String.join(",", values)).append("\n");
-    }
-
-    return sb.toString();
-  }
-
-  private String generateJsonData(List<LdapEntry> entries, List<String> requestedAttrs) {
-    StringBuilder sb = new StringBuilder();
-    sb.append("[\n");
-
-    for (int i = 0; i < entries.size(); i++) {
-      LdapEntry entry = entries.get(i);
-      sb.append("  {\n");
-      sb.append("    \"dn\": \"").append(escapeJson(entry.getDn())).append("\"");
-
-      if (requestedAttrs.isEmpty()) {
-        // Export all attributes
-        for (var attr : entry.getAttributes().entrySet()) {
-          sb.append(",\n    \"").append(escapeJson(attr.getKey())).append("\": ");
-          if (attr.getValue().size() == 1) {
-            sb.append("\"").append(escapeJson(attr.getValue().get(0))).append("\"");
-          } else {
-            sb.append("[");
-            for (int j = 0; j < attr.getValue().size(); j++) {
-              if (j > 0) sb.append(", ");
-              sb.append("\"").append(escapeJson(attr.getValue().get(j))).append("\"");
-            }
-            sb.append("]");
-          }
-        }
-      } else {
-        // Export only requested attributes
-        for (String attrName : requestedAttrs) {
-          List<String> values = entry.getAttributes().get(attrName);
-          if (values != null && !values.isEmpty()) {
-            sb.append(",\n    \"").append(escapeJson(attrName)).append("\": ");
-            if (values.size() == 1) {
-              sb.append("\"").append(escapeJson(values.get(0))).append("\"");
-            } else {
-              sb.append("[");
-              for (int j = 0; j < values.size(); j++) {
-                if (j > 0) sb.append(", ");
-                sb.append("\"").append(escapeJson(values.get(j))).append("\"");
-              }
-              sb.append("]");
-            }
-          }
-        }
-      }
-
-      sb.append("\n  }");
-      if (i < entries.size() - 1) {
-        sb.append(",");
-      }
-      sb.append("\n");
-    }
-
-    sb.append("]\n");
-    return sb.toString();
-  }
-
-  private String generateLdifData(List<LdapEntry> entries, List<String> requestedAttrs) {
-    StringBuilder sb = new StringBuilder();
-
-    for (LdapEntry entry : entries) {
-      sb.append("dn: ").append(entry.getDn()).append("\n");
-
-      if (requestedAttrs.isEmpty()) {
-        // Export all attributes
-        for (var attr : entry.getAttributes().entrySet()) {
-          for (String value : attr.getValue()) {
-            sb.append(attr.getKey()).append(": ").append(value).append("\n");
-          }
-        }
-      } else {
-        // Export only requested attributes
-        for (String attrName : requestedAttrs) {
-          List<String> values = entry.getAttributes().get(attrName);
-          if (values != null) {
-            for (String value : values) {
-              sb.append(attrName).append(": ").append(value).append("\n");
-            }
-          }
-        }
-      }
-
-      sb.append("\n");
-    }
-
-    return sb.toString();
-  }
-
-  private String generateDnListData(List<LdapEntry> entries) {
-    StringBuilder sb = new StringBuilder();
-    for (LdapEntry entry : entries) {
-      sb.append(entry.getDn()).append("\n");
-    }
-    return sb.toString();
-  }
-
-  private String escapeQuotes(String value) {
-    return value.replace("\"", "\"\"");
-  }
-
-  private String escapeJson(String value) {
-    return value
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
-        .replace("\t", "\\t");
+    return LdapExportFormatter.generateExportData(entries, format,
+        requestedAttrs, includeHeader, includeDn, surroundValues);
   }
 
   private String generateFileName(String format) {
-    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
-    String timestamp = LocalDateTime.now().format(formatter);
-    String extension = switch (format.toUpperCase()) {
-      case "JSON" -> "json";
-      case "LDIF" -> "ldif";
-      case "DN LIST" -> "txt";
-      default -> "csv";
-    };
-    return "ldap_export_" + timestamp + "." + extension;
+    return LdapExportFormatter.generateFileName(format);
   }
 
   private void createDownloadLink(String data, String fileName, String format) {
-    String mimeType = switch (format.toUpperCase()) {
-      case "JSON" -> "application/json";
-      case "LDIF" -> "text/plain";
-      case "DN LIST" -> "text/plain";
-      default -> "text/csv";
-    };
+    String mimeType = LdapExportFormatter.getMimeType(format);
 
     DownloadHandler handler = event -> {
       event.setFileName(fileName);
