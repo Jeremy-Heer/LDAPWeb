@@ -536,6 +536,32 @@ public class MainLayout extends AppLayout
   }
 
   /**
+   * Merges server names into the current selection in the global
+   * server selector for this UI instance.
+   *
+   * @param serverNames server names to merge into selected servers
+   */
+  public void mergeSelectedServers(Set<String> serverNames) {
+    if (serverNames == null || serverNames.isEmpty() || !serverSelect.isEnabled()) {
+      return;
+    }
+
+    Set<String> merged = new LinkedHashSet<>(serverSelect.getSelectedItems());
+    Set<String> allowedServers = getAllowedServers();
+
+    for (String serverName : serverNames) {
+      if (serverName != null
+          && !serverName.trim().isEmpty()
+          && allowedServers.contains(serverName)
+          && serverConfigMap.containsKey(serverName)) {
+        merged.add(serverName);
+      }
+    }
+
+    serverSelect.setValue(merged);
+  }
+
+  /**
    * Updates the badge on the logs button to show unread count.
    */
   private void updateLogsBadge() {

@@ -221,6 +221,53 @@ class LdapServerConfigTest {
   // ---- allowedTemplates -----------------------------------------------
 
   @Nested
+  @DisplayName("Tags field")
+  class Tags {
+
+    @Test
+    @DisplayName("defaults to empty list")
+    void defaultsToEmpty() {
+      LdapServerConfig cfg = new LdapServerConfig();
+      assertThat(cfg.getTags()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("getter returns set values")
+    void setAndGet() {
+      LdapServerConfig cfg = valid();
+      cfg.setTags(List.of("prod", "critical"));
+      assertThat(cfg.getTags()).containsExactly("prod", "critical");
+    }
+
+    @Test
+    @DisplayName("null setter normalises to empty list")
+    void nullNormalisesToEmpty() {
+      LdapServerConfig cfg = valid();
+      cfg.setTags(null);
+      assertThat(cfg.getTags()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("copy preserves tags")
+    void copyPreserves() {
+      LdapServerConfig cfg = valid();
+      cfg.setTags(new ArrayList<>(List.of("prod", "ldap")));
+      LdapServerConfig copied = cfg.copy();
+      assertThat(copied.getTags()).containsExactly("prod", "ldap");
+    }
+
+    @Test
+    @DisplayName("copy creates independent tags list")
+    void copyIsIndependent() {
+      LdapServerConfig cfg = valid();
+      cfg.setTags(new ArrayList<>(List.of("prod")));
+      LdapServerConfig copied = cfg.copy();
+      copied.getTags().add("new");
+      assertThat(cfg.getTags()).containsExactly("prod");
+    }
+  }
+
+  @Nested
   @DisplayName("AllowedTemplates field")
   class AllowedTemplates {
 

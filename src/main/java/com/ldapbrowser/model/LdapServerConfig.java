@@ -26,6 +26,7 @@ public class LdapServerConfig implements Serializable {
   private boolean useSsl;
   private boolean useStartTls;
   private boolean validateCertificate = true;
+  private List<String> tags = new ArrayList<>();
   private List<String> allowedTemplates =
       new ArrayList<>(List.of("LDAP"));
   private Map<String, String> otherBases = new LinkedHashMap<>();
@@ -134,6 +135,14 @@ public class LdapServerConfig implements Serializable {
     this.validateCertificate = validateCertificate;
   }
 
+  public List<String> getTags() {
+    return tags;
+  }
+
+  public void setTags(List<String> tags) {
+    this.tags = tags != null ? tags : new ArrayList<>();
+  }
+
   public List<String> getAllowedTemplates() {
     return allowedTemplates;
   }
@@ -207,6 +216,7 @@ public class LdapServerConfig implements Serializable {
         this.useStartTls
     );
     copied.setValidateCertificate(this.validateCertificate);
+    copied.setTags(new ArrayList<>(this.tags));
     copied.setAllowedTemplates(
         new ArrayList<>(this.allowedTemplates));
     copied.setOtherBases(

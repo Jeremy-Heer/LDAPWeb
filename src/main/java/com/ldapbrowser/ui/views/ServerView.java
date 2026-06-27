@@ -36,9 +36,11 @@ import com.vaadin.flow.spring.annotation.UIScope;
 import jakarta.annotation.security.RolesAllowed;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -68,6 +70,7 @@ public class ServerView extends VerticalLayout {
   private Button copyButton;
   private Button deleteButton;
   private Button testButton;
+  private Button connectButton;
 
   /**
    * Creates the Server view.
@@ -117,8 +120,12 @@ public class ServerView extends VerticalLayout {
     testButton = new Button("Test", event -> testSelectedServer());
     testButton.setEnabled(false);
 
+    connectButton = new Button("Connect", event -> connectSelectedServers());
+    connectButton.setEnabled(false);
+
     HorizontalLayout buttonLayout = new HorizontalLayout(
-        addServerButton, editButton, copyButton, deleteButton, testButton
+      addServerButton, editButton, copyButton, deleteButton, testButton,
+      connectButton
     );
     buttonLayout.setSpacing(true);
     buttonLayout.setAlignItems(FlexComponent.Alignment.CENTER);
@@ -154,6 +161,8 @@ public class ServerView extends VerticalLayout {
           || (config.getHost() != null && config.getHost().toLowerCase().contains(lowerCaseFilter))
           || String.valueOf(config.getPort()).contains(lowerCaseFilter)
           || (config.getBindDn() != null && config.getBindDn().toLowerCase().contains(lowerCaseFilter))
+            || config.getTags().stream().anyMatch(tag ->
+              tag != null && tag.toLowerCase().contains(lowerCaseFilter))
           || getSecurityLabel(config).toLowerCase().contains(lowerCaseFilter)
       );
     }
@@ -187,15 +196,27 @@ public class ServerView extends VerticalLayout {
         .setSortable(true)
         .setResizable(true);
 
-    serverGrid.asSingleSelect().addValueChangeListener(event -> {
-      boolean hasSelection = event.getValue() != null;
-      editButton.setEnabled(hasSelection);
-      copyButton.setEnabled(hasSelection);
-      deleteButton.setEnabled(hasSelection);
-      testButton.setEnabled(hasSelection);
-    });
+    serverGrid.addColumn(config -> String.join(", ", config.getTags()))
+        .setHeader("Tags")
+        .setSortable(true)
+        .setResizable(true);
+
+    serverGrid.setSelectionMode(Grid.SelectionMode.MULTI);
+    serverGrid.addSelectionListener(event -> updateActionButtonsState());
 
     add(serverGrid);
+  }
+
+  /**
+   * Updates action button state based on selected row count.
+   */
+  private void updateActionButtonsState() {
+    int selectionCount = serverGrid.getSelectedItems().size();
+    editButton.setEnabled(selectionCount == 1);
+    copyButton.setEnabled(selectionCount == 1);
+    deleteButton.setEnabled(selectionCount > 0);
+    testButton.setEnabled(selectionCount > 0);
+    connectButton.setEnabled(selectionCount > 0);
   }
 
   /**
@@ -353,6 +374,29 @@ public class ServerView extends VerticalLayout {
     formLayout.add(validateCertificateCheckbox, viewCertButton);
 
     // Template filtering
+    MultiSelectComboBox<String> tagsCombo =
+        new MultiSelectComboBox<>("Tags");
+    tagsCombo.setPlaceholder("Select or add tags");
+    tagsCombo.setWidthFull();
+    tagsCombo.setAllowCustomValue(true);
+    LinkedHashSet<String> allTagNames = new LinkedHashSet<>();
+    configService.loadConfigurations().stream()
+        .map(LdapServerConfig::getTags)
+        .filter(tags -> tags != null)
+        .forEach(allTagNames::addAll);
+    tagsCombo.setItems(allTagNames);
+    tagsCombo.addCustomValueSetListener(event -> {
+      String customTag = event.getDetail() != null ? event.getDetail().trim() : "";
+      if (!customTag.isEmpty()) {
+        allTagNames.add(customTag);
+        tagsCombo.setItems(allTagNames);
+        Set<String> selected = new LinkedHashSet<>(tagsCombo.getSelectedItems());
+        selected.add(customTag);
+        tagsCombo.setValue(selected);
+      }
+    });
+
+    // Template filtering
     MultiSelectComboBox<String> templatesCombo =
         new MultiSelectComboBox<>("Allowed Templates");
     templatesCombo.setPlaceholder(
@@ -365,6 +409,7 @@ public class ServerView extends VerticalLayout {
         .forEach(allTemplateNames::add);
     templatesCombo.setItems(allTemplateNames);
     templatesCombo.setWidthFull();
+    formLayout.add(tagsCombo, 2);
     formLayout.add(templatesCombo, 2);
     formLayout.add(baseDnLayout, 2);
 
@@ -477,6 +522,10 @@ public class ServerView extends VerticalLayout {
         LdapServerConfig::isUseStartTls, LdapServerConfig::setUseStartTls);
     binder.bind(validateCertificateCheckbox,
         LdapServerConfig::isValidateCertificate, LdapServerConfig::setValidateCertificate);
+    binder.forField(tagsCombo)
+      .bind(
+        cfg -> new HashSet<>(cfg.getTags()),
+        (cfg, selected) -> cfg.setTags(new ArrayList<>(selected)));
     binder.forField(templatesCombo)
         .bind(
             cfg -> new java.util.HashSet<>(cfg.getAllowedTemplates()),
@@ -565,7 +614,7 @@ public class ServerView extends VerticalLayout {
    * Edits the selected server.
    */
   private void editSelectedServer() {
-    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
+    LdapServerConfig selected = getSingleSelectedServer();
     if (selected != null) {
       openServerDialog(selected);
     }
@@ -575,7 +624,7 @@ public class ServerView extends VerticalLayout {
    * Copies the selected server.
    */
   private void copySelectedServer() {
-    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
+    LdapServerConfig selected = getSingleSelectedServer();
     if (selected != null) {
       LdapServerConfig copy = selected.copy();
       openServerDialog(copy);
@@ -587,21 +636,65 @@ public class ServerView extends VerticalLayout {
    * Deletes the selected server.
    */
   private void deleteSelectedServer() {
-    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
-    if (selected != null && selected.getName() != null) {
+    Set<LdapServerConfig> selectedConfigs = getSelectedServerConfigs();
+    if (!selectedConfigs.isEmpty()) {
+      int selectedCount = selectedConfigs.size();
+      StringBuilder summary = new StringBuilder();
+      int previewCount = 0;
+      for (LdapServerConfig selectedConfig : selectedConfigs) {
+        if (selectedConfig.getName() == null) {
+          continue;
+        }
+        if (previewCount >= 5) {
+          break;
+        }
+        if (summary.length() > 0) {
+          summary.append(", ");
+        }
+        summary.append(selectedConfig.getName());
+        previewCount++;
+      }
+
       Dialog confirmDialog = new Dialog();
       confirmDialog.setHeaderTitle("Confirm Delete");
-      confirmDialog.add("Are you sure you want to delete server: " + selected.getName() + "?");
+      confirmDialog.add("Are you sure you want to delete " + selectedCount + " server(s): "
+          + summary + (selectedCount > previewCount ? ", ..." : "") + "?");
 
       Button confirmButton = new Button("Delete", event -> {
+        int successCount = 0;
+        List<String> failedServers = new ArrayList<>();
+
+        for (LdapServerConfig selectedConfig : selectedConfigs) {
+          if (selectedConfig.getName() == null) {
+            continue;
+          }
+
+          try {
+            ldapService.closeConnectionPool(selectedConfig.getName());
+            configService.deleteConfiguration(selectedConfig.getName());
+            successCount++;
+          } catch (IOException e) {
+            logger.warn("Failed to delete configuration {}: {}",
+                selectedConfig.getName(), e.getMessage());
+            failedServers.add(selectedConfig.getName());
+          }
+        }
+
+        if (failedServers.isEmpty()) {
+          NotificationHelper.showSuccess("Deleted " + successCount + " server configuration(s)");
+        } else {
+          NotificationHelper.showError(
+              "Deleted " + successCount + " server(s), failed to delete "
+                  + failedServers.size() + ": " + String.join(", ", failedServers));
+        }
+
         try {
-          configService.deleteConfiguration(selected.getName());
-          NotificationHelper.showSuccess("Configuration deleted: " + selected.getName());
           refreshServerGrid();
           refreshNavbarServerList();
+          updateActionButtonsState();
           confirmDialog.close();
-        } catch (IOException e) {
-          NotificationHelper.showError("Failed to delete configuration: " + e.getMessage());
+        } catch (Exception e) {
+          NotificationHelper.showError("Failed to refresh after delete: " + e.getMessage());
         }
       });
       confirmButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
@@ -618,22 +711,93 @@ public class ServerView extends VerticalLayout {
    * Tests the selected server connection.
    */
   private void testSelectedServer() {
-    LdapServerConfig selected = serverGrid.asSingleSelect().getValue();
-    if (selected != null) {
+    Set<LdapServerConfig> selectedConfigs = getSelectedServerConfigs();
+    if (selectedConfigs.isEmpty()) {
+      return;
+    }
+
+    if (selectedConfigs.size() == 1) {
+      LdapServerConfig selected = selectedConfigs.iterator().next();
       try {
         boolean success = ldapService.testConnection(selected);
         if (success) {
-          // Show visual notification for successful test
           NotificationHelper.showModifySuccess("Connection successful to: " + selected.getName());
         } else {
           NotificationHelper.showError("Connection failed to: " + selected.getName());
         }
       } catch (CertificateValidationException e) {
-        // Certificate validation failed - show TLS dialog to allow user to import
         handleCertificateValidationFailure(selected, e);
       } catch (Exception e) {
         NotificationHelper.showError("Connection test failed: " + e.getMessage());
       }
+      return;
+    }
+
+    int successCount = 0;
+    List<String> failedServers = new ArrayList<>();
+    for (LdapServerConfig selected : selectedConfigs) {
+      try {
+        boolean success = ldapService.testConnection(selected);
+        if (success) {
+          successCount++;
+        } else {
+          failedServers.add(selected.getName());
+        }
+      } catch (CertificateValidationException e) {
+        failedServers.add(selected.getName());
+      } catch (Exception e) {
+        logger.warn("Connection test failed for {}: {}",
+            selected.getName(), e.getMessage());
+        failedServers.add(selected.getName());
+      }
+    }
+
+    if (failedServers.isEmpty()) {
+      NotificationHelper.showSuccess("Connection test successful for "
+          + successCount + " server(s)");
+    } else {
+      NotificationHelper.showError("Connection test succeeded for " + successCount
+          + " server(s), failed for " + failedServers.size()
+          + ": " + String.join(", ", failedServers));
+    }
+  }
+
+  /**
+   * Connects all selected servers and merges successful connections
+   * into the global server selection.
+   */
+  private void connectSelectedServers() {
+    Set<LdapServerConfig> selectedConfigs = getSelectedServerConfigs();
+    if (selectedConfigs.isEmpty()) {
+      return;
+    }
+
+    int successCount = 0;
+    List<String> failedServers = new ArrayList<>();
+    Set<String> connectedServerNames = new LinkedHashSet<>();
+
+    for (LdapServerConfig selected : selectedConfigs) {
+      try {
+        ldapService.connect(selected);
+        successCount++;
+        connectedServerNames.add(selected.getName());
+      } catch (Exception e) {
+        logger.warn("Failed to connect server {}: {}",
+            selected.getName(), e.getMessage());
+        failedServers.add(selected.getName());
+      }
+    }
+
+    if (!connectedServerNames.isEmpty()) {
+      mergeConnectedServersInNavbar(connectedServerNames);
+    }
+
+    if (failedServers.isEmpty()) {
+      NotificationHelper.showSuccess("Connected " + successCount + " server(s)");
+    } else {
+      NotificationHelper.showError("Connected " + successCount
+          + " server(s), failed to connect " + failedServers.size()
+          + ": " + String.join(", ", failedServers));
     }
   }
 
@@ -806,14 +970,57 @@ public class ServerView extends VerticalLayout {
    */
   private void refreshNavbarServerList() {
     getUI().ifPresent(ui -> {
-      MainLayout layout = (MainLayout) ui.getChildren()
-          .filter(component -> component instanceof MainLayout)
-          .findFirst()
-          .orElse(null);
+      MainLayout layout = getMainLayout(ui);
       if (layout != null) {
         layout.refreshServerList();
       }
     });
+  }
+
+  /**
+   * Merges successfully connected servers into the global selector.
+   *
+   * @param connectedServerNames connected server names
+   */
+  private void mergeConnectedServersInNavbar(Set<String> connectedServerNames) {
+    getUI().ifPresent(ui -> {
+      MainLayout layout = getMainLayout(ui);
+      if (layout != null) {
+        layout.mergeSelectedServers(connectedServerNames);
+      }
+    });
+  }
+
+  /**
+   * Gets selected server configs from the grid.
+   *
+   * @return selected configurations
+   */
+  private Set<LdapServerConfig> getSelectedServerConfigs() {
+    return new LinkedHashSet<>(serverGrid.getSelectedItems());
+  }
+
+  /**
+   * Gets selected server when exactly one row is selected.
+   *
+   * @return selected server or null
+   */
+  private LdapServerConfig getSingleSelectedServer() {
+    Set<LdapServerConfig> selected = getSelectedServerConfigs();
+    return selected.size() == 1 ? selected.iterator().next() : null;
+  }
+
+  /**
+   * Finds MainLayout instance in current UI.
+   *
+   * @param ui current UI
+   * @return main layout or null
+   */
+  private MainLayout getMainLayout(com.vaadin.flow.component.UI ui) {
+    return (MainLayout) ui.getChildren()
+        .filter(component -> component instanceof MainLayout)
+        .findFirst()
+        .orElse(null);
   }
 
   /**

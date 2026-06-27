@@ -1,5 +1,16 @@
 # LDAP Web Browser
 
+## v0.93 - Server View Enhancemnt
+- In server view, edit/add server dialog, add a 'tags' field
+- Allows user to add and select existing tags to provide additional lables to each server
+- In server view when displaying the server grid, add a 'tags' column to display the selected tags for each server.
+- In server view when displaying the server grid, add a "connect" button in line with "add server", "edit", "copy", "delete", "Test" buttons.
+  - When the "connect" button is selected, all selected servers in the server rid will connected and displayed as connected at the top of the app and in the server dropdown
+- In server view when dsiplaying the server grid, allow multiple servers to be selected at once.
+  - When multiple servers are selected these buttons would be disabled "Edit", "copy"
+  - with multiple servers selected and the test button selected, all selected servers would go through the test process
+  - with multiple servers selected and the delete button selected, all selected servers would go through the delete process
+
 ## v0.92 - Search Template Enhancement
 - For search templates (Settings view, templates tab, edit template dialog, Search tab),
   add a field in the template to store the place holder / default value  and tool tip.
