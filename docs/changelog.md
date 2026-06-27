@@ -1,5 +1,19 @@
 # LDAP Web Browser
 
+## v0.94 - Schema View Enhancement
+- On Schema View, Compare tab. When a row is selected for one of the schema items in the grid, change the
+  details display to:
+  - a grid that shows the server name in the first column, and the second column the raw schema definition
+  - Each selected server would have its own row to easly compare the schema defintion for the selected item accross the connected servers.
+- On the Schema View, create a new tab in line with "Manage", "Compare", and "Migration" tabs named "Schema Files"
+  - The "Schema Files" tab would:
+    - Using the connected server names, and the "X-SCHEMA-FILE" properties of the objectClasses and AttributeTypes, create a grid
+      with the server name in the first column, followed by the X-SCHEMA-FILE properites names.
+    - When a server has a scheam with multiple X-SCHEMA-FILE values, each X-SCHEMA-FILE value would be listed in its own row.
+    - When a row is selected for a server/schema-file, All the scheam elements found for the selected schema-file would be displayed in a details view in schema file ldif format.
+    - The details for the scheam-file would have a copy icon to copy to the clipboard, and a download, to save the selected schema file.
+    - As an example, if server1 and server2 were connected, multiple rows would be dislayed for each server1 and server2 for all the scheam files found from all their schema elements. Allowing the user to access the entire scheam files content for each scheam file found for each selected server.
+
 ## v0.93 - Server View Enhancemnt
 - In server view, edit/add server dialog, add a 'tags' field
 - Allows user to add and select existing tags to provide additional lables to each server

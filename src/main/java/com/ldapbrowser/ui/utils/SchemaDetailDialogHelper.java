@@ -301,7 +301,7 @@ public final class SchemaDetailDialogHelper {
    * @param schemaElement the schema element
    * @return the raw definition string
    */
-  private static String getRawDefinitionString(Object schemaElement) {
+  public static String getRawDefinitionString(Object schemaElement) {
     // Try common methods for getting the raw definition
     String[] candidateMethods = new String[] {
         "toString", "getDefinitionString", "getDefinitionOrString",
@@ -336,14 +336,52 @@ public final class SchemaDetailDialogHelper {
    * @param extensions the extensions map
    * @return the schema file name or empty string
    */
-  private static String getSchemaFileFromExtensions(Map<String, String[]> extensions) {
-    if (extensions != null && extensions.containsKey("X-ORIGIN")) {
-      String[] origins = extensions.get("X-ORIGIN");
-      if (origins != null && origins.length > 0) {
-        return origins[0];
+  public static String getSchemaFileFromExtensions(Map<String, String[]> extensions) {
+    if (extensions == null || extensions.isEmpty()) {
+      return "";
+    }
+
+    String[] keys = new String[] {
+        "X-SCHEMA-FILE", "X-Schema-File", "X-Schema-file", "x-schema-file"
+    };
+
+    for (String key : keys) {
+      String[] values = extensions.get(key);
+      if (values != null && values.length > 0) {
+        return String.join(", ", values);
       }
     }
+
     return "";
+  }
+
+  /**
+   * Strips X-READ-ONLY extension values from a raw schema definition string.
+   * This extension is server-managed and should not be part of generated LDIF.
+   *
+   * @param rawDefinition the raw schema definition
+   * @return definition without X-READ-ONLY extension values
+   */
+  public static String stripReadOnlyExtension(String rawDefinition) {
+    if (rawDefinition == null) {
+      return rawDefinition;
+    }
+    return rawDefinition.replaceAll("(?i)\\s+X-READ-ONLY\\s+'[^']*'", "");
+  }
+
+  /**
+   * Strips server-managed schema extensions from a raw schema definition string.
+   * Removes X-READ-ONLY and X-SCHEMA-FILE extension values.
+   *
+   * @param rawDefinition the raw schema definition
+   * @return definition without server-managed extensions
+   */
+  public static String stripServerExtensions(String rawDefinition) {
+    if (rawDefinition == null) {
+      return rawDefinition;
+    }
+    String withoutReadOnly = stripReadOnlyExtension(rawDefinition);
+    return withoutReadOnly.replaceAll("(?i)\\s+X-SCHEMA-FILE\\s+'[^']*'", "");
   }
 
   /**

@@ -1780,44 +1780,6 @@ public class SchemaManageTab extends VerticalLayout {
   }
 
   /**
-   * Strips X-READ-ONLY extensions from a raw schema definition string.
-   * X-READ-ONLY 'false' is the implied default and including it causes
-   * errors when importing LDIF to the LDAP server.
-   *
-   * @param rawDefinition the raw schema definition string
-   * @return the definition with X-READ-ONLY extensions removed
-   */
-  private String stripReadOnlyExtension(String rawDefinition) {
-    if (rawDefinition == null) {
-      return rawDefinition;
-    }
-    // Remove X-READ-ONLY 'false' and X-READ-ONLY 'true'
-    String cleaned = rawDefinition
-        .replaceAll("\\s*X-READ-ONLY\\s+'false'", "")
-        .replaceAll("\\s*X-READ-ONLY\\s+'true'", "");
-    return cleaned;
-  }
-
-  /**
-   * Strips server-managed extensions from a raw schema definition string.
-   * Removes X-READ-ONLY and X-SCHEMA-FILE which should not appear in
-   * delete LDIF operations sent to the LDAP server.
-   *
-   * @param rawDefinition the raw schema definition string
-   * @return the definition with server extensions removed
-   */
-  private String stripServerExtensions(String rawDefinition) {
-    if (rawDefinition == null) {
-      return rawDefinition;
-    }
-    String cleaned = rawDefinition
-        .replaceAll("\\s*X-READ-ONLY\\s+'false'", "")
-        .replaceAll("\\s*X-READ-ONLY\\s+'true'", "")
-        .replaceAll("\\s*X-SCHEMA-FILE\\s+'[^']*'", "");
-    return cleaned;
-  }
-
-  /**
    * Builds an object class definition string from the provided fields.
    *
    * @param oid object class OID
@@ -3787,7 +3749,7 @@ public class SchemaManageTab extends VerticalLayout {
     dialog.setWidth("600px");
 
     // Create LDIF
-    String rawDef = stripReadOnlyExtension(
+    String rawDef = SchemaDetailDialogHelper.stripReadOnlyExtension(
         getRawDefinitionString(oc));
     String createLdif = schemaDefinitionToLdif(rawDef,
         getSchemaFileFromExtensions(oc.getExtensions()),
@@ -3871,7 +3833,7 @@ public class SchemaManageTab extends VerticalLayout {
     dialog.setWidth("600px");
 
     // Create LDIF
-    String rawDef = stripReadOnlyExtension(
+    String rawDef = SchemaDetailDialogHelper.stripReadOnlyExtension(
         getRawDefinitionString(at));
     String createLdif = schemaDefinitionToLdif(rawDef,
         getSchemaFileFromExtensions(at.getExtensions()),
@@ -3946,7 +3908,7 @@ public class SchemaManageTab extends VerticalLayout {
    * @return LDIF to delete the object class
    */
   private String buildDeleteObjectClassLdif(String rawDefinition) {
-    String cleanDef = stripServerExtensions(rawDefinition);
+    String cleanDef = SchemaDetailDialogHelper.stripServerExtensions(rawDefinition);
     StringBuilder ldif = new StringBuilder();
     ldif.append("dn: cn=schema\n");
     ldif.append("changetype: modify\n");
@@ -4020,7 +3982,7 @@ public class SchemaManageTab extends VerticalLayout {
     }
 
     // Delete the attribute type itself
-    String rawDef = stripServerExtensions(
+    String rawDef = SchemaDetailDialogHelper.stripServerExtensions(
         getRawDefinitionString(at));
     ldif.append("dn: cn=schema\n");
     ldif.append("changetype: modify\n");

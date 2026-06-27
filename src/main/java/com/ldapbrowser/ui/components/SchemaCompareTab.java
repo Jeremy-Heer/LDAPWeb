@@ -5,6 +5,7 @@ import com.ldapbrowser.service.LdapService;
 import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.service.SchemaComparisonService;
 import com.ldapbrowser.ui.utils.NotificationHelper;
+import com.ldapbrowser.ui.utils.SchemaDetailDialogHelper;
 import com.ldapbrowser.util.SchemaCompareUtil;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.schema.AttributeSyntaxDefinition;
@@ -32,7 +33,6 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -563,28 +563,94 @@ public class SchemaCompareTab extends VerticalLayout {
     }
 
     // Build comparison grid
-    Grid<SchemaPropertyRow> comparisonGrid = new Grid<>(SchemaPropertyRow.class, false);
+    Grid<ServerDefinitionRow> comparisonGrid = new Grid<>(ServerDefinitionRow.class, false);
     comparisonGrid.setSizeFull();
-    comparisonGrid.addColumn(SchemaPropertyRow::getProperty)
-        .setHeader("Property")
+    comparisonGrid.addColumn(ServerDefinitionRow::getServerName)
+        .setHeader("Server")
         .setAutoWidth(true)
+      .setFlexGrow(0)
         .setResizable(true)
         .setFrozen(true);
 
-    for (String serverName : sortedServers.stream().map(this::displayName).toList()) {
-      comparisonGrid.addColumn(row -> row.getValue(serverName))
-          .setHeader(serverName)
-          .setAutoWidth(true)
-          .setResizable(true)
-          .setSortable(true);
-    }
+    comparisonGrid.addColumn(ServerDefinitionRow::getRawDefinition)
+        .setHeader("Raw Schema Definition")
+        .setFlexGrow(1)
+        .setResizable(true);
 
-    List<SchemaPropertyRow> propertyRows = loadSchemaElementDetails(rowModel, schemas, 
+    List<ServerDefinitionRow> propertyRows = loadSchemaElementDefinitions(rowModel, schemas,
         currentType);
     comparisonGrid.setItems(propertyRows);
 
     detailsPanel.add(comparisonGrid);
     splitLayout.setSplitterPosition(50);
+  }
+
+  private List<ServerDefinitionRow> loadSchemaElementDefinitions(RowModel rowModel,
+      Map<String, Schema> schemas, ComponentType type) {
+    List<ServerDefinitionRow> rows = new ArrayList<>();
+    String elementName = rowModel.getName();
+
+    for (Map.Entry<String, Schema> entry : schemas.entrySet()) {
+      String serverName = entry.getKey();
+      Schema schema = entry.getValue();
+      String rawDefinition = "N/A";
+
+      if (schema == null) {
+        rawDefinition = "ERROR";
+      } else {
+        try {
+          rawDefinition = switch (type) {
+            case OBJECT_CLASS -> {
+              ObjectClassDefinition def = schema.getObjectClass(elementName);
+              yield def != null ? SchemaDetailDialogHelper.getRawDefinitionString(def) : "N/A";
+            }
+            case ATTRIBUTE_TYPE -> {
+              AttributeTypeDefinition def = schema.getAttributeType(elementName);
+              yield def != null ? SchemaDetailDialogHelper.getRawDefinitionString(def) : "N/A";
+            }
+            case MATCHING_RULE -> {
+              MatchingRuleDefinition def = schema.getMatchingRule(elementName);
+              yield def != null ? SchemaDetailDialogHelper.getRawDefinitionString(def) : "N/A";
+            }
+            case MATCHING_RULE_USE -> {
+              MatchingRuleUseDefinition def = schema.getMatchingRuleUse(elementName);
+              yield def != null ? SchemaDetailDialogHelper.getRawDefinitionString(def) : "N/A";
+            }
+            case SYNTAX -> {
+              AttributeSyntaxDefinition def = schema.getAttributeSyntax(elementName);
+              yield def != null ? SchemaDetailDialogHelper.getRawDefinitionString(def) : "N/A";
+            }
+          };
+        } catch (Exception e) {
+          rawDefinition = "ERROR";
+        }
+      }
+
+      rows.add(new ServerDefinitionRow(serverName, rawDefinition));
+    }
+
+    return rows;
+  }
+
+  /**
+   * Represents a raw schema definition row in the comparison details grid.
+   */
+  public static class ServerDefinitionRow {
+    private final String serverName;
+    private final String rawDefinition;
+
+    public ServerDefinitionRow(String serverName, String rawDefinition) {
+      this.serverName = serverName;
+      this.rawDefinition = rawDefinition;
+    }
+
+    public String getServerName() {
+      return serverName;
+    }
+
+    public String getRawDefinition() {
+      return rawDefinition;
+    }
   }
 
   private ComponentType getTypeForTab(Tab tab) {
@@ -604,159 +670,6 @@ public class SchemaCompareTab extends VerticalLayout {
   private void hideDetails() {
     detailsPanel.setVisible(false);
     splitLayout.setSplitterPosition(100);
-  }
-
-  private List<SchemaPropertyRow> loadSchemaElementDetails(RowModel rowModel, 
-      Map<String, Schema> schemas, ComponentType type) {
-    List<SchemaPropertyRow> propertyRows = new ArrayList<>();
-    String elementName = rowModel.getName();
-
-    switch (type) {
-      case OBJECT_CLASS -> addObjectClassProperties(propertyRows, elementName, schemas);
-      case ATTRIBUTE_TYPE -> addAttributeTypeProperties(propertyRows, elementName, schemas);
-      case MATCHING_RULE -> addMatchingRuleProperties(propertyRows, elementName, schemas);
-      case MATCHING_RULE_USE -> addMatchingRuleUseProperties(propertyRows, elementName, schemas);
-      case SYNTAX -> addSyntaxProperties(propertyRows, elementName, schemas);
-    }
-
-    return propertyRows;
-  }
-
-  private void addObjectClassProperties(List<SchemaPropertyRow> propertyRows, 
-      String elementName, Map<String, Schema> schemas) {
-    addProperty(propertyRows, "OID", elementName, schemas, (schema, name) -> {
-      ObjectClassDefinition def = schema.getObjectClass(name);
-      return def != null ? def.getOID() : "N/A";
-    });
-
-    addProperty(propertyRows, "Names", elementName, schemas, (schema, name) -> {
-      ObjectClassDefinition def = schema.getObjectClass(name);
-      return def != null && def.getNames() != null 
-          ? String.join(", ", Arrays.asList(def.getNames())) : "N/A";
-    });
-
-    addProperty(propertyRows, "Description", elementName, schemas, (schema, name) -> {
-      ObjectClassDefinition def = schema.getObjectClass(name);
-      return def != null ? (def.getDescription() != null ? def.getDescription() : "N/A") : "N/A";
-    });
-
-    addProperty(propertyRows, "Type", elementName, schemas, (schema, name) -> {
-      ObjectClassDefinition def = schema.getObjectClass(name);
-      return def != null && def.getObjectClassType() != null 
-          ? def.getObjectClassType().getName() : "N/A";
-    });
-
-    addProperty(propertyRows, "Obsolete", elementName, schemas, (schema, name) -> {
-      ObjectClassDefinition def = schema.getObjectClass(name);
-      return def != null ? (def.isObsolete() ? "Yes" : "No") : "N/A";
-    });
-
-    addProperty(propertyRows, "Superior Classes", elementName, schemas, (schema, name) -> {
-      ObjectClassDefinition def = schema.getObjectClass(name);
-      return def != null && def.getSuperiorClasses() != null 
-          ? String.join(", ", def.getSuperiorClasses()) : "N/A";
-    });
-  }
-
-  private void addAttributeTypeProperties(List<SchemaPropertyRow> propertyRows, 
-      String elementName, Map<String, Schema> schemas) {
-    addProperty(propertyRows, "OID", elementName, schemas, (schema, name) -> {
-      AttributeTypeDefinition def = schema.getAttributeType(name);
-      return def != null ? def.getOID() : "N/A";
-    });
-
-    addProperty(propertyRows, "Names", elementName, schemas, (schema, name) -> {
-      AttributeTypeDefinition def = schema.getAttributeType(name);
-      return def != null && def.getNames() != null 
-          ? String.join(", ", Arrays.asList(def.getNames())) : "N/A";
-    });
-
-    addProperty(propertyRows, "Description", elementName, schemas, (schema, name) -> {
-      AttributeTypeDefinition def = schema.getAttributeType(name);
-      return def != null ? (def.getDescription() != null ? def.getDescription() : "N/A") : "N/A";
-    });
-
-    addProperty(propertyRows, "Syntax", elementName, schemas, (schema, name) -> {
-      AttributeTypeDefinition def = schema.getAttributeType(name);
-      return def != null ? (def.getSyntaxOID() != null ? def.getSyntaxOID() : "N/A") : "N/A";
-    });
-  }
-
-  private void addMatchingRuleProperties(List<SchemaPropertyRow> propertyRows, 
-      String elementName, Map<String, Schema> schemas) {
-    addProperty(propertyRows, "OID", elementName, schemas, (schema, name) -> {
-      MatchingRuleDefinition def = schema.getMatchingRule(name);
-      return def != null ? def.getOID() : "N/A";
-    });
-
-    addProperty(propertyRows, "Names", elementName, schemas, (schema, name) -> {
-      MatchingRuleDefinition def = schema.getMatchingRule(name);
-      return def != null && def.getNames() != null 
-          ? String.join(", ", Arrays.asList(def.getNames())) : "N/A";
-    });
-
-    addProperty(propertyRows, "Description", elementName, schemas, (schema, name) -> {
-      MatchingRuleDefinition def = schema.getMatchingRule(name);
-      return def != null ? (def.getDescription() != null ? def.getDescription() : "N/A") : "N/A";
-    });
-  }
-
-  private void addMatchingRuleUseProperties(List<SchemaPropertyRow> propertyRows, 
-      String elementName, Map<String, Schema> schemas) {
-    addProperty(propertyRows, "OID", elementName, schemas, (schema, name) -> {
-      MatchingRuleUseDefinition def = schema.getMatchingRuleUse(name);
-      return def != null ? def.getOID() : "N/A";
-    });
-
-    addProperty(propertyRows, "Names", elementName, schemas, (schema, name) -> {
-      MatchingRuleUseDefinition def = schema.getMatchingRuleUse(name);
-      return def != null && def.getNames() != null 
-          ? String.join(", ", Arrays.asList(def.getNames())) : "N/A";
-    });
-
-    addProperty(propertyRows, "Description", elementName, schemas, (schema, name) -> {
-      MatchingRuleUseDefinition def = schema.getMatchingRuleUse(name);
-      return def != null ? (def.getDescription() != null ? def.getDescription() : "N/A") : "N/A";
-    });
-  }
-
-  private void addSyntaxProperties(List<SchemaPropertyRow> propertyRows, String elementName, 
-      Map<String, Schema> schemas) {
-    addProperty(propertyRows, "OID", elementName, schemas, (schema, name) -> {
-      AttributeSyntaxDefinition def = schema.getAttributeSyntax(name);
-      return def != null ? def.getOID() : "N/A";
-    });
-
-    addProperty(propertyRows, "Description", elementName, schemas, (schema, name) -> {
-      AttributeSyntaxDefinition def = schema.getAttributeSyntax(name);
-      return def != null ? (def.getDescription() != null ? def.getDescription() : "N/A") : "N/A";
-    });
-  }
-
-  private void addProperty(List<SchemaPropertyRow> propertyRows, String propertyName, 
-      String elementName, Map<String, Schema> schemas, PropertyExtractor extractor) {
-    Map<String, String> values = new LinkedHashMap<>();
-    for (Map.Entry<String, Schema> entry : schemas.entrySet()) {
-      String serverName = entry.getKey();
-      Schema schema = entry.getValue();
-      String value;
-      if (schema == null) {
-        value = "ERROR";
-      } else {
-        try {
-          value = extractor.extract(schema, elementName);
-        } catch (Exception e) {
-          value = "ERROR";
-        }
-      }
-      values.put(serverName, value);
-    }
-    propertyRows.add(new SchemaPropertyRow(propertyName, values));
-  }
-
-  @FunctionalInterface
-  private interface PropertyExtractor {
-    String extract(Schema schema, String elementName);
   }
 
   /**

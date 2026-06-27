@@ -7,6 +7,7 @@ import com.ldapbrowser.service.LoggingService;
 import com.ldapbrowser.service.SchemaComparisonService;
 import com.ldapbrowser.ui.MainLayout;
 import com.ldapbrowser.ui.components.SchemaCompareTab;
+import com.ldapbrowser.ui.components.SchemaFilesTab;
 import com.ldapbrowser.ui.components.SchemaManageTab;
 import com.ldapbrowser.ui.components.SchemaMigrationTab;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -33,6 +34,7 @@ public class SchemaView extends VerticalLayout {
 
   private final SchemaManageTab manageTab;
   private final SchemaCompareTab compareTab;
+  private final SchemaFilesTab filesTab;
   private final SchemaMigrationTab migrationTab;
   private final Tabs topLevelTabs;
   private final VerticalLayout contentContainer;
@@ -58,12 +60,14 @@ public class SchemaView extends VerticalLayout {
     topLevelTabs = new Tabs();
     Tab manageTabItem = new Tab("Manage");
     Tab compareTabItem = new Tab("Compare");
+    Tab filesTabItem = new Tab("Schema Files");
     Tab migrationTabItem = new Tab("Migration");
-    topLevelTabs.add(manageTabItem, compareTabItem, migrationTabItem);
+    topLevelTabs.add(manageTabItem, compareTabItem, filesTabItem, migrationTabItem);
 
     // Create tab content components
     manageTab = new SchemaManageTab(ldapService, configService);
     compareTab = new SchemaCompareTab(ldapService, loggingService, schemaComparisonService);
+    filesTab = new SchemaFilesTab(loggingService, schemaComparisonService);
     migrationTab = new SchemaMigrationTab(ldapService, loggingService, schemaComparisonService);
 
     // Content container
@@ -88,6 +92,9 @@ public class SchemaView extends VerticalLayout {
         contentContainer.add(compareTab);
         // Update compare tab with selected servers
         updateCompareTabServers();
+      } else if (selectedTab == filesTabItem) {
+        contentContainer.add(filesTab);
+        updateSchemaFilesTabServers();
       } else if (selectedTab == migrationTabItem) {
         contentContainer.add(migrationTab);
         // Update migration tab with selected servers
@@ -116,6 +123,14 @@ public class SchemaView extends VerticalLayout {
   private void updateMigrationTabServers() {
     Set<LdapServerConfig> selectedServers = getSelectedServers();
     migrationTab.setEnvironments(selectedServers);
+  }
+
+  /**
+   * Updates the schema files tab with currently selected servers.
+   */
+  private void updateSchemaFilesTabServers() {
+    Set<LdapServerConfig> selectedServers = getSelectedServers();
+    filesTab.setEnvironments(selectedServers);
   }
 
   /**
